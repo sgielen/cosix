@@ -1,0 +1,44 @@
+CloudOS
+-------
+
+This is a prototype kernel that is bootable by qemu. Its eventual purpose is to
+run CloudABI[0] binaries, including the ability to suspend, freeze, serialize,
+deserialize, thaw and resume CloudABI binaries. However, it's still far from
+that goal.
+
+[0] https://www.bsdcan.org/2015/schedule/track/Security/524.en.html
+
+To run the tests, compile it with a native (non-cross) compiler:
+
+  mkdir build
+  cd build
+  cmake -DCMAKE_BUILD_TYPE=Debug ..
+  make
+  make test
+
+To compile the kernel, first build and install Binutils with '--target
+i686-elf', then build and install Clang SVN with '-DLLVM_TARGETS_TO_BUILD=X86'.
+Then, in the 'bin' directory where both are installed, run:
+
+  ln -s i686-elf-ar i686-unknown-cloudabi-ar
+  ln -s i686-elf-ld i686-unknown-cloudabi-ld
+  ln -s clang i686-unknown-cloudabi-cc
+  ln -s clang++ i686-unknown-cloudabi-c++
+
+Then, use the CloudABI toolchain file to set up your build directory:
+
+  mkdir build
+  cd build
+  cmake -DCMAKE_BUILD_TYPE=Debug \
+    -DCMAKE_TOOLCHAIN_FILE=../cmake/Toolchain-i686-cloudabi.cmake ..
+  make
+
+There is a 'boot' target that will run the kernel inside qemu:
+
+  make boot
+
+Good luck and have fun!
+
+- Sjors Gielen <sjors@sjorsgielen.nl>
+
+[1] https://github.com/NuxiNL/cloudlibc/wiki/Building-the-toolchain
