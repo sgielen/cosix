@@ -1,5 +1,5 @@
-add_library(oslibc string.c string.h)
-list(APPEND oslibc_tests test/test_string.cpp)
+add_library(oslibc string.c string.h numeric.c numeric.h)
+list(APPEND oslibc_tests test/test_string.cpp test/test_numeric.cpp)
 
 if(TESTING_ENABLED)
 	add_executable(oslibc_test ${oslibc_tests} test/test_main.cpp)

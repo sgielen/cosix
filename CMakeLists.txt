@@ -20,6 +20,7 @@ endif()
 
 add_subdirectory(oslibc)
 add_subdirectory(hw)
+add_subdirectory(compiler-rt)
 
 if(BAREMETAL_ENABLED)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffreestanding -O0 -g -fno-exceptions -fno-rtti -I${CMAKE_BUILD_DIR}")
@@ -28,7 +29,7 @@ if(BAREMETAL_ENABLED)
 	include_directories(${CMAKE_BINARY_DIR})
 	set_source_files_properties(boot.s PROPERTIES COMPILE_FLAGS "-x assembler-with-cpp")
 	add_executable(cloudkernel boot.s kernel_main.cpp)
-	target_link_libraries(cloudkernel hw oslibc)
+	target_link_libraries(cloudkernel hw oslibc compiler_rt_builtins)
 	set_target_properties(cloudkernel PROPERTIES LINK_DEPENDS ${CMAKE_SOURCE_DIR}/linker.ld)
 
 	add_custom_target(boot qemu-system-i386 -kernel cloudkernel)
