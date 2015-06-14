@@ -1,4 +1,5 @@
 #include "hw/vga.hpp"
+#include "hw/vga_stream.hpp"
 #include "oslibc/numeric.h"
 #include "cloudos_version.h"
 
@@ -9,11 +10,9 @@ extern "C"
 #endif
 void kernel_main() {
 	vga_buffer buf;
-	buf.write("CloudOS v" cloudos_VERSION " -- starting up\n");
-	char digits[40];
-	buf.write("Multiboot magic: 0x");
-	buf.write(ui64toa_s(0x2BADB002, &digits[0], sizeof(digits), 16));
-	buf.putc('\n');
+	vga_stream stream(buf);
+	stream << "CloudOS v" cloudos_VERSION " -- starting up\n";
+	stream << "Multiboot magic: " << hex << 0x2BADB002 << "\n";
 
-	buf.write("Shutting down\n");
+	stream << "Shutting down\n";
 }

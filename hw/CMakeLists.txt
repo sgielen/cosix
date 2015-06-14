@@ -1,5 +1,6 @@
-add_library(hw vga.cpp vga.hpp)
-list(APPEND hw_tests test/test_vga.cpp)
+add_library(hw vga.cpp vga.hpp vga_stream.hpp vga_stream.cpp)
+list(APPEND hw_tests test/test_vga.cpp test/test_vga_stream.cpp)
+target_link_libraries(hw oslibc)
 
 if(TESTING_ENABLED)
 	add_executable(hw_test ${hw_tests} test/test_main.cpp)
