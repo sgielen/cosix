@@ -4,6 +4,7 @@
 
 TEST_CASE( "hw/multiboot" ) {
 	using cloudos::multiboot_info;
+	using cloudos::memory_map_entry;
 
 	uint32_t buf[255];
 	memset(&buf[0], 0x00, sizeof(buf));
@@ -25,6 +26,8 @@ TEST_CASE( "hw/multiboot" ) {
 		REQUIRE(mi.is_valid());
 		uint32_t l, u;
 		REQUIRE(mi.mem_amount(&l, &u) == false);
+		memory_map_entry *f;
+		REQUIRE(mi.memory_map(&f) == 0);
 	}
 
 	SECTION( "mem_info" ) {
@@ -37,5 +40,16 @@ TEST_CASE( "hw/multiboot" ) {
 		REQUIRE(mi.mem_amount(&l, &u) == true);
 		REQUIRE(l == 200);
 		REQUIRE(u == 400);
+	}
+
+	SECTION( "mmap" ) {
+		buf[0] = 64;
+		buf[11] = 0x1234;
+		buf[12] = 0x5678;
+		multiboot_info mi(buf);
+		REQUIRE(mi.is_valid());
+		memory_map_entry *f;
+		REQUIRE(mi.memory_map(&f) == 0x1234);
+		REQUIRE(reinterpret_cast<uint64_t>(f) == 0x5678);
 	}
 }

@@ -53,6 +53,7 @@ struct boot_info {
 }
 
 #define FLAG_MEMORY 1
+#define FLAG_MMAP 64
 
 multiboot_info::multiboot_info(void *a, uint32_t magic)
 : bi(reinterpret_cast<boot_info*>(a))
@@ -72,4 +73,13 @@ bool multiboot_info::mem_amount(uint32_t *mem_lower, uint32_t *mem_upper) const 
 	} else {
 		return false;
 	}
+}
+
+size_t multiboot_info::memory_map(memory_map_entry **first) const {
+	if((bi->flags & FLAG_MMAP) == 0 || bi->mmap_length == 0) {
+		return 0;
+	}
+
+	*first = reinterpret_cast<memory_map_entry*>(bi->mmap_addr);
+	return bi->mmap_length;
 }
