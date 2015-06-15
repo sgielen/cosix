@@ -1,5 +1,8 @@
-add_library(hw vga.cpp vga.hpp vga_stream.hpp vga_stream.cpp)
-list(APPEND hw_tests test/test_vga.cpp test/test_vga_stream.cpp)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-packed")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-packed")
+
+add_library(hw vga.cpp vga.hpp vga_stream.hpp vga_stream.cpp multiboot.hpp multiboot.cpp)
+list(APPEND hw_tests test/test_vga.cpp test/test_vga_stream.cpp test/test_multiboot.cpp)
 target_link_libraries(hw oslibc)
 
 if(TESTING_ENABLED)

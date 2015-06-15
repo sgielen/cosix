@@ -23,6 +23,11 @@ stack_top:
 _start:
 	movl $stack_top, %esp
 
+	# We expect a Multiboot boot, where %eax contains the Multiboot magic
+	# and %ebx a pointer to a struct with hardware information. These are
+	# passed as parameters to the kernel_main C function.
+	push %ebx
+	push %eax
 	call kernel_main
 
 	cli
