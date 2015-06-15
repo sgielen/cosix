@@ -75,7 +75,7 @@ vga_stream &cloudos::operator<<(vga_stream &s, void *ptr) {
 	if(ptr == NULL) {
 		s.vga().write("(null)");
 	} else {
-		uint64_t addr = (uint64_t)ptr;
+		uint64_t addr = reinterpret_cast<uint64_t>(ptr);
 		char buf[16];
 		s.vga().write("0x");
 		s.vga().write(ui64toa_s(addr, &buf[0], sizeof(buf), 16));
