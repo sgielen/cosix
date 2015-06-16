@@ -1,6 +1,7 @@
 #include "hw/vga.hpp"
 #include "hw/vga_stream.hpp"
 #include "hw/multiboot.hpp"
+#include "hw/segments.hpp"
 #include "oslibc/numeric.h"
 #include "cloudos_version.h"
 
@@ -61,6 +62,21 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr) {
 		}
 		stream << "\n";
 	}
+
+	// Set up segment table
+	segment_table gdt;
+	// first entry is always null
+	gdt.add_entry(0, 0, 0, 0);
+	// second entry: entire 4GiB address space is readable code
+	gdt.add_entry(0xffffff, 0,
+		SEGMENT_RW | SEGMENT_EXEC | SEGMENT_ALWAYS | SEGMENT_PRESENT,
+		SEGMENT_PAGE_GRANULARITY | SEGMENT_32BIT);
+	// third entry: entire 4GiB address space is writable data
+	gdt.add_entry(0xffffff, 0,
+		SEGMENT_RW | SEGMENT_ALWAYS | SEGMENT_PRESENT,
+		SEGMENT_PAGE_GRANULARITY | SEGMENT_32BIT);
+	gdt.load();
+	stream << "Global Descriptor Table loaded, segmentation is in effect\n";
 
 	stream << "Shutting down\n";
 }

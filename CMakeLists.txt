@@ -4,6 +4,8 @@ project(CLOUDOS C CXX ASM)
 
 include(wubwubcmake/enable_cpp11.cmake)
 include(wubwubcmake/warning_settings.cmake)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-packed")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-packed")
 include(wubwubcmake/version.cmake)
 add_sane_warning_flags()
 generate_git_version_h("cloudos" "0.1")
