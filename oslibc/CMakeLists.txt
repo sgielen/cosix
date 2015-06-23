@@ -1,4 +1,4 @@
-add_library(oslibc string.c string.h numeric.c numeric.h)
+add_library(oslibc string.c string.h numeric.c numeric.h cxx_support.cpp)
 list(APPEND oslibc_tests test/test_string.cpp test/test_numeric.cpp)
 
 if(TESTING_ENABLED)

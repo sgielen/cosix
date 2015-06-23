@@ -1,8 +1,8 @@
 if(BAREMETAL_ENABLED)
-	set(EXTRA_HW_SOURCES segments.s)
-	set_source_files_properties(segments.s PROPERTIES COMPILE_FLAGS "-x assembler-with-cpp")
+	set(EXTRA_HW_SOURCES segments.s interrupt.S)
+	set_source_files_properties(segments.s interrupt.S PROPERTIES COMPILE_FLAGS "-x assembler-with-cpp")
 else()
-	set(EXTRA_HW_SOURCES test/segments_stub.c)
+	set(EXTRA_HW_SOURCES test/segments_stub.c test/interrupt_stub.c)
 endif()
 
 add_library(hw
@@ -10,6 +10,8 @@ add_library(hw
 	vga_stream.hpp vga_stream.cpp
 	multiboot.hpp multiboot.cpp
 	segments.hpp segments.cpp
+	interrupt_table.hpp interrupt_table.cpp
+	interrupt.hpp interrupt.cpp
 	${EXTRA_HW_SOURCES})
 list(APPEND hw_tests
 	test/test_vga.cpp

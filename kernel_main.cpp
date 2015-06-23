@@ -2,14 +2,59 @@
 #include "hw/vga_stream.hpp"
 #include "hw/multiboot.hpp"
 #include "hw/segments.hpp"
+#include "hw/interrupt_table.hpp"
+#include "hw/interrupt.hpp"
+#include "hw/cpu_io.hpp"
 #include "oslibc/numeric.h"
 #include "cloudos_version.h"
 
 using namespace cloudos;
 
-#if defined(__cplusplus)
+const char scancode_to_key[] = {
+	0   , 0   , '1' , '2' , '3' , '4' , '5' , '6' , // 00-07
+	'7' , '8' , '9' , '0' , '-' , '=' , '\b', '\t', // 08-0f
+	'q' , 'w' , 'e' , 'r' , 't' , 'y' , 'u' , 'i' , // 10-17
+	'o' , 'p' , '[' , ']' , '\n' , 0  , 'a' , 's' , // 18-1f
+	'd' , 'f' , 'g' , 'h' , 'j' , 'k' , 'l' , ';' , // 20-27
+	'\'', '`' , 0   , '\\', 'z' , 'x' , 'c' , 'v' , // 28-2f
+	'b' , 'n' , 'm' , ',' , '.' , '/' , 0   , '*' , // 30-37
+	0   , ' ' , 0   , 0   , 0   , 0   , 0   , 0   , // 38-3f
+	0   , 0   , 0   , 0   , 0   , 0   , 0   , '7' , // 40-47
+	'8' , '9' , '-' , '4' , '5' , '6' , '+' , '1' , // 48-4f
+	'2' , '3' , '0' , '.' // 50-53
+};
+
+struct interrupt_handler : public interrupt_functor {
+	interrupt_handler(vga_stream *s) : stream(s) {}
+	void operator()(uint32_t int_no, uint32_t err_code) {
+		if(int_no == 0x20) {
+			// keyboard input!
+			// wait for the ready bit to turn on
+			uint32_t waits = 0;
+			while((inb(0x64) & 0x1) == 0 && waits < 0xffffffff) {
+				waits++;
+			}
+
+			if((inb(0x64) & 0x1) == 0x1) {
+				uint16_t scancode = inb(0x60);
+				char buf[2];
+				buf[0] = scancode_to_key[scancode];
+				buf[1] = 0;
+				*stream << buf;
+			} else {
+				*stream << "Waited for scancode for too long\n";
+			}
+		} else if(int_no == 0x21) {
+			// ? ignore
+		} else {
+			*stream << "Got interrupt " << int_no << " (" << hex << int_no << dec << ", err code " << err_code << ")\n";
+		}
+	}
+private:
+	vga_stream *stream;
+};
+
 extern "C"
-#endif
 void kernel_main(uint32_t multiboot_magic, void *bi_ptr) {
 	vga_buffer buf;
 	vga_stream stream(buf);
@@ -78,5 +123,14 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr) {
 	gdt.load();
 	stream << "Global Descriptor Table loaded, segmentation is in effect\n";
 
-	stream << "Shutting down\n";
+	interrupt_handler handler(&stream);
+
+	interrupt_table interrupts;
+	interrupt_global interrupts_global(&handler);
+	interrupts_global.setup(interrupts);
+	interrupts_global.reprogram_pic();
+
+	stream << "Waiting for interrupts...\n";
+	interrupts_global.enable_interrupts();
+	while(1) {}
 }

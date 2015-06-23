@@ -21,6 +21,7 @@ stack_top:
 .global _start
 .type _start, @function
 _start:
+	cli
 	movl $stack_top, %esp
 
 	# We expect a Multiboot boot, where %eax contains the Multiboot magic
@@ -30,7 +31,6 @@ _start:
 	push %eax
 	call kernel_main
 
-	cli
 	hlt
 .Lhang:
 	jmp .Lhang
