@@ -28,10 +28,12 @@ struct interrupt_handler : public interrupt_functor {
 	interrupt_handler(vga_stream *s) : stream(s) {}
 	void operator()(uint32_t int_no, uint32_t err_code) {
 		if(int_no == 0x20) {
+			// timer interrupt
+		} else if(int_no == 0x21) {
 			// keyboard input!
 			// wait for the ready bit to turn on
 			uint32_t waits = 0;
-			while((inb(0x64) & 0x1) == 0 && waits < 0xffffffff) {
+			while((inb(0x64) & 0x1) == 0 && waits < 0xfffff) {
 				waits++;
 			}
 
@@ -44,8 +46,6 @@ struct interrupt_handler : public interrupt_functor {
 			} else {
 				*stream << "Waited for scancode for too long\n";
 			}
-		} else if(int_no == 0x21) {
-			// ? ignore
 		} else {
 			*stream << "Got interrupt " << int_no << " (" << hex << int_no << dec << ", err code " << err_code << ")\n";
 		}
