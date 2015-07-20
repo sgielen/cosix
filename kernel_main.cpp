@@ -26,7 +26,9 @@ const char scancode_to_key[] = {
 
 struct interrupt_handler : public interrupt_functor {
 	interrupt_handler(vga_stream *s) : stream(s) {}
-	void operator()(uint32_t int_no, uint32_t err_code) {
+	void operator()(interrupt_state_t *regs) {
+		int int_no = regs->int_no;
+		int err_code = regs->err_code;
 		if(int_no == 0x20) {
 			// timer interrupt
 		} else if(int_no == 0x21) {

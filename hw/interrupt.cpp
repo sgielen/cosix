@@ -24,17 +24,10 @@ ISR_NUM(38); ISR_NUM(39); ISR_NUM(40); ISR_NUM(41); ISR_NUM(42); ISR_NUM(43);
 ISR_NUM(44); ISR_NUM(45); ISR_NUM(46); ISR_NUM(47);
 #undef ISR_NUM
 
-struct register_t {
-	uint32_t ds;
-	uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;
-	uint32_t int_no, err_code;
-	uint32_t eip, cs, eflags, useresp, ss;
-};
-
 extern "C"
-void isr_handler(register_t regs) {
+void isr_handler(interrupt_state_t regs) {
 	if(global_interrupt != 0) {
-		global_interrupt->call(regs.int_no, regs.err_code);
+		global_interrupt->call(&regs);
 	}
 }
 
@@ -64,9 +57,10 @@ void interrupt_global::setup(interrupt_table &table) {
 	table.load();
 }
 
-void interrupt_global::call(uint32_t int_no, uint32_t err_code) {
+void interrupt_global::call(interrupt_state_t *regs) {
 	interrupt_functor &f = *functor;
-	f(int_no, err_code);
+	int int_no = regs->int_no;
+	f(regs);
 
 	if(int_no >= 0x20 && int_no < 0x30) {
 		// IRQ caused this interrupt, so ACK it with the PICs

@@ -6,10 +6,17 @@
 
 namespace cloudos {
 
+struct interrupt_state_t {
+	uint32_t ds;
+	uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;
+	uint32_t int_no, err_code;
+	uint32_t eip, cs, eflags, useresp, ss;
+};
+
 struct interrupt_functor {
 	interrupt_functor() {}
 	virtual ~interrupt_functor() {}
-	virtual void operator()(uint32_t int_no, uint32_t err_code) = 0;
+	virtual void operator()(interrupt_state_t*) = 0;
 };
 
 struct interrupt_global {
@@ -21,7 +28,7 @@ struct interrupt_global {
 	void enable_interrupts();
 	void disable_interrupts();
 
-	void call(uint32_t int_no, uint32_t err_code);
+	void call(interrupt_state_t*);
 
 private:
 	interrupt_functor *functor;
