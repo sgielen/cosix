@@ -31,6 +31,7 @@ vga_stream &operator<<(vga_stream &, int32_t);
 vga_stream &operator<<(vga_stream &, int64_t);
 
 vga_stream &operator<<(vga_stream &, bool);
+vga_stream &operator<<(vga_stream &, char);
 vga_stream &operator<<(vga_stream &, const char*);
 vga_stream &operator<<(vga_stream &, void*);
 

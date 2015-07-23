@@ -66,6 +66,11 @@ vga_stream &cloudos::operator<<(vga_stream &s, bool val) {
 	return s;
 }
 
+vga_stream &cloudos::operator<<(vga_stream &s, char val) {
+	s.vga().putc(val);
+	return s;
+}
+
 vga_stream &cloudos::operator<<(vga_stream &s, const char *str) {
 	s.vga().write(str == NULL ? "(null)" : str);
 	return s;
