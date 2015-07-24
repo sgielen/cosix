@@ -14,4 +14,8 @@ gdt_load:
 	ljmp $0x08, $gdt_flush
 
 gdt_flush:
+	/* load tss as well */
+	mov $0x2B, %ax;
+	ltr %ax;
+
 	ret

@@ -98,3 +98,6 @@ isr_without_errorcode 44
 isr_without_errorcode 45
 isr_without_errorcode 46
 isr_without_errorcode 47
+
+/* Software interrupts */
+isr_without_errorcode 128

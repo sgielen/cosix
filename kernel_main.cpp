@@ -7,6 +7,8 @@
 #include "hw/cpu_io.hpp"
 #include "oslibc/numeric.h"
 #include "cloudos_version.h"
+#include "userland/process.hpp"
+#include "process/process.hpp"
 
 using namespace cloudos;
 
@@ -25,12 +27,32 @@ const char scancode_to_key[] = {
 };
 
 struct interrupt_handler : public interrupt_functor {
-	interrupt_handler(vga_stream *s) : stream(s) {}
+	interrupt_handler(vga_stream *s) : stream(s), proc_ctr(0), int_first(true) {
+		for(size_t i = 0; i < 3; ++i) {
+			procs[i].initialize(i, reinterpret_cast<void*>(process_main), reinterpret_cast<void*>(0x300000 + 0x100000 * i));
+		}
+	}
+
 	void operator()(interrupt_state_t *regs) {
+		if(int_first) {
+			// This boolean is only set to true for the first interrupt, because we only
+			// switch to the first process on the first interrupt, and after that all
+			// interrupts are from the userland.
+			// TODO: Instead, we should detect whether an interrupt is coming from kernel
+			// or userland, and what process, so we can make that difference and don't
+			// need this boolean anymore.
+			int_first = false;
+		} else {
+			procs[proc_ctr].set_return_state(regs);
+		}
+
 		int int_no = regs->int_no;
 		int err_code = regs->err_code;
 		if(int_no == 0x20) {
 			// timer interrupt
+			if(++proc_ctr == 3) {
+				proc_ctr = 0;
+			}
 		} else if(int_no == 0x21) {
 			// keyboard input!
 			// wait for the ready bit to turn on
@@ -45,15 +67,24 @@ struct interrupt_handler : public interrupt_functor {
 				buf[0] = scancode_to_key[scancode];
 				buf[1] = 0;
 				*stream << buf;
+				if(buf[0] == '\n') {
+					*stream << hex << "Stack ptr: " << &scancode << "; returning to stack: " << regs->useresp << dec << "\n";
+				}
 			} else {
 				*stream << "Waited for scancode for too long\n";
 			}
+		} else if(int_no == 0x80) {
+			procs[proc_ctr].handle_syscall(*stream);
 		} else {
 			*stream << "Got interrupt " << int_no << " (" << hex << int_no << dec << ", err code " << err_code << ")\n";
 		}
+		procs[proc_ctr].get_return_state(regs);
 	}
 private:
 	vga_stream *stream;
+	cloudos::process procs[3];
+	int proc_ctr;
+	bool int_first;
 };
 
 extern "C"
@@ -116,12 +147,22 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr) {
 	gdt.add_entry(0, 0, 0, 0);
 	// second entry: entire 4GiB address space is readable code
 	gdt.add_entry(0xffffff, 0,
-		SEGMENT_RW | SEGMENT_EXEC | SEGMENT_ALWAYS | SEGMENT_PRESENT,
+		SEGMENT_RW | SEGMENT_EXEC | SEGMENT_ALWAYS | SEGMENT_PRIV_RING0 | SEGMENT_PRESENT,
 		SEGMENT_PAGE_GRANULARITY | SEGMENT_32BIT);
 	// third entry: entire 4GiB address space is writable data
 	gdt.add_entry(0xffffff, 0,
-		SEGMENT_RW | SEGMENT_ALWAYS | SEGMENT_PRESENT,
+		SEGMENT_RW | SEGMENT_ALWAYS | SEGMENT_PRIV_RING0 | SEGMENT_PRESENT,
 		SEGMENT_PAGE_GRANULARITY | SEGMENT_32BIT);
+	// fourth entry: entire 4GiB address space is ring 3 readable code
+	gdt.add_entry(0xfffff, 0,
+		SEGMENT_RW | SEGMENT_EXEC | SEGMENT_ALWAYS | SEGMENT_PRIV_RING3 | SEGMENT_PRESENT,
+		SEGMENT_PAGE_GRANULARITY | SEGMENT_32BIT | SEGMENT_AVAILABLE);
+	// fifth entry: entire 4GiB address space is ring 3 writable data
+	gdt.add_entry(0xffffff, 0,
+		SEGMENT_RW | SEGMENT_ALWAYS | SEGMENT_PRIV_RING3 | SEGMENT_PRESENT,
+		SEGMENT_PAGE_GRANULARITY | SEGMENT_32BIT | SEGMENT_AVAILABLE);
+	// and then a TSS entry
+	gdt.add_tss_entry();
 	gdt.load();
 	stream << "Global Descriptor Table loaded, segmentation is in effect\n";
 

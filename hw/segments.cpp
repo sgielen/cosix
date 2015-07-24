@@ -57,3 +57,25 @@ gdt_directory *segment_table::directory_ptr() {
 gdt_entry *segment_table::entry_ptr() {
 	return &entries[0];
 }
+
+bool segment_table::add_tss_entry()
+{
+	memset(&tss, 0, sizeof(tss));
+	tss.ss0 = 0x10;
+	tss.esp0 = 0x200000;
+
+	uint32_t base = reinterpret_cast<uint32_t>(&tss);
+	uint32_t limit = base + sizeof(tss);
+
+	return add_entry(limit, base,
+		  1 /* is TSS, not LDT */
+		| 8 /* 32bit */
+		| SEGMENT_PRIV_RING3
+		| SEGMENT_PRESENT,
+		0);
+}
+
+void segment_table::set_kernel_stack(void *stackptr)
+{
+	tss.esp0 = reinterpret_cast<uint32_t>(stackptr);
+}
