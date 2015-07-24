@@ -64,7 +64,7 @@ bool segment_table::add_tss_entry()
 	tss.ss0 = 0x10;
 	tss.esp0 = 0x200000;
 
-	uint32_t base = reinterpret_cast<uint32_t>(&tss);
+	uint32_t base = reinterpret_cast<uint64_t>(&tss);
 	uint32_t limit = base + sizeof(tss);
 
 	return add_entry(limit, base,
@@ -77,5 +77,5 @@ bool segment_table::add_tss_entry()
 
 void segment_table::set_kernel_stack(void *stackptr)
 {
-	tss.esp0 = reinterpret_cast<uint32_t>(stackptr);
+	tss.esp0 = reinterpret_cast<uint64_t>(stackptr);
 }
