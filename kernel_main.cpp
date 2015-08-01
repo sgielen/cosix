@@ -6,17 +6,16 @@
 #include "hw/interrupt.hpp"
 #include "hw/cpu_io.hpp"
 #include "oslibc/numeric.h"
+#include "oslibc/string.h"
 #include "cloudos_version.h"
 #include "userland/process.hpp"
 #include "process/process.hpp"
 #include "memory/allocator.hpp"
+#include "global.hpp"
 
 using namespace cloudos;
 
 extern "C" char __end_of_binary;
-
-allocator *alloc;
-segment_table *gdt_;
 
 const char scancode_to_key[] = {
 	0   , 0   , '1' , '2' , '3' , '4' , '5' , '6' , // 00-07
@@ -33,13 +32,14 @@ const char scancode_to_key[] = {
 };
 
 struct interrupt_handler : public interrupt_functor {
-	interrupt_handler(vga_stream *s) : stream(s), proc_ctr(0), int_first(true) {
+	interrupt_handler(global_state *g) : global(g), proc_ctr(0), int_first(true) {
 		for(size_t i = 0; i < 3; ++i) {
-			procs[i].initialize(i, reinterpret_cast<void*>(process_main), alloc);
+			procs[i].initialize(i, reinterpret_cast<void*>(process_main), global->alloc);
 		}
 	}
 
 	void operator()(interrupt_state_t *regs) {
+		vga_stream *stream = global->vga;
 		if(int_first) {
 			// This boolean is only set to true for the first interrupt, because we only
 			// switch to the first process on the first interrupt, and after that all
@@ -86,10 +86,10 @@ struct interrupt_handler : public interrupt_functor {
 			*stream << "Got interrupt " << int_no << " (" << hex << int_no << dec << ", err code " << err_code << ")\n";
 		}
 		procs[proc_ctr].get_return_state(regs);
-		gdt_->set_kernel_stack(procs[proc_ctr].get_kernel_stack_top());
+		global->gdt->set_kernel_stack(procs[proc_ctr].get_kernel_stack_top());
 	}
 private:
-	vga_stream *stream;
+	global_state *global;
 	cloudos::process procs[3];
 	int proc_ctr;
 	bool int_first;
@@ -97,8 +97,11 @@ private:
 
 extern "C"
 void kernel_main(uint32_t multiboot_magic, void *bi_ptr) {
+	global_state global;
+
 	vga_buffer buf;
 	vga_stream stream(buf);
+	global.vga = &stream;
 	stream << "CloudOS v" cloudos_VERSION " -- starting up\n";
 
 	multiboot_info boot_info(bi_ptr, multiboot_magic);
@@ -124,7 +127,7 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr) {
 	// __end_of_binary points at the end of any usable code, stack, BSS,
 	// etc, so everything after that is free for use by the allocator
 	allocator alloc_(reinterpret_cast<void*>(&__end_of_binary), mmap, memory_map_bytes);
-	alloc = &alloc_;
+	global.alloc = &alloc_;
 
 	for(size_t i = 0; memory_map_bytes > 0; ++i) {
 		memory_map_entry &entry = mmap[i];
@@ -177,10 +180,10 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr) {
 	// and then a TSS entry
 	gdt.add_tss_entry();
 	gdt.load();
-	gdt_ = &gdt;
+	global.gdt = &gdt;
 	stream << "Global Descriptor Table loaded, segmentation is in effect\n";
 
-	interrupt_handler handler(&stream);
+	interrupt_handler handler(&global);
 
 	interrupt_table interrupts;
 	interrupt_global interrupts_global(&handler);
@@ -190,4 +193,8 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr) {
 	stream << "Waiting for interrupts...\n";
 	interrupts_global.enable_interrupts();
 	while(1) {}
+}
+
+global_state::global_state() {
+	memset(this, 0, sizeof(*this));
 }
