@@ -9,7 +9,7 @@ SECTIONS
 	.text BLOCK(4K) : ALIGN(4K)
 	{
 		*(.multiboot)
-		*(.text)
+		*(.text*)
 	}
 
 	.rodata BLOCK(4K) : ALIGN(4K)
@@ -19,13 +19,15 @@ SECTIONS
 
 	.data BLOCK(4K) : ALIGN(4K)
 	{
-		*(.data)
+		*(.data*)
 	}
 
 	.bss BLOCK(4K) : ALIGN(4K)
 	{
 		*(COMMON)
-		*(.bss)
+		*(.bss*)
 		*(.bootstrap_stack)
 	}
+
+	__end_of_binary = .;
 }

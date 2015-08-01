@@ -9,8 +9,14 @@
 #include "cloudos_version.h"
 #include "userland/process.hpp"
 #include "process/process.hpp"
+#include "memory/allocator.hpp"
 
 using namespace cloudos;
+
+extern "C" char __end_of_binary;
+
+allocator *alloc;
+segment_table *gdt_;
 
 const char scancode_to_key[] = {
 	0   , 0   , '1' , '2' , '3' , '4' , '5' , '6' , // 00-07
@@ -29,7 +35,7 @@ const char scancode_to_key[] = {
 struct interrupt_handler : public interrupt_functor {
 	interrupt_handler(vga_stream *s) : stream(s), proc_ctr(0), int_first(true) {
 		for(size_t i = 0; i < 3; ++i) {
-			procs[i].initialize(i, reinterpret_cast<void*>(process_main), reinterpret_cast<void*>(0x300000 + 0x100000 * i));
+			procs[i].initialize(i, reinterpret_cast<void*>(process_main), alloc);
 		}
 	}
 
@@ -80,6 +86,7 @@ struct interrupt_handler : public interrupt_functor {
 			*stream << "Got interrupt " << int_no << " (" << hex << int_no << dec << ", err code " << err_code << ")\n";
 		}
 		procs[proc_ctr].get_return_state(regs);
+		gdt_->set_kernel_stack(procs[proc_ctr].get_kernel_stack_top());
 	}
 private:
 	vga_stream *stream;
@@ -113,6 +120,11 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr) {
 		stream << "Panic: Missing memory map information from the bootloader.\n";
 		return;
 	}
+
+	// __end_of_binary points at the end of any usable code, stack, BSS,
+	// etc, so everything after that is free for use by the allocator
+	allocator alloc_(reinterpret_cast<void*>(&__end_of_binary), mmap, memory_map_bytes);
+	alloc = &alloc_;
 
 	for(size_t i = 0; memory_map_bytes > 0; ++i) {
 		memory_map_entry &entry = mmap[i];
@@ -165,6 +177,7 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr) {
 	// and then a TSS entry
 	gdt.add_tss_entry();
 	gdt.load();
+	gdt_ = &gdt;
 	stream << "Global Descriptor Table loaded, segmentation is in effect\n";
 
 	interrupt_handler handler(&stream);

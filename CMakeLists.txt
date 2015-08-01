@@ -38,7 +38,7 @@ if(BAREMETAL_ENABLED)
 	include_directories(${CMAKE_BINARY_DIR})
 	set_source_files_properties(boot.s PROPERTIES COMPILE_FLAGS "-x assembler-with-cpp")
 	add_executable(cloudkernel boot.s kernel_main.cpp)
-	target_link_libraries(cloudkernel hw oslibc compiler_rt_builtins userland process)
+	target_link_libraries(cloudkernel hw oslibc compiler_rt_builtins userland process memory)
 	set_target_properties(cloudkernel PROPERTIES LINK_DEPENDS ${CMAKE_SOURCE_DIR}/linker.ld)
 
 	add_custom_target(boot qemu-system-i386 -kernel cloudkernel)

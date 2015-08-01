@@ -18,7 +18,9 @@ void process_main() {
 	putstring("Process ");
 	char buf[64];
 	putstring(ui64toa_s(getpid(), &buf[0], sizeof(buf), 10));
-	putstring(" started!\n");
+	putstring(" started! Stack location: 0x");
+	putstring(ui64toa_s(reinterpret_cast<uint64_t>(&buf[0]), &buf[0], sizeof(buf), 16));
+	putstring("\n");
 
 	while(1) {
 		putstring("This is process ");
