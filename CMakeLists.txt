@@ -32,6 +32,7 @@ add_subdirectory(hw)
 add_subdirectory(compiler-rt)
 add_subdirectory(userland)
 add_subdirectory(process)
+add_subdirectory(memory)
 
 if(BAREMETAL_ENABLED)
 	include_directories(${CMAKE_BINARY_DIR})
