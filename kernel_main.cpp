@@ -66,9 +66,10 @@ struct interrupt_handler : public interrupt_functor {
 				char buf[2];
 				buf[0] = scancode_to_key[scancode];
 				buf[1] = 0;
-				*stream << buf;
 				if(buf[0] == '\n') {
 					*stream << hex << "Stack ptr: " << &scancode << "; returning to stack: " << regs->useresp << dec << "\n";
+				} else {
+					*stream << buf;
 				}
 			} else {
 				*stream << "Waited for scancode for too long\n";
