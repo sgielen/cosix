@@ -84,6 +84,7 @@ struct interrupt_handler : public interrupt_functor {
 			procs[proc_ctr].handle_syscall(*stream);
 		} else {
 			*stream << "Got interrupt " << int_no << " (" << hex << int_no << dec << ", err code " << err_code << ")\n";
+			kernel_panic("Unknown interrupt received");
 		}
 		procs[proc_ctr].get_return_state(regs);
 		global->gdt->set_kernel_stack(procs[proc_ctr].get_kernel_stack_top());
@@ -95,10 +96,12 @@ private:
 	bool int_first;
 };
 
+cloudos::global_state *cloudos::global_state_;
+
 extern "C"
 void kernel_main(uint32_t multiboot_magic, void *bi_ptr) {
 	global_state global;
-
+	global_state_ = &global;
 	vga_buffer buf;
 	vga_stream stream(buf);
 	global.vga = &stream;

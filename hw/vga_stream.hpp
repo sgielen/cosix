@@ -1,3 +1,5 @@
+#pragma once
+
 #include "hw/vga.hpp"
 
 namespace cloudos {

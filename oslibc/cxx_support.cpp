@@ -1,3 +1,4 @@
+#include "global.hpp"
 
 void operator delete (void*) noexcept {
 	// TODO(sjors): implement as soon as we have allocations
@@ -7,6 +8,5 @@ void operator delete (void*) noexcept {
 
 extern "C"
 void __cxa_pure_virtual(void) {
-	// TODO(sjors): implement an actual panic
-	asm volatile("cli; halted: hlt; jmp halted;");
+	cloudos::kernel_panic("Pure virtual method called");
 }
