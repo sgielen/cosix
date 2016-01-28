@@ -83,7 +83,7 @@ struct interrupt_handler : public interrupt_functor {
 		} else if(int_no == 0x80) {
 			procs[proc_ctr].handle_syscall(*stream);
 		} else {
-			*stream << "Got interrupt " << int_no << " (" << hex << int_no << dec << ", err code " << err_code << ")\n";
+			*stream << "Got interrupt " << int_no << " (0x" << hex << int_no << dec << ", err code " << err_code << ")\n";
 			kernel_panic("Unknown interrupt received");
 		}
 		procs[proc_ctr].get_return_state(regs);
@@ -146,8 +146,8 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr) {
 		uint64_t begin_addr = reinterpret_cast<uint64_t>(entry.mem_base.addr);
 		uint64_t end_addr = begin_addr + entry.mem_length;
 
-		stream  << "  " << i << ": Addr " << hex << begin_addr
-			<< " to " << end_addr << " (" << dec
+		stream  << "  " << i << ": Addr 0x" << hex << begin_addr
+			<< " to 0x" << end_addr << " (" << dec
 			<< "length " << entry.mem_length
 			<< ") type: ";
 		switch(entry.mem_type) {

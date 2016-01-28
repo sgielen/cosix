@@ -40,11 +40,6 @@ vga_stream &cloudos::operator<<(vga_stream &s, TYPE value) { \
 		s.vga().putc('-'); \
 		value = -value; \
 	} \
-	s.vga().write( \
-		s.base == 2 ? "0b" : \
-		s.base == 8 ? "0" : \
-		s.base == 10 ? "" : \
-		s.base == 16 ? "0x" : "0#"); \
 	s.vga().write(PRODUCER(value, &buf[0], sizeof(buf), s.base)); \
 	return s; \
 }

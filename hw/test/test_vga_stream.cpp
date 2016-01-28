@@ -104,7 +104,7 @@ TEST_CASE( "hw/vga_stream" ) {
 
 	SECTION( "streaming hexadecimal integers into vga_buffer" ) {
 		s << cloudos::hex << -502;
-		memcpy(&first_line[0], "\x2d\x07\x30\x07\x78\x07\x31\x07\x66\x07\x36\x07", 12);
+		memcpy(&first_line[0], "\x2d\x07\x31\x07\x66\x07\x36\x07", 8);
 
 		for(size_t y = 0; y < VGA_HEIGHT; ++y) {
 			if(y == 0) {
@@ -117,7 +117,7 @@ TEST_CASE( "hw/vga_stream" ) {
 		size_t row, column;
 		buf.get_cursor(&row, &column);
 		REQUIRE(row == 0);
-		REQUIRE(column == 6);
+		REQUIRE(column == 4);
 	}
 
 	SECTION( "streaming a boolean into vga_buffer" ) {
@@ -140,7 +140,7 @@ TEST_CASE( "hw/vga_stream" ) {
 
 	SECTION( "streaming a hex number and a boolean into vga_buffer" ) {
 		s << cloudos::hex << 0xff << true;
-		memcpy(&first_line[0], "\x30\x07\x78\x07\x66\x07\x66\x07\x74\x07\x72\x07\x75\x07\x65\x07", 16);
+		memcpy(&first_line[0], "\x66\x07\x66\x07\x74\x07\x72\x07\x75\x07\x65\x07", 12);
 
 		for(size_t y = 0; y < VGA_HEIGHT; ++y) {
 			if(y == 0) {
@@ -153,6 +153,6 @@ TEST_CASE( "hw/vga_stream" ) {
 		size_t row, column;
 		buf.get_cursor(&row, &column);
 		REQUIRE(row == 0);
-		REQUIRE(column == 8);
+		REQUIRE(column == 6);
 	}
 }
