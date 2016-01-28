@@ -5,6 +5,10 @@
 #include "hw/interrupt_table.hpp"
 #include "hw/interrupt.hpp"
 #include "hw/cpu_io.hpp"
+#include "hw/root_device.hpp"
+#include "hw/driver_store.hpp"
+#include "hw/pci_bus.hpp"
+#include "hw/net/virtio.hpp"
 #include "oslibc/numeric.h"
 #include "oslibc/string.h"
 #include "cloudos_version.h"
@@ -193,8 +197,27 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr) {
 	interrupts_global.setup(interrupts);
 	interrupts_global.reprogram_pic();
 
+	global.driver_store = get_allocator()->allocate<driver_store>();
+	new(global.driver_store) driver_store();
+
+#define REGISTER_DRIVER(TYPE) \
+	do { \
+		auto driver = get_allocator()->allocate<TYPE>(); \
+		new(driver) TYPE(); \
+		get_driver_store()->register_driver(driver); \
+	} while(0);
+
+	REGISTER_DRIVER(pci_driver);
+	REGISTER_DRIVER(virtio_net_driver);
+
+	global.root_device = get_allocator()->allocate<root_device>();
+	new(global.root_device) root_device();
+	global.root_device->init();
+	dump_device_descriptions(stream, global.root_device);
+
 	stream << "Waiting for interrupts...\n";
 	interrupts_global.enable_interrupts();
+
 	while(1) {}
 }
 

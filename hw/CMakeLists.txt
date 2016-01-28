@@ -12,6 +12,12 @@ add_library(hw
 	segments.hpp segments.cpp
 	interrupt_table.hpp interrupt_table.cpp
 	interrupt.hpp interrupt.cpp
+	pci_bus.hpp pci_bus.cpp
+	driver.hpp
+	driver_store.hpp driver_store.cpp
+	device.hpp device.cpp
+	root_device.hpp root_device.cpp
+	net/virtio.hpp net/virtio.cpp
 	${EXTRA_HW_SOURCES})
 list(APPEND hw_tests
 	test/test_vga.cpp
