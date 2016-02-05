@@ -42,5 +42,8 @@ if(BAREMETAL_ENABLED)
 	target_link_libraries(cloudkernel hw oslibc compiler_rt_builtins userland process memory)
 	set_target_properties(cloudkernel PROPERTIES LINK_DEPENDS ${CMAKE_SOURCE_DIR}/linker.ld)
 
-	add_custom_target(boot qemu-system-i386 -kernel cloudkernel -netdev user,id=nic0 -device virtio-net-pci,netdev=nic0)
+	add_custom_target(boot
+		COMMAND qemu-system-i386 -kernel cloudkernel -net nic,model=virtio -net dump,file=dump.pcap -net user
+		DEPENDS cloudkernel
+	)
 endif()
