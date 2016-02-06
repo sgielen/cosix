@@ -9,6 +9,9 @@
 #include "hw/driver_store.hpp"
 #include "hw/pci_bus.hpp"
 #include "hw/net/virtio.hpp"
+#include "net/loopback_interface.hpp"
+#include "net/interface_store.hpp"
+#include "net/udp.hpp"
 #include "oslibc/numeric.h"
 #include "oslibc/string.h"
 #include "cloudos_version.h"
@@ -35,6 +38,32 @@ const char scancode_to_key[] = {
 	'2' , '3' , '0' , '.' // 50-53
 };
 
+static void send_udp_test_packet() {
+	auto *eth0 = get_interface_store()->get_interface("eth0");
+	if(!eth0) {
+		return;
+	}
+
+	auto *list = eth0->get_ipv4addr_list();
+	if(!list) {
+		return;
+	}
+
+	ipv4addr_t source, destination;
+	memcpy(source, list->address, 4);
+	// 8.8.8.8
+	destination[0] = destination[1] = destination[2] = destination[3] = 0x08;
+
+	const char *payload = "Hello world!";
+	error_t res = get_protocol_store()->udp->send_ipv4_udp(
+		reinterpret_cast<const uint8_t*>(payload), strlen(payload), source, 53, destination, 53);
+	if(res == error_t::no_error) {
+		get_vga_stream() << "Sent a packet!\n";
+	} else {
+		get_vga_stream() << "Failed to send a packet: " << res << "\n";
+	}
+}
+
 struct interrupt_handler : public interrupt_functor {
 	interrupt_handler(global_state *g) : global(g), proc_ctr(0), int_first(true) {
 		for(size_t i = 0; i < 3; ++i) {
@@ -59,6 +88,7 @@ struct interrupt_handler : public interrupt_functor {
 		int int_no = regs->int_no;
 		int err_code = regs->err_code;
 		if(int_no == 0x20) {
+			get_root_device()->timer_event_recursive();
 			// timer interrupt
 			if(++proc_ctr == 3) {
 				proc_ctr = 0;
@@ -75,10 +105,13 @@ struct interrupt_handler : public interrupt_functor {
 				uint16_t scancode = inb(0x60);
 				char buf[2];
 				buf[0] = scancode_to_key[scancode];
+				if(buf[0] == 'u') {
+					send_udp_test_packet();
+				}
 				buf[1] = 0;
 				if(buf[0] == '\n') {
 					*stream << hex << "Stack ptr: " << &scancode << "; returning to stack: " << regs->useresp << dec << "\n";
-				} else {
+				} else if(scancode <= 0x53) {
 					*stream << buf;
 				}
 			} else {
@@ -210,10 +243,26 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr) {
 	REGISTER_DRIVER(pci_driver);
 	REGISTER_DRIVER(virtio_net_driver);
 
+	global.protocol_store = get_allocator()->allocate<protocol_store>();
+	new(global.protocol_store) protocol_store();
+
+	global.interface_store = get_allocator()->allocate<interface_store>();
+	new(global.interface_store) interface_store();
+
+	loopback_interface *loopback = get_allocator()->allocate<loopback_interface>();
+	new(loopback) loopback_interface();
+	if(global.interface_store->register_interface_fixed_name(loopback, "lo") != error_t::no_error) {
+		kernel_panic("Failed to register loopback interface");
+	}
+
+	loopback->add_ipv4_addr(reinterpret_cast<const uint8_t*>("\x7f\x00\x00\x01"));
+
 	global.root_device = get_allocator()->allocate<root_device>();
 	new(global.root_device) root_device();
 	global.root_device->init();
 	dump_device_descriptions(stream, global.root_device);
+
+	dump_interfaces(stream, global.interface_store);
 
 	stream << "Waiting for interrupts...\n";
 	interrupts_global.enable_interrupts();

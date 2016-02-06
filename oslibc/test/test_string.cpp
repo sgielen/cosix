@@ -26,3 +26,37 @@ TEST_CASE("memcpy") {
 		REQUIRE(buf[i] == res[i]);
 	}
 }
+
+TEST_CASE("strcmp") {
+	CHECK(strcmp("", "") == 0);
+	CHECK(strcmp("a", "b") == -1);
+	CHECK(strcmp("b", "a") == 1);
+	CHECK(strcmp("a", "") == 1);
+	CHECK(strcmp("", "a") == -1);
+	CHECK(strcmp("ab", "aa") == 1);
+	CHECK(strcmp("", "abc") == -1);
+	CHECK(strcmp("abc", "") == 1);
+}
+
+TEST_CASE("memcmp") {
+	CHECK(memcmp("", "", 0) == 0);
+	CHECK(memcmp("", "", 1) == 0);
+	CHECK(memcmp("a", "b", 0) == 0);
+	CHECK(memcmp("a", "b", 1) == -1);
+	CHECK(memcmp("a", "b", 2) == -1);
+	CHECK(memcmp("b", "a", 0) == 0);
+	CHECK(memcmp("b", "a", 1) == 1);
+	CHECK(memcmp("b", "a", 2) == 1);
+	CHECK(memcmp("a", "", 0) == 0);
+	CHECK(memcmp("a", "", 1) == 1);
+	CHECK(memcmp("", "a", 0) == 0);
+	CHECK(memcmp("", "a", 1) == -1);
+	CHECK(memcmp("ab", "aa", 0) == 0);
+	CHECK(memcmp("ab", "aa", 1) == 0);
+	CHECK(memcmp("ab", "aa", 2) == 1);
+	CHECK(memcmp("ab", "aa", 3) == 1);
+	CHECK(memcmp("", "abc", 0) == 0);
+	CHECK(memcmp("", "abc", 1) == -1);
+	CHECK(memcmp("abc", "", 0) == 0);
+	CHECK(memcmp("abc", "", 1) == 1);
+}

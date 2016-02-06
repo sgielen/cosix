@@ -8,6 +8,8 @@ struct global_state;
 class allocator;
 struct segment_table;
 struct driver_store;
+struct protocol_store;
+struct interface_store;
 struct device;
 
 extern global_state *global_state_;
@@ -19,6 +21,8 @@ struct global_state {
 	cloudos::segment_table *gdt; /* for TSS access */
 	cloudos::vga_stream *vga;
 	cloudos::driver_store *driver_store;
+	cloudos::protocol_store *protocol_store;
+	cloudos::interface_store *interface_store;
 	cloudos::device *root_device;
 };
 
@@ -44,6 +48,22 @@ inline driver_store *get_driver_store() {
 	}
 
 	return global_state_->driver_store;
+}
+
+inline protocol_store *get_protocol_store() {
+	if(!global_state_ || !global_state_->protocol_store) {
+		kernel_panic("No protocol store is set");
+	}
+
+	return global_state_->protocol_store;
+}
+
+inline interface_store *get_interface_store() {
+	if(!global_state_ || !global_state_->interface_store) {
+		kernel_panic("No interface store is set");
+	}
+
+	return global_state_->interface_store;
 }
 
 inline vga_stream &get_vga_stream() {

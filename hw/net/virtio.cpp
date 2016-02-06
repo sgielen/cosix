@@ -3,10 +3,14 @@
 #include "global.hpp"
 #include "memory/allocator.hpp"
 #include "oslibc/error.h"
+#include "oslibc/string.h"
+#include "net/protocol_store.hpp"
+#include "net/dhcp.hpp" // TODO remove
 
 using namespace cloudos;
 
 namespace cloudos {
+
 struct virtq_desc {
 	/* Address (guest-physical). */
 	uint64_t addr;
@@ -18,7 +22,7 @@ struct virtq_desc {
 /* This marks a buffer as device write-only (otherwise device read-only). */
 #define VIRTQ_DESC_F_WRITE     2
 /* This means the buffer contains a list of buffer descriptors. */
-#define VIRTQ_DESC_F_INDIRECT   4
+//#define VIRTQ_DESC_F_INDIRECT   4
 	/* The flags as indicated above. */
 	uint16_t flags;
 	/* Next field if flags & NEXT */
@@ -26,7 +30,7 @@ struct virtq_desc {
 };
 
 struct virtq_avail {
-#define VIRTQ_AVAIL_F_NO_INTERRUPT      1
+//#define VIRTQ_AVAIL_F_NO_INTERRUPT      1
 	uint16_t flags;
 	uint16_t idx;
 	uint16_t ring[];
@@ -34,7 +38,7 @@ struct virtq_avail {
 } __attribute__((__packed__));
 
 struct virtq_used {
-#define VIRTQ_USED_F_NO_NOTIFY  1
+//#define VIRTQ_USED_F_NO_NOTIFY  1
 	uint16_t flags;
 	uint16_t idx;
 	struct {
@@ -150,7 +154,7 @@ const char *virtio_net_device::description()
 }
 
 virtio_net_device::virtio_net_device(pci_bus *parent, int d)
-: device(parent)
+: ethernet_device(parent)
 , bus(parent)
 , bus_device(d)
 , last_readq_idx(0)
@@ -160,16 +164,14 @@ virtio_net_device::virtio_net_device(pci_bus *parent, int d)
 {
 }
 
-error_t virtio_net_device::init()
+error_t virtio_net_device::eth_init()
 {
-	get_vga_stream() << "Found VirtIO NIC. Initializing it.\n";
 	uint32_t bar0 = bus->get_bar0(bus_device);
 	if((bar0 & 0x01) != 1) {
 		get_vga_stream() << "Not I/O space BAR type, skipping.\n";
 		return error_t::dev_not_supported;
 	}
 	bar0 = bar0 & 0xfffffffc;
-	get_vga_stream() << "bar0: 0x" << hex << bar0 << dec << "\n";
 	//uint8_t int_info = read_pci_config(bus, device, 0, 0x3c) & 0xff;
 	//get_vga_stream() << "Will use IRQ " << int_info << "\n";
 	uint32_t mem_base = bar0;
@@ -178,9 +180,7 @@ error_t virtio_net_device::init()
 	uint32_t const queue_address = mem_base + 0x08; // 4 bytes
 	uint32_t const queue_size = mem_base + 0x0c; // 2 bytes
 	uint32_t const queue_select = mem_base + 0x0e; // 2 bytes
-	uint32_t const queue_notify = mem_base + 0x10; // 2 bytes
 	uint32_t const device_status = mem_base + 0x12; // 1 byte
-	uint32_t const isr_status = mem_base + 0x13; // 1 byte
 
 	// acknowledge device
 	outb(device_status, 0); /* reset device */
@@ -226,15 +226,13 @@ error_t virtio_net_device::init()
 	outl(driver_features + 1, drv_features >> 32);
 	get_vga_stream() << "Driver features: 0x" << hex << inl(driver_features) << dec << "\n";
 
-	uint8_t mac[6];
-	{
-		mac[0] = inb(mem_base + 0x14);
-		mac[1] = inb(mem_base + 0x15);
-		mac[2] = inb(mem_base + 0x16);
-		mac[3] = inb(mem_base + 0x17);
-		mac[4] = inb(mem_base + 0x18);
-		mac[5] = inb(mem_base + 0x19);
-	}
+	mac[0] = inb(mem_base + 0x14);
+	mac[1] = inb(mem_base + 0x15);
+	mac[2] = inb(mem_base + 0x16);
+	mac[3] = inb(mem_base + 0x17);
+	mac[4] = inb(mem_base + 0x18);
+	mac[5] = inb(mem_base + 0x19);
+
 	get_vga_stream() << "MAC address: " << hex << mac[0] << ":" << mac[1] << ":" << mac[2] << ":" << mac[3] << ":" << mac[4] << ":" << mac[5] << "\n";
 
 	for(int queue = 0; queue < 2; ++queue) {
@@ -244,7 +242,6 @@ error_t virtio_net_device::init()
 		virtq *q = get_allocator()->allocate<virtq>();
 		new(q) virtq(queue, number_of_entries);
 
-		get_vga_stream() << "Data ptr: " << hex << q->get_virtq_addr() << dec << "\n";
 		if((reinterpret_cast<uint64_t>(q->get_virtq_addr()) % 4096) != 0) {
 			get_vga_stream() << "Failed to allocate descriptor table aligned to 4096 bytes\n";
 			return error_t::no_memory;
@@ -253,80 +250,10 @@ error_t virtio_net_device::init()
 		(queue == 0 ? readq : writeq) = q;
 	}
 
-	get_vga_stream() << "Readq  queue size: " << readq->get_queue_size() << "\n";
-	get_vga_stream() << "Writeq queue size: " << writeq->get_queue_size() << "\n";
-
-	get_vga_stream() << "ISR status: " << inb(isr_status) << "\n";
-	get_vga_stream() << "ISR status: " << inb(isr_status) << "\n";
-
-	outb(device_status, 4); /* driver ready */
-
-	// TODO: the code after this is just a test. It sends a DHCP request and prints some information
-	// about the resulting response. Also, even though the MAC is filled in dynamically, the checksums
-	// are wrong for any MAC other than qemu's default. This code should be replaced with a decent IP
-	// stack.
-
-	/* TODO: this must be in DMA phys memory */
-	uint8_t net_hdr[] = {
-		0x01, /* needs checksum */
-		0x00, /* no segmentation */
-		0x00, 0x00, /* header length */
-		0x00, 0x00, /* segment size */
-		0x00, 0x00, /* checksum start */
-		0x00, 0x00, /* checksum offset */
-		0x00, 0x00, /* buffer count */
-	};
-
-	uint8_t bootp[] = {
-		/* ethernet */
-		0xff, 0xff, 0xff, 0xff, 0xff, 0xff, // destination MAC
-		mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], // source MAC
-		0x08, 0x00, // IPv4
-		/* ipv4 */
-		0x45, 0x00, 0x00, 0xdf, 0xf5, 0xe9, 0x00, 0x00, // id, flags, length, type, ...
-		0xff, 0x11, 0xc5, 0x24, // ttl, udp, checksum
-		0x00, 0x00, 0x00, 0x00, // source IP
-		0xff, 0xff, 0xff, 0xff, // destination IP
-		/* udp */
-		0x00, 0x44, 0x00, 0x43, // source and dest port
-		0x00, 0xcb, 0x00, 0x00, // length and checksum
-		/* bootp */
-		0x01, 0x01, 0x06, 0x00, // bootp request, ethernet, hw address length 6, 0 hops
-		0xd1, 0x4c, 0x52, 0xae, // id
-		0x00, 0x00, 0x00, 0x00, // no time elapsed, no flags
-		0x00, 0x00, 0x00, 0x00, // client IP
-		0x00, 0x00, 0x00, 0x00, // "your" IP
-		0x00, 0x00, 0x00, 0x00, // next server IP
-		0x00, 0x00, 0x00, 0x00, // relay IP,
-		mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], // client MAC (note, this invalidates checksum)
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // hardware address padding
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // server host name
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // server host name
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // server host name
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // server host name
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // boot filename
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // boot filename
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // boot filename
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // boot filename
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // boot filename
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // boot filename
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // boot filename
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // boot filename
-		/* dhcp */
-		0x63, 0x82, 0x53, 0x63, // dhcp magic cookie
-		0x35, 0x01, 0x03, // dhcp request
-		0x37, 0x0a, 0x01, 0x79, 0x03, 0x06, 0x0f, 0x77, 0xf, 0x5f, 0x2c, 0x2e, // request various other parameters as well
-		0x39, 0x02, 0x05, 0xdc, // max response size
-		0x3d, 0x07, 0x01, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], // client identifier
-		/* missing: requested IP address */
-		/* missing: IP address lease time */
-		0x0c, 0x07, 'c', 'l', 'o', 'u', 'd', 'o', 's', // hostname
-		0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 // end + padding
-	};
-
 	last_readq_idx = readq->get_virtq_used()->idx;
 
-	/* make some read buffers available */
+	// make some read buffers available
+	// TODO: ensure there are always read buffers available
 	{
 		auto avail = readq->get_virtq_avail();
 		for(int i = 0; i < 10; ++i) {
@@ -341,52 +268,110 @@ error_t virtio_net_device::init()
 		avail->idx = 10;
 	}
 
-	auto d0 = writeq->get_virtq_desc(0);
-	auto d1 = writeq->get_virtq_desc(1);
+	outb(device_status, 4); /* driver ready */
+
+	// TODO: make something other than the ethernet_device responsible for starting
+	// the DHCP client
+	return get_protocol_store()->dhcp->start_dhcp_discover_for(get_interface());
+}
+
+error_t virtio_net_device::check_new_packets() {
+	if(readq == nullptr) {
+		return error_t::invalid_argument;
+	}
+
+	auto *virtq_used = readq->get_virtq_used();
+	while(virtq_used->idx > last_readq_idx) {
+		uint32_t id = virtq_used->ring[last_readq_idx].id;
+		uint32_t length = virtq_used->ring[last_readq_idx].len;
+		auto *descriptor = readq->get_virtq_desc(id);
+		uint8_t *nethdr = reinterpret_cast<uint8_t*>(descriptor->addr & 0xffffffff);
+		auto res = ethernet_frame_received(nethdr + 12, length - 12);
+
+		last_readq_idx++;
+
+		// TODO: add the buffer back into the available buffer
+		if(res != error_t::no_error) {
+			return res;
+		}
+	}
+
+	// TODO: free sent buffers
+
+	return error_t::no_error;
+}
+
+error_t virtio_net_device::get_mac_address(char m[6]) {
+	if(readq == nullptr) {
+		return error_t::invalid_argument;
+	}
+
+	memcpy(m, mac, 6);
+	return error_t::no_error;
+}
+
+error_t virtio_net_device::send_ethernet_frame(uint8_t *frame, size_t length) {
+	if(writeq == nullptr) {
+		return error_t::invalid_argument;
+	}
+
+	/* TODO: this must be in DMA phys memory */
+	uint8_t net_hdr[] = {
+		0x01, /* needs checksum */
+		0x00, /* no segmentation */
+		0x00, 0x00, /* header length */
+		0x00, 0x00, /* segment size */
+		0x00, 0x00, /* checksum start */
+		0x00, 0x00, /* checksum offset */
+		0x00, 0x00, /* buffer count */
+	};
+
+	// TODO: allocate actual descriptors
+	size_t first_desc = last_writeq_idx++;
+	size_t second_desc = last_writeq_idx++;
+	auto d0 = writeq->get_virtq_desc(first_desc);
+	auto d1 = writeq->get_virtq_desc(second_desc);
 
 	d0->addr = reinterpret_cast<uint64_t>(net_hdr);
 	d0->len = sizeof(net_hdr);
 	d0->flags = VIRTQ_DESC_F_NEXT;
-	d0->next = 1;
+	d0->next = second_desc;
 
-	d1->addr = reinterpret_cast<uint64_t>(bootp);
-	d1->len = sizeof(bootp);
+	d1->addr = reinterpret_cast<uint64_t>(frame);
+	d1->len = length;
 	d1->flags = 0;
-	d1->next = 1;
-
-	// memory barrier
-	asm volatile ("": : :"memory");
+	d1->next = 0;
 
 	auto avail = writeq->get_virtq_avail();
-	get_vga_stream() << "Avail ptr: " << hex << avail << dec << "\n";
 	avail->flags = 0;
-	avail->ring[0] = 0;
+	avail->ring[avail->idx] = first_desc;
 
 	// memory barrier
 	asm volatile ("": : :"memory");
 
-	avail->idx = 1;
+	avail->idx += 1;
 
 	// memory barrier
 	asm volatile ("": : :"memory");
 
+	uint32_t bar0 = bus->get_bar0(bus_device);
+	if((bar0 & 0x01) != 1) {
+		get_vga_stream() << "Not I/O space BAR type, skipping.\n";
+		return error_t::dev_not_supported;
+	}
+	bar0 = bar0 & 0xfffffffc;
+
+	uint32_t const queue_notify = bar0 + 0x10;
 	outw(queue_notify, writeq->get_queue_select());
 
-	for(int i = 0; i < 100000000; ++i) {
-		// memory barrier
-		asm volatile ("": : :"memory");
-	}
-
-	while(readq->get_virtq_used()->idx > last_readq_idx) {
-		uint32_t id = readq->get_virtq_used()->ring[last_readq_idx].id;
-		uint32_t len = readq->get_virtq_used()->ring[last_readq_idx].len;
-		get_vga_stream() << "New packet with index " << last_readq_idx << ", id " << id << ", len " << len << "\n";
-		auto desc = readq->get_virtq_desc(id);
-		get_vga_stream() << "Desc addr 0x" << hex << (desc->addr & 0xffffffff) << dec << "\n";
-		get_vga_stream() << "     len " << desc->len << ", flags " << desc->flags << ", next " << desc->next << "\n";
-
-		last_readq_idx++;
-	}
-
 	return error_t::no_error;
+}
+
+void virtio_net_device::timer_event() {
+	// TODO: do this when the correct interrupt arrives, instead of
+	// when the timer fires
+	auto res = check_new_packets();
+	if(res != error_t::no_error) {
+		get_vga_stream() << "check_new_packets failed: " << res << "\n";
+	}
 }

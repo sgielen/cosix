@@ -55,6 +55,15 @@ struct device {
 	 */
 	device_list *children();
 
+	virtual void timer_event() {};
+
+	void timer_event_recursive() {
+		timer_event();
+		for(auto *list = children_; list; list = list->next) {
+			list->device->timer_event_recursive();
+		}
+	}
+
 private:
 	void add_child(device *child);
 	void remove_child(device *child);

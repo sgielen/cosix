@@ -16,6 +16,12 @@ memset(void *b, int c, size_t len);
 void *
 memcpy(void *dst, const void *src, size_t n);
 
+int
+memcmp(const void *left, const void *right, size_t n);
+
+int
+strcmp(const char *left, const char *right);
+
 #if defined(__cplusplus)
 }
 #endif
