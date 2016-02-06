@@ -1,6 +1,7 @@
 #pragma once
 
 #include "hw/vga.hpp"
+#include "oslibc/error.h"
 
 namespace cloudos {
 
@@ -36,5 +37,7 @@ vga_stream &operator<<(vga_stream &, bool);
 vga_stream &operator<<(vga_stream &, char);
 vga_stream &operator<<(vga_stream &, const char*);
 vga_stream &operator<<(vga_stream &, void*);
+
+vga_stream &operator<<(vga_stream &, error_t);
 
 }

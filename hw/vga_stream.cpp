@@ -82,3 +82,8 @@ vga_stream &cloudos::operator<<(vga_stream &s, void *ptr) {
 	}
 	return s;
 }
+
+vga_stream &cloudos::operator<<(vga_stream &s, error_t error) {
+	s << to_string(error);
+	return s;
+}
