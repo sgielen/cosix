@@ -14,6 +14,8 @@ static void wait() {
 	}
 }
 
+// #define VERBOSE_PROCESS
+
 void process_main() {
 	putstring("Process ");
 	char buf[64];
@@ -23,9 +25,11 @@ void process_main() {
 	putstring("\n");
 
 	while(1) {
+#ifdef VERBOSE_PROCESS
 		putstring("This is process ");
 		putstring(ui64toa_s(getpid(), &buf[0], sizeof(buf), 10));
 		putstring(".\n");
+#endif
 		wait();
 	}
 }
