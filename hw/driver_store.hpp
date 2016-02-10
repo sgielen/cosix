@@ -2,15 +2,13 @@
 
 #include "global.hpp"
 #include "memory/allocator.hpp"
+#include "oslibc/list.hpp"
 
 namespace cloudos {
 
 struct driver;
 
-struct driver_list {
-	driver *driver;
-	driver_list *next;
-};
+typedef linked_list<driver*> driver_list;
 
 struct driver_store {
 	driver_store();

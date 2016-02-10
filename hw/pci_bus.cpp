@@ -26,19 +26,19 @@ const char *pci_bus::description()
 
 error_t pci_bus::init()
 {
-	auto *orig_list = get_driver_store()->get_drivers();
-	for(uint8_t device = 0; device < 32; ++device) {
-		auto *list = orig_list;
-		while(list) {
-			auto *dev = list->driver->probe_pci_device(this, device);
+	auto *list = get_driver_store()->get_drivers();
+	for(uint8_t device_nr = 0; device_nr < 32; ++device_nr) {
+		device *dev = nullptr;
+		find(list, [this, device_nr, &dev](driver_list *item) {
+			dev = item->data->probe_pci_device(this, device_nr);
+			return dev != nullptr;
+		});
 
-			if(dev != nullptr) {
-				auto res = dev->init();
-				if(res != error_t::no_error) {
-					return res;
-				}
+		if(dev != nullptr) {
+			auto res = dev->init();
+			if(res != error_t::no_error) {
+				return res;
 			}
-			list = list->next;
 		}
 	}
 	return error_t::no_error;

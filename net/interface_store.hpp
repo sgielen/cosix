@@ -1,15 +1,13 @@
 #pragma once
 
 #include "oslibc/error.h"
+#include "oslibc/list.hpp"
 
 namespace cloudos {
 
 struct interface;
 
-struct interface_list {
-	interface *interface;
-	interface_list *next;
-};
+typedef linked_list<interface*> interface_list;
 
 struct interface_store;
 struct vga_stream;

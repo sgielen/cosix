@@ -50,7 +50,7 @@ static void send_udp_test_packet() {
 	}
 
 	ipv4addr_t source, destination;
-	memcpy(source, list->address, 4);
+	memcpy(source, list->data, 4);
 	// 8.8.8.8
 	destination[0] = destination[1] = destination[2] = destination[3] = 0x08;
 

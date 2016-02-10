@@ -1,16 +1,14 @@
 #pragma once
 
 #include "oslibc/error.h"
+#include "oslibc/list.hpp"
 
 namespace cloudos {
 
 struct device;
 struct vga_stream;
 
-struct device_list {
-	device *device;
-	device_list *next;
-};
+typedef linked_list<device*> device_list;
 
 void dump_device_descriptions(vga_stream &stream, device *device);
 
@@ -57,12 +55,7 @@ struct device {
 
 	virtual void timer_event() {};
 
-	void timer_event_recursive() {
-		timer_event();
-		for(auto *list = children_; list; list = list->next) {
-			list->device->timer_event_recursive();
-		}
-	}
+	void timer_event_recursive();
 
 private:
 	void add_child(device *child);

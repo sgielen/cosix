@@ -5,20 +5,14 @@
 #include "net/ip.hpp"
 #include "net/protocol_store.hpp"
 #include "oslibc/error.h"
+#include "oslibc/list.hpp"
 
 namespace cloudos {
 
 struct interface_store;
 
-struct ipv4addr_list {
-	ipv4addr_t address;
-	ipv4addr_list *next;
-};
-
-struct ipv6addr_list {
-	ipv6addr_t address;
-	ipv6addr_list *next;
-};
+typedef linked_list<ipv4addr_t> ipv4addr_list;
+typedef linked_list<ipv6addr_t> ipv6addr_list;
 
 /**
  * An interface is used for IP communication. It is an abstract concept with

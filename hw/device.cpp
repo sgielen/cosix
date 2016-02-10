@@ -34,31 +34,17 @@ void device::add_child(device *child) {
 	if(child->parent() != this) {
 		kernel_panic("device to add as child does not have me as parent");
 	}
+
+	if(contains_object(children_, child)) {
+		kernel_panic("device added as child is already a child of mine");
+	}
 #endif
 
 	device_list *new_entry = get_allocator()->allocate<device_list>();
-	new_entry->device = child;
+	new_entry->data = child;
 	new_entry->next = nullptr;
 
-	if(children_ == nullptr) {
-		children_ = new_entry;
-		return;
-	}
-
-	device_list *list = children_;
-	while(true) {
-#ifndef NDEBUG
-		if(list->device == child) {
-			kernel_panic("device added as child is already a child of mine");
-		}
-#endif
-		if(list->next == nullptr) {
-			list->next = new_entry;
-			return;
-		} else {
-			list = list->next;
-		}
-	}
+	append(&children_, new_entry);
 }
 
 void device::remove_child(device *child) {
@@ -68,22 +54,16 @@ void device::remove_child(device *child) {
 	}
 #endif
 
-	device_list *last = nullptr;
-	device_list *list = children_;
-	while(list) {
-		if(list->device == child) {
-			if(last == nullptr) {
-				children_ = list->next;
-			} else {
-				last->next = list->next;
-			}
-			return;
-		}
-		last = list;
-		list = list->next;
+	if(!remove_object(&children_, child, [](device*){})) {
+		kernel_panic("device to remove as child was not in my children list");
 	}
+}
 
-	kernel_panic("device to remove as child was not in my children list");
+void device::timer_event_recursive() {
+	timer_event();
+	iterate(children_, [](device_list *item) {
+		item->data->timer_event_recursive();
+	});
 }
 
 static void dump_device_descriptions(vga_stream &stream, device *device, int level)
@@ -92,9 +72,9 @@ static void dump_device_descriptions(vga_stream &stream, device *device, int lev
 		stream << ' ';
 	}
 	stream << "* " << device->description() << '\n';
-	for(device_list *list = device->children(); list; list = list->next) {
-		dump_device_descriptions(stream, list->device, level + 1);
-	}
+	iterate(device->children(), [&stream, level](device_list *item) {
+		dump_device_descriptions(stream, item->data, level + 1);
+	});
 }
 
 void cloudos::dump_device_descriptions(vga_stream &stream, device *device)

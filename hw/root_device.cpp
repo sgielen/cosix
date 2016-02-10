@@ -13,16 +13,15 @@ const char *root_device::description() {
 }
 
 error_t root_device::init() {
-	auto list = get_driver_store()->get_drivers();
-	while(list) {
-		auto *dev = list->driver->probe_root_device(this);
+	auto *list = get_driver_store()->get_drivers();
+	error_t res = error_t::no_error;
+	find(list, [this, &res](driver_list *item) {
+		auto *dev = item->data->probe_root_device(this);
 		if(dev != nullptr) {
-			auto res = dev->init();
-			if(res != error_t::no_error) {
-				return res;
-			}
+			res = dev->init();
+			return res != error_t::no_error;
 		}
-		list = list->next;
-	}
-	return error_t::no_error;
+		return false;
+	});
+	return res;
 }

@@ -140,8 +140,8 @@ error_t ip_implementation::send_ipv4_packet(uint8_t *payload, size_t length, ipv
 
 	auto *list = get_interface_store()->get_interfaces();
 	for(; list; list = list->next) {
-		if(strcmp(list->interface->get_name(), "eth0") == 0) {
-			return list->interface->send_packet(packet, ip_length);
+		if(strcmp(list->data->get_name(), "eth0") == 0) {
+			return list->data->send_packet(packet, ip_length);
 		}
 	}
 

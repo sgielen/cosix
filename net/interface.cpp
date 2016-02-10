@@ -27,21 +27,16 @@ void interface::set_name(const char *n)
 
 error_t interface::add_ipv4_addr(uint8_t const ip[4])
 {
+	if(contains(ipv4_addrs, [&ip](ipv4addr_list const *item){
+	    return memcmp(item->data, ip, 4) == 0;
+	})) {
+		return error_t::file_exists;
+	}
+
 	ipv4addr_list *new_entry = get_allocator()->allocate<ipv4addr_list>();
-	memcpy(new_entry->address, ip, 4);
+	memcpy(new_entry->data, ip, 4);
 	new_entry->next = nullptr;
 
-	if(ipv4_addrs == nullptr) {
-		ipv4_addrs = new_entry;
-		return error_t::no_error;
-	}
-
-	auto *list = ipv4_addrs;
-	for(; list->next == nullptr; list = list->next) {
-		if(memcmp(list->address, ip, 4)) {
-			return error_t::file_exists;
-		}
-	}
-	list->next = new_entry;
+	append(&ipv4_addrs, new_entry);
 	return error_t::no_error;
 }

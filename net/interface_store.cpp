@@ -10,13 +10,13 @@ using namespace cloudos;
 void cloudos::dump_interfaces(vga_stream &stream, interface_store *store)
 {
 	stream << "Interfaces:\n";
-	for(interface_list *list = store->get_interfaces(); list; list = list->next) {
-		stream << "* " << list->interface->get_name() << "\n";
-		for(auto *ip_list = list->interface->get_ipv4addr_list(); ip_list; ip_list = ip_list->next) {
-			uint8_t *a = ip_list->address;
+	iterate(store->get_interfaces(), [&stream](interface_list *item){
+		stream << "* " << item->data->get_name() << "\n";
+		iterate(item->data->get_ipv4addr_list(), [&stream](ipv4addr_list *addr_item){
+			uint8_t *a = addr_item->data;
 			stream << "  IPv4: " << dec << a[0] << "." << a[1] << "." << a[2] << "." << a[3] << "\n";
-		}
-	}
+		});
+	});
 }
 
 interface_store::interface_store()
@@ -25,12 +25,10 @@ interface_store::interface_store()
 
 interface *interface_store::get_interface(const char *name)
 {
-	for(interface_list *list = interfaces_; list; list = list->next) {
-		if(strcmp(list->interface->get_name(), name) == 0) {
-			return list->interface;
-		}
-	}
-	return nullptr;
+	interface_list *found = find(interfaces_, [name](interface_list *item) {
+		return strcmp(item->data->get_name(), name) == 0;
+	});
+	return found == nullptr ? nullptr : found->data;
 }
 
 error_t interface_store::register_interface(interface *i, const char *prefix)
@@ -64,20 +62,9 @@ error_t interface_store::register_interface_fixed_name(interface *i, const char 
 	i->set_name(name);
 
 	interface_list *next_entry = get_allocator()->allocate<interface_list>();
-	next_entry->interface = i;
+	next_entry->data = i;
 	next_entry->next = nullptr;
 
-	if(interfaces_ == nullptr) {
-		interfaces_ = next_entry;
-		return error_t::no_error;
-	}
-
-	interface_list *list = interfaces_;
-	while(true) {
-		if(list->next == nullptr) {
-			list->next = next_entry;
-			return error_t::no_error;
-		}
-		list = list->next;
-	}
+	append(&interfaces_, next_entry);
+	return error_t::no_error;
 }
