@@ -18,11 +18,10 @@
 #include "userland/process.hpp"
 #include "process/process.hpp"
 #include "memory/allocator.hpp"
+#include "memory/page_allocator.hpp"
 #include "global.hpp"
 
 using namespace cloudos;
-
-extern "C" char __end_of_binary;
 
 const char scancode_to_key[] = {
 	0   , 0   , '1' , '2' , '3' , '4' , '5' , '6' , // 00-07
@@ -87,7 +86,27 @@ struct interrupt_handler : public interrupt_functor {
 
 		int int_no = regs->int_no;
 		int err_code = regs->err_code;
-		if(int_no == 0x20) {
+		if(int_no == 0x0e) {
+			*stream << "Page fault in process " << proc_ctr << "\n";
+			if(err_code & 0x01) {
+				*stream << "  Caused by a page-protection violation during page ";
+			} else {
+				*stream << "  Caused by a non-present page during page ";
+			}
+			*stream << ((err_code & 0x02) ? "write" : "read");
+			*stream << ((err_code & 0x04) ? " in unprivileged mode" : " in kernel mode");
+			if(err_code & 0x08) {
+				*stream << " as a result of reading a reserved field";
+			}
+			if(err_code & 0x10) {
+				*stream << " as a result of an instruction fetch";
+			}
+			*stream << "\n";
+			uint32_t address;
+			asm volatile("mov %%cr2, %0" : "=a"(address));
+			*stream << "  Virtual address accessed: 0x" << hex << address << dec << "\n";
+			kernel_panic("Received #PF interrupt");
+		} else if(int_no == 0x20) {
 			get_root_device()->timer_event_recursive();
 			// timer interrupt
 			if(++proc_ctr == 3) {
@@ -136,7 +155,7 @@ private:
 cloudos::global_state *cloudos::global_state_;
 
 extern "C"
-void kernel_main(uint32_t multiboot_magic, void *bi_ptr) {
+void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	global_state global;
 	global_state_ = &global;
 	vga_buffer buf;
@@ -164,26 +183,14 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr) {
 		return;
 	}
 
-	// __end_of_binary points at the end of any usable code, stack, BSS,
-	// etc, so everything after that is free for use by the allocator
-	allocator alloc_(reinterpret_cast<void*>(&__end_of_binary), mmap, memory_map_bytes);
-	global.alloc = &alloc_;
-
-	for(size_t i = 0; memory_map_bytes > 0; ++i) {
-		memory_map_entry &entry = mmap[i];
-		if(entry.entry_size == 0) {
-			stream << "  " << i << ": end of list\n";
-			break;
-		} else if(entry.entry_size != 20) {
-			stream << "Memory map entry " << i << " size is invalid: " << entry.entry_size << "\n";
-			break;
-		}
-		memory_map_bytes -= entry.entry_size;
+	stream << "Memory map as provided in Multiboot information:\n";
+	iterate_through_mem_map(mmap, memory_map_bytes, [&](memory_map_entry *e) {
+		memory_map_entry &entry = *e;
 
 		uint64_t begin_addr = reinterpret_cast<uint64_t>(entry.mem_base.addr);
 		uint64_t end_addr = begin_addr + entry.mem_length;
 
-		stream  << "  " << i << ": Addr 0x" << hex << begin_addr
+		stream  << "* Addr 0x" << hex << begin_addr
 			<< " to 0x" << end_addr << " (" << dec
 			<< "length " << entry.mem_length
 			<< ") type: ";
@@ -195,7 +202,16 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr) {
 		default: stream << "reserved memory"; break;
 		}
 		stream << "\n";
-	}
+	});
+
+	allocator alloc_;
+	global.alloc = &alloc_;
+
+	// end_of_kernel points at the end of any usable code, stack, BSS, etc
+	// in physical memory, so everything after that is free for use by the
+	// allocator
+	page_allocator paging(end_of_kernel, mmap, memory_map_bytes);
+	global.page_allocator = &paging;
 
 	// Set up segment table
 	segment_table gdt;
@@ -222,6 +238,9 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr) {
 	gdt.load();
 	global.gdt = &gdt;
 	stream << "Global Descriptor Table loaded, segmentation is in effect\n";
+
+	paging.install();
+	stream << "Paging directory loaded, paging is in effect\n";
 
 	interrupt_handler handler(&global);
 

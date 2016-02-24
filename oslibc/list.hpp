@@ -121,7 +121,7 @@ inline size_t remove_all(linked_list<T> **list, Functor f, Deallocator d) {
 			}
 			linked_list<T> *next = i->next;
 			i->next = nullptr;
-			d(i->data);
+			d(i);
 			i = next;
 			++removed;
 		} else {

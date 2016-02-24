@@ -2,6 +2,7 @@
 #include "hw/cpu_io.hpp"
 #include "global.hpp"
 #include "memory/allocator.hpp"
+#include "memory/page_allocator.hpp"
 #include "oslibc/error.h"
 #include "oslibc/string.h"
 #include "net/protocol_store.hpp"
@@ -65,9 +66,7 @@ struct virtq {
 		iovirtq_bytes += padding_used;
 		/* used list */
 		iovirtq_bytes += 2 + queue_size * 8;
-		/* TODO: this must be DMA physical memory */
 		data = reinterpret_cast<uint8_t*>(get_allocator()->allocate_aligned(iovirtq_bytes, 4096));
-		// initialize to zero
 		for(size_t i = 0; i < iovirtq_bytes; ++i) {
 			data[i] = 0;
 		}
@@ -81,8 +80,8 @@ struct virtq {
 		return queue_size;
 	}
 
-	void *get_virtq_addr() {
-		return reinterpret_cast<void*>(data);
+	void *get_virtq_addr_phys() {
+		return get_page_allocator()->to_physical_address(data);
 	}
 
 	virtq_desc *get_virtq_desc(int i) {
@@ -242,11 +241,12 @@ error_t virtio_net_device::eth_init()
 		virtq *q = get_allocator()->allocate<virtq>();
 		new(q) virtq(queue, number_of_entries);
 
-		if((reinterpret_cast<uint64_t>(q->get_virtq_addr()) % 4096) != 0) {
+		uint64_t virtq_addr_phys = reinterpret_cast<uint64_t>(q->get_virtq_addr_phys());
+		if((virtq_addr_phys % 4096) != 0) {
 			get_vga_stream() << "Failed to allocate descriptor table aligned to 4096 bytes\n";
 			return error_t::no_memory;
 		}
-		outl(queue_address, reinterpret_cast<uint64_t>(q->get_virtq_addr()) / 4096);
+		outl(queue_address, virtq_addr_phys >> 12);
 		(queue == 0 ? readq : writeq) = q;
 	}
 
@@ -258,7 +258,8 @@ error_t virtio_net_device::eth_init()
 		auto avail = readq->get_virtq_avail();
 		for(int i = 0; i < 10; ++i) {
 			auto desc = readq->get_virtq_desc(i);
-			desc->addr = reinterpret_cast<uint64_t>(get_allocator()->allocate(2048));
+			void *address = get_allocator()->allocate(2048);
+			desc->addr = reinterpret_cast<uint64_t>(get_page_allocator()->to_physical_address(address));
 			desc->len = 2048;
 			desc->flags = VIRTQ_DESC_F_WRITE;
 			desc->next = 0;
@@ -332,12 +333,12 @@ error_t virtio_net_device::send_ethernet_frame(uint8_t *frame, size_t length) {
 	auto d0 = writeq->get_virtq_desc(first_desc);
 	auto d1 = writeq->get_virtq_desc(second_desc);
 
-	d0->addr = reinterpret_cast<uint64_t>(net_hdr);
+	d0->addr = reinterpret_cast<uint64_t>(get_page_allocator()->to_physical_address(net_hdr));
 	d0->len = sizeof(net_hdr);
 	d0->flags = VIRTQ_DESC_F_NEXT;
 	d0->next = second_desc;
 
-	d1->addr = reinterpret_cast<uint64_t>(frame);
+	d1->addr = reinterpret_cast<uint64_t>(get_page_allocator()->to_physical_address(frame));
 	d1->len = length;
 	d1->flags = 0;
 	d1->next = 0;

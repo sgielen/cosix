@@ -1,8 +1,8 @@
 add_library(memory
 	allocator.cpp allocator.hpp
+	page_allocator.cpp page_allocator.hpp
 )
 list(APPEND memory_tests
-	test/test_allocator.cpp
 )
 
 if(TESTING_ENABLED)

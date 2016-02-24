@@ -15,9 +15,11 @@
 .section .bootstrap_stack, "aw", @nobits
 stack_bottom:
 .skip 16384 # 16 KiB
+.global stack_top
 stack_top:
 
 .section .text
+.align 4
 .global _start
 .type _start, @function
 _start:
@@ -26,10 +28,10 @@ _start:
 
 	# We expect a Multiboot boot, where %eax contains the Multiboot magic
 	# and %ebx a pointer to a struct with hardware information. These are
-	# passed as parameters to the kernel_main C function.
+	# passed as parameters to the kernel_start C function.
 	push %ebx
 	push %eax
-	call kernel_main
+	call kernel_start
 
 	hlt
 .Lhang:

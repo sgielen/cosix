@@ -6,6 +6,7 @@ namespace cloudos {
 
 struct global_state;
 class allocator;
+struct page_allocator;
 struct segment_table;
 struct driver_store;
 struct protocol_store;
@@ -18,6 +19,7 @@ struct global_state {
 	global_state();
 
 	cloudos::allocator *alloc;
+	cloudos::page_allocator *page_allocator;
 	cloudos::segment_table *gdt; /* for TSS access */
 	cloudos::vga_stream *vga;
 	cloudos::driver_store *driver_store;
@@ -40,6 +42,14 @@ inline allocator *get_allocator() {
 	}
 
 	return global_state_->alloc;
+}
+
+inline page_allocator *get_page_allocator() {
+	if(!global_state_ || !global_state_->page_allocator) {
+		kernel_panic("No page allocator is set");
+	}
+
+	return global_state_->page_allocator;
 }
 
 inline driver_store *get_driver_store() {

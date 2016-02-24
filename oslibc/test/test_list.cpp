@@ -304,8 +304,8 @@ TEST_CASE("remove_all") {
 	REQUIRE(remove_all(&list, [&values_seen](linked_list<body*> *item) {
 		values_seen.push_back(item->data->value);
 		return item->data->value > 30;
-	}, [&values_destructed](body *data) {
-		values_destructed.push_back(data->value);
+	}, [&values_destructed](linked_list<body*> *item) {
+		values_destructed.push_back(item->data->value);
 	}) == 3);
 	REQUIRE(values_seen.size() == 5);
 	REQUIRE(values_seen[0] == 22);
