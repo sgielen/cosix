@@ -22,6 +22,9 @@ memcmp(const void *left, const void *right, size_t n);
 int
 strcmp(const char *left, const char *right);
 
+char *
+strncpy(char *dst, const char *src, size_t n);
+
 #if defined(__cplusplus)
 }
 #endif

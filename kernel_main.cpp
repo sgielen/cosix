@@ -16,7 +16,7 @@
 #include "oslibc/string.h"
 #include "cloudos_version.h"
 #include "userland/process.hpp"
-#include "process/process.hpp"
+#include "fd/process_fd.hpp"
 #include "memory/allocator.hpp"
 #include "memory/page_allocator.hpp"
 #include "global.hpp"
@@ -147,7 +147,7 @@ struct interrupt_handler : public interrupt_functor {
 	}
 private:
 	global_state *global;
-	cloudos::process procs[3];
+	cloudos::process_fd procs[3];
 	int proc_ctr;
 	bool int_first;
 };

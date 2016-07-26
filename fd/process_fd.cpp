@@ -1,12 +1,9 @@
-#include "process.hpp"
+#include "process_fd.hpp"
 #include <oslibc/string.h>
 #include <hw/vga_stream.hpp>
 #include <memory/allocator.hpp>
 
-cloudos::process::process() {
-}
-
-void cloudos::process::initialize(int p, void *start_addr, cloudos::allocator *alloc) {
+void cloudos::process_fd::initialize(int p, void *start_addr, cloudos::allocator *alloc) {
 	pid = p;
 	userland_stack_size = kernel_stack_size = 0x10000 /* 64 kb */;
 	userland_stack_bottom = reinterpret_cast<uint8_t*>(alloc->allocate(userland_stack_size));
@@ -30,15 +27,15 @@ void cloudos::process::initialize(int p, void *start_addr, cloudos::allocator *a
 	state.eflags = INTERRUPT_ENABLE;
 }
 
-void cloudos::process::set_return_state(interrupt_state_t *new_state) {
+void cloudos::process_fd::set_return_state(interrupt_state_t *new_state) {
 	state = *new_state;
 }
 
-void cloudos::process::get_return_state(interrupt_state_t *return_state) {
+void cloudos::process_fd::get_return_state(interrupt_state_t *return_state) {
 	*return_state = state;
 }
 
-void cloudos::process::handle_syscall(vga_stream &stream) {
+void cloudos::process_fd::handle_syscall(vga_stream &stream) {
 	// software interrupt
 	int syscall = state.eax;
 	if(syscall == 1) {
@@ -58,6 +55,6 @@ void cloudos::process::handle_syscall(vga_stream &stream) {
 	}
 }
 
-void *cloudos::process::get_kernel_stack_top() {
+void *cloudos::process_fd::get_kernel_stack_top() {
 	return reinterpret_cast<char*>(kernel_stack_bottom) + kernel_stack_size;
 }

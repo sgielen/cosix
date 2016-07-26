@@ -33,14 +33,14 @@ add_subdirectory(hw)
 add_subdirectory(net)
 add_subdirectory(compiler-rt)
 add_subdirectory(userland)
-add_subdirectory(process)
+add_subdirectory(fd)
 add_subdirectory(memory)
 
 if(BAREMETAL_ENABLED)
 	include_directories(${CMAKE_BINARY_DIR})
 	set_source_files_properties(boot.s PROPERTIES COMPILE_FLAGS "-x assembler-with-cpp")
 	add_executable(cloudkernel boot.s kernel_start.c kernel_main.cpp)
-	target_link_libraries(cloudkernel compiler_rt_builtins oslibc hw userland process memory net)
+	target_link_libraries(cloudkernel compiler_rt_builtins oslibc hw userland fd memory net)
 	set_target_properties(cloudkernel PROPERTIES LINK_DEPENDS ${CMAKE_SOURCE_DIR}/linker.ld)
 
 	add_custom_target(boot
