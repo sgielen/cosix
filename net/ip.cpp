@@ -57,9 +57,10 @@ error_t ip_implementation::received_ipv4_packet(interface *iface, uint8_t *packe
 	const uint8_t IPV4_FLAG_MORE_FRAGMENTS = 2;
 
 	uint8_t flags = packet[6] >> 5;
-	uint16_t fragment_offset = ntoh(*reinterpret_cast<uint16_t*>(packet[6]) & 0x1fff);
+	uint16_t fragment_offset = ntoh<uint16_t>(*reinterpret_cast<uint16_t*>(&packet[6]) & 0x1fff);
 	if(flags & IPV4_FLAG_MORE_FRAGMENTS || fragment_offset != 0) {
 		// fragmented packets currently unsupported
+		get_vga_stream() << "Fragmented IPv4 packet received, ignoring\n";
 		return error_t::invalid_argument;
 	}
 
