@@ -66,7 +66,13 @@ static void send_udp_test_packet() {
 struct interrupt_handler : public interrupt_functor {
 	interrupt_handler(global_state *g) : global(g), proc_ctr(0), int_first(true) {
 		for(size_t i = 0; i < 3; ++i) {
-			procs[i].initialize(i, reinterpret_cast<void*>(process_main), global->alloc);
+			void *start_addr = reinterpret_cast<void*>(process_main);
+			// this is a big hack, that is necessary as long as we call kernel functions as userland entrypoints
+			// so we should switch to not doing that pretty soon
+			if(reinterpret_cast<uint32_t>(start_addr) < 0xc0000000) {
+				start_addr = reinterpret_cast<void*>(reinterpret_cast<uint32_t>(start_addr) + 0xc0000000);
+			}
+			procs[i].initialize(i, start_addr, global->alloc);
 		}
 	}
 

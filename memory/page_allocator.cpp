@@ -115,8 +115,11 @@ page_allocator::page_allocator(void *h, memory_map_entry *mmap, size_t mmap_size
 	}
 	uint32_t *first_page_table = reinterpret_cast<uint32_t*>(p.address);
 	directory[0] = p.page_ptr->data | 0x03;
-	for(size_t i = 0; i < PAGING_TABLE_SIZE; ++i) {
-		first_page_table[i] = (i * 0x1000) | 0x3; // read-write kernel-only present entry
+	for(size_t i = 128; i < 384; ++i) {
+		// TODO: identity mapping should not be necessary, but we still use it for the
+		// memory map above (we should copy it to our own allocated buffer before enabling
+		// paging though)
+		first_page_table[i] = (i * 0x1000) | 0x03; // read-write kernel-only present entry
 	}
 }
 
