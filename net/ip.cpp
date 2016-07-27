@@ -39,7 +39,7 @@ error_t ip_implementation::received_ipv4_packet(interface *iface, uint8_t *packe
 		return error_t::invalid_argument;
 	}
 
-	uint16_t total_length = ntoh(*reinterpret_cast<uint16_t*>(packet[2]));
+	uint16_t total_length = ntoh(*reinterpret_cast<uint16_t*>(&packet[2]));
 	if(total_length < header_length) {
 		// total length does not include header
 		return error_t::invalid_argument;
@@ -48,8 +48,6 @@ error_t ip_implementation::received_ipv4_packet(interface *iface, uint8_t *packe
 		// actual IP packet does not fit in packet
 		return error_t::invalid_argument;
 	}
-
-	get_vga_stream() << dec << "Total IP packet length: " << total_length << "\n";
 
 	if(length != total_length) {
 		get_vga_stream() << "Packet contains more than just header and payload, since it is "
