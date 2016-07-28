@@ -21,6 +21,8 @@
 #include "memory/page_allocator.hpp"
 #include "global.hpp"
 
+extern uint32_t _kernel_virtual_base;
+
 using namespace cloudos;
 
 const char scancode_to_key[] = {
@@ -69,8 +71,8 @@ struct interrupt_handler : public interrupt_functor {
 			void *start_addr = reinterpret_cast<void*>(process_main);
 			// this is a big hack, that is necessary as long as we call kernel functions as userland entrypoints
 			// so we should switch to not doing that pretty soon
-			if(reinterpret_cast<uint32_t>(start_addr) < 0xc0000000) {
-				start_addr = reinterpret_cast<void*>(reinterpret_cast<uint32_t>(start_addr) + 0xc0000000);
+			if(reinterpret_cast<uint32_t>(start_addr) < _kernel_virtual_base) {
+				start_addr = reinterpret_cast<void*>(reinterpret_cast<uint32_t>(start_addr) + _kernel_virtual_base);
 			}
 			procs[i].initialize(i, start_addr, global->alloc);
 		}

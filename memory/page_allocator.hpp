@@ -70,15 +70,8 @@ private:
 	static const int PAGING_DIRECTORY_SIZE = 1024 /* entries */;
 	static const int PAGING_TABLE_SIZE = 1024 /* entries */;
 	static const int PAGING_ALIGNMENT = 4096 /* bytes for entry alignment */;
-	static const uint32_t kernel_address_offset = 0xc0000000 /* 3 GB */;
 
-	inline uint32_t *get_page_table(int i) {
-		if(directory != nullptr && directory[i] & 0x1 /* present */) {
-			return reinterpret_cast<uint32_t*>(directory[i] & 0xfffff000 + kernel_address_offset);
-		} else {
-			return nullptr;
-		}
-	}
+	uint32_t *get_page_table(int i);
 
 	uint32_t *directory;
 };

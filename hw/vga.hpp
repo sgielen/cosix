@@ -25,7 +25,7 @@ enum class vga_color {
 
 struct vga_buffer {
 	vga_buffer(vga_color fg = vga_color::LIGHT_GREY, vga_color bg = vga_color::BLACK,
-		uint16_t *ptr = reinterpret_cast<uint16_t*>(0xB8000),
+		uint16_t *ptr = reinterpret_cast<uint16_t*>(0xC00B8000 /* VGA pointer in upper virtual memory, mapped to 0xb8000 in physical memory */),
 		size_t width = 80, size_t height = 25);
 
 	void set_color(vga_color fg, vga_color bg);

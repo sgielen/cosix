@@ -7,6 +7,8 @@ using namespace cloudos;
  * http://git.savannah.gnu.org/cgit/grub.git/tree/doc/multiboot.texi?h=multiboot
  */
 
+extern uint32_t _kernel_virtual_base;
+
 namespace cloudos {
 struct boot_info {
 	uint32_t flags;
@@ -80,6 +82,6 @@ size_t multiboot_info::memory_map(memory_map_entry **first) const {
 		return 0;
 	}
 
-	*first = reinterpret_cast<memory_map_entry*>(bi->mmap_addr);
+	*first = reinterpret_cast<memory_map_entry*>(bi->mmap_addr + _kernel_virtual_base);
 	return bi->mmap_length;
 }

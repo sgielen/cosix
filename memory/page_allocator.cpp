@@ -1,6 +1,8 @@
 #include "global.hpp"
 #include "memory/page_allocator.hpp"
 
+extern uint32_t _kernel_virtual_base;
+
 using namespace cloudos;
 
 page_allocator::page_allocator(void *h, memory_map_entry *mmap, size_t mmap_size)
@@ -8,7 +10,7 @@ page_allocator::page_allocator(void *h, memory_map_entry *mmap, size_t mmap_size
 , free_pages(0)
 , directory(0)
 {
-	uint64_t physical_handout = reinterpret_cast<uint64_t>(h);
+	uint64_t physical_handout = reinterpret_cast<uint64_t>(h) - _kernel_virtual_base;
 
 	// Convert memory map into list of aligned pages + their physical address
 	page_list *free_pages_tail = 0;
@@ -33,7 +35,7 @@ page_allocator::page_allocator(void *h, memory_map_entry *mmap, size_t mmap_size
 			// TODO: this assumes the first memory block in mmap is large enough to hold the page list;
 			// we should probably at least check for this, and ideally, use an initial allocator for
 			// allocating data structures necessary for running a true page allocator.
-			page_list *page_entry = reinterpret_cast<page_list*>(physical_handout + kernel_address_offset);
+			page_list *page_entry = reinterpret_cast<page_list*>(physical_handout + _kernel_virtual_base);
 			physical_handout += sizeof(page_list);
 
 			page_entry->data = begin_addr;
@@ -72,17 +74,17 @@ page_allocator::page_allocator(void *h, memory_map_entry *mmap, size_t mmap_size
 	if(res != error_t::no_error) {
 		kernel_panic("Failed to allocate paging directory");
 	}
-	directory = reinterpret_cast<uint32_t*>(reinterpret_cast<uint64_t>(p.page_ptr->data) + kernel_address_offset);
+	directory = reinterpret_cast<uint32_t*>(reinterpret_cast<uint64_t>(p.page_ptr->data) + _kernel_virtual_base);
 
 	for(size_t i = 0; i < PAGING_DIRECTORY_SIZE; ++i) {
 		directory[i] = 0; // read-only kernel-only non-present table
 	}
 
 	// Allocate page tables
-	constexpr uint32_t kernel_address_space = UINT32_MAX - kernel_address_offset + 1;
-	constexpr size_t num_kernel_pages = kernel_address_space / PAGE_SIZE;
-	constexpr size_t page_tables_needed = num_kernel_pages / PAGING_TABLE_SIZE;
-	constexpr size_t first_kernel_page_table = PAGING_DIRECTORY_SIZE - page_tables_needed;
+	uint32_t kernel_address_space = UINT32_MAX - _kernel_virtual_base + 1;
+	size_t num_kernel_pages = kernel_address_space / PAGE_SIZE;
+	size_t page_tables_needed = num_kernel_pages / PAGING_TABLE_SIZE;
+	size_t first_kernel_page_table = PAGING_DIRECTORY_SIZE - page_tables_needed;
 	static_assert(PAGING_ALIGNMENT == sizeof(uint32_t) * PAGING_TABLE_SIZE, "Page table must be by itself paging-aligned");
 	for(size_t i = first_kernel_page_table; i < PAGING_DIRECTORY_SIZE; ++i) {
 		res = allocate_phys(&p);
@@ -108,6 +110,10 @@ page_allocator::page_allocator(void *h, memory_map_entry *mmap, size_t mmap_size
 		}
 	}
 
+	if(to_physical_address((void*)0xc00b8000) != (void*)0xb8000) {
+		kernel_panic("Failed to map VGA page, VGA stream will fail later");
+	}
+
 	// Allocate a page for the first table as well, so we can identity map it for now
 	res = allocate(&p);
 	if(res != error_t::no_error) {
@@ -115,18 +121,15 @@ page_allocator::page_allocator(void *h, memory_map_entry *mmap, size_t mmap_size
 	}
 	uint32_t *first_page_table = reinterpret_cast<uint32_t*>(p.address);
 	directory[0] = p.page_ptr->data | 0x03;
-	for(size_t i = 128; i < 384; ++i) {
-		// TODO: identity mapping should not be necessary, but we still use it for the
-		// memory map above (we should copy it to our own allocated buffer before enabling
-		// paging though)
-		first_page_table[i] = (i * 0x1000) | 0x03; // read-write kernel-only present entry
+	for(size_t i = 0; i < PAGING_TABLE_SIZE; ++i) {
+		first_page_table[i] = 0;
 	}
 }
 
 void page_allocator::install() {
 #ifndef TESTING_ENABLED
 	// Set the paging directory in cr3
-	asm volatile("mov %0, %%cr3" : : "a"(reinterpret_cast<uint32_t>(&directory[0]) - kernel_address_offset) : "memory");
+	asm volatile("mov %0, %%cr3" : : "a"(reinterpret_cast<uint32_t>(&directory[0]) - _kernel_virtual_base) : "memory");
 
 	// Turn on paging in cr0
 	int cr0;
@@ -200,4 +203,12 @@ error_t page_allocator::allocate(page_allocation *a) {
 	}
 
 	kernel_panic("allocate() called, but there is no virtual address space left");
+}
+
+uint32_t *page_allocator::get_page_table(int i) {
+	if(directory != nullptr && directory[i] & 0x1 /* present */) {
+		return reinterpret_cast<uint32_t*>((directory[i] & 0xfffff000) + _kernel_virtual_base);
+	} else {
+		return nullptr;
+	}
 }

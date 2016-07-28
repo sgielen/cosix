@@ -22,10 +22,10 @@ if(TESTING_ENABLED)
 endif()
 
 if(BAREMETAL_ENABLED)
-	set(C_AND_CXX_FLAGS "-ffreestanding -O0 -g -mno-sse -mno-mmx -fPIC -fno-sanitize=safe-stack")
+	set(C_AND_CXX_FLAGS "-ffreestanding -O0 -g -mno-sse -mno-mmx -fno-sanitize=safe-stack")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${C_AND_CXX_FLAGS} -fno-exceptions -fno-rtti")
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${C_AND_CXX_FLAGS}")
-	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -O0 -g -nostdlib -T ${CMAKE_SOURCE_DIR}/linker.ld")
+	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -O0 -g -nostdlib")
 endif()
 
 add_subdirectory(oslibc)
@@ -39,9 +39,10 @@ add_subdirectory(memory)
 if(BAREMETAL_ENABLED)
 	include_directories(${CMAKE_BINARY_DIR})
 	set_source_files_properties(boot.s PROPERTIES COMPILE_FLAGS "-x assembler-with-cpp")
-	add_executable(cloudkernel boot.s kernel_start.c kernel_main.cpp)
+	add_executable(cloudkernel boot.s kernel_main.cpp)
 	target_link_libraries(cloudkernel compiler_rt_builtins oslibc hw userland fd memory net)
-	set_target_properties(cloudkernel PROPERTIES LINK_DEPENDS ${CMAKE_SOURCE_DIR}/linker.ld)
+	set_target_properties(cloudkernel PROPERTIES LINK_DEPENDS "${CMAKE_SOURCE_DIR}/linker.ld")
+	set_target_properties(cloudkernel PROPERTIES LINK_FLAGS "-T ${CMAKE_SOURCE_DIR}/linker.ld")
 
 	add_custom_target(boot
 		COMMAND qemu-system-i386 -kernel cloudkernel -net nic,model=virtio -net dump,file=dump.pcap -net user
