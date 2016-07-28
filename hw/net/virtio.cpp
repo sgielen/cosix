@@ -8,6 +8,8 @@
 #include "net/protocol_store.hpp"
 #include "net/dhcp.hpp" // TODO remove
 
+extern uint32_t _kernel_virtual_base;
+
 using namespace cloudos;
 
 namespace cloudos {
@@ -87,7 +89,7 @@ struct virtq {
 	virtq_desc *get_virtq_desc(int i) {
 		/* TODO: assertion */
 		if(i >= queue_size) {
-			return NULL;
+			kernel_panic("get_virtq_desc");
 		}
 		auto iovirtdesc = reinterpret_cast<virtq_desc*>(data);
 		return iovirtdesc + i;
@@ -160,6 +162,7 @@ virtio_net_device::virtio_net_device(pci_bus *parent, int d)
 , last_writeq_idx(0)
 , readq(nullptr)
 , writeq(nullptr)
+, mappings(0)
 {
 }
 
@@ -259,7 +262,16 @@ error_t virtio_net_device::eth_init()
 		for(int i = 0; i < 10; ++i) {
 			auto desc = readq->get_virtq_desc(i);
 			void *address = get_allocator()->allocate(2048);
-			desc->addr = reinterpret_cast<uint64_t>(get_page_allocator()->to_physical_address(address));
+
+			address_mapping *mapping = get_allocator()->allocate<address_mapping>();
+			address_mapping_list *mappingl = get_allocator()->allocate<address_mapping_list>();
+			mapping->logical = address;
+			mapping->physical = get_page_allocator()->to_physical_address(mapping->logical);
+			mappingl->data = mapping;
+			mappingl->next = nullptr;
+			append(&mappings, mappingl);
+
+			desc->addr = reinterpret_cast<uint64_t>(mapping->physical);
 			desc->len = 2048;
 			desc->flags = VIRTQ_DESC_F_WRITE;
 			desc->next = 0;
@@ -286,7 +298,19 @@ error_t virtio_net_device::check_new_packets() {
 		uint32_t id = virtq_used->ring[last_readq_idx].id;
 		uint32_t length = virtq_used->ring[last_readq_idx].len;
 		auto *descriptor = readq->get_virtq_desc(id);
-		uint8_t *nethdr = reinterpret_cast<uint8_t*>(descriptor->addr & 0xffffffff);
+
+		uint32_t nethdr_phys = descriptor->addr & 0xffffffff;
+
+		address_mapping_list *found = find(mappings, [nethdr_phys](address_mapping_list *item) {
+			return reinterpret_cast<uint32_t>(item->data->physical) == nethdr_phys;
+		});
+		if(found == nullptr) {
+			kernel_panic("Did not find logical address for physical kernel address of nethdr");
+		}
+		uint8_t *nethdr = reinterpret_cast<uint8_t*>(found->data->logical);
+		if(reinterpret_cast<uint32_t>(nethdr) < _kernel_virtual_base) {
+			kernel_panic("Virtio frame ptr is too low");
+		}
 		auto res = ethernet_frame_received(nethdr + 12, length - 12);
 
 		last_readq_idx++;
@@ -333,12 +357,26 @@ error_t virtio_net_device::send_ethernet_frame(uint8_t *frame, size_t length) {
 	auto d0 = writeq->get_virtq_desc(first_desc);
 	auto d1 = writeq->get_virtq_desc(second_desc);
 
-	d0->addr = reinterpret_cast<uint64_t>(get_page_allocator()->to_physical_address(net_hdr));
+	address_mapping *mapping0 = get_allocator()->allocate<address_mapping>();
+	address_mapping_list *mappingl0 = get_allocator()->allocate<address_mapping_list>();
+	address_mapping *mapping1 = get_allocator()->allocate<address_mapping>();
+	address_mapping_list *mappingl1 = get_allocator()->allocate<address_mapping_list>();
+	mapping0->logical = net_hdr;
+	mapping0->physical = get_page_allocator()->to_physical_address(mapping0->logical);
+	mappingl0->data = mapping0;
+	mappingl0->next = mappingl1;
+	mapping1->logical = frame;
+	mapping1->physical = get_page_allocator()->to_physical_address(mapping1->logical);
+	mappingl1->data = mapping1;
+	mappingl1->next = nullptr;
+	append(&mappings, mappingl0);
+
+	d0->addr = reinterpret_cast<uint64_t>(mapping0->physical);
 	d0->len = sizeof(net_hdr);
 	d0->flags = VIRTQ_DESC_F_NEXT;
 	d0->next = second_desc;
 
-	d1->addr = reinterpret_cast<uint64_t>(get_page_allocator()->to_physical_address(frame));
+	d1->addr = reinterpret_cast<uint64_t>(mapping1->physical);
 	d1->len = length;
 	d1->flags = 0;
 	d1->next = 0;

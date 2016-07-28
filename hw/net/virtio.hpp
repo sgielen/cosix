@@ -6,6 +6,14 @@
 
 namespace cloudos {
 
+struct address_mapping {
+	void *physical;
+	void *logical;
+};
+
+// TODO: there must be a better way to remember logical addresses for physical ones handed out to virtio
+typedef linked_list<address_mapping*> address_mapping_list;
+
 struct virtq;
 
 struct virtio_net_device : public ethernet_device {
@@ -30,6 +38,7 @@ private:
 	int last_writeq_idx;
 	virtq *readq;
 	virtq *writeq;
+	address_mapping_list *mappings;
 };
 
 struct virtio_net_driver : public driver {
