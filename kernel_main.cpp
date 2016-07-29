@@ -67,14 +67,16 @@ static void send_udp_test_packet() {
 
 struct interrupt_handler : public interrupt_functor {
 	interrupt_handler(global_state *g) : global(g), proc_ctr(0), int_first(true) {
-		for(size_t i = 0; i < 3; ++i) {
-			void *start_addr = reinterpret_cast<void*>(process_main);
-			// this is a big hack, that is necessary as long as we call kernel functions as userland entrypoints
-			// so we should switch to not doing that pretty soon
-			if(reinterpret_cast<uint32_t>(start_addr) < _kernel_virtual_base) {
-				start_addr = reinterpret_cast<void*>(reinterpret_cast<uint32_t>(start_addr) + _kernel_virtual_base);
+		for(size_t i = 0; i < MAX_PROCS; ++i) {
+			procs[i] = 0;
+		}
+	}
+
+	void add_process(process_fd *d) {
+		for(size_t i = 0; i < MAX_PROCS; ++i) {
+			if(procs[i] == 0) {
+				procs[i] = d;
 			}
-			procs[i].initialize(i, start_addr, global->alloc);
 		}
 	}
 
@@ -89,7 +91,7 @@ struct interrupt_handler : public interrupt_functor {
 			// need this boolean anymore.
 			int_first = false;
 		} else {
-			procs[proc_ctr].set_return_state(regs);
+			procs[proc_ctr]->set_return_state(regs);
 		}
 
 		int int_no = regs->int_no;
@@ -116,9 +118,14 @@ struct interrupt_handler : public interrupt_functor {
 			kernel_panic("Received #PF interrupt");
 		} else if(int_no == 0x20) {
 			get_root_device()->timer_event_recursive();
-			// timer interrupt
-			if(++proc_ctr == 3) {
-				proc_ctr = 0;
+			// timer interrupt, round robin through processes
+			while(1) {
+				if(++proc_ctr == MAX_PROCS) {
+					proc_ctr = 0;
+				}
+				if(procs[proc_ctr] != 0) {
+					break;
+				}
 			}
 		} else if(int_no == 0x21) {
 			// keyboard input!
@@ -145,17 +152,19 @@ struct interrupt_handler : public interrupt_functor {
 				*stream << "Waited for scancode for too long\n";
 			}
 		} else if(int_no == 0x80) {
-			procs[proc_ctr].handle_syscall(*stream);
+			procs[proc_ctr]->handle_syscall(*stream);
 		} else {
 			*stream << "Got interrupt " << int_no << " (0x" << hex << int_no << dec << ", err code " << err_code << ")\n";
 			kernel_panic("Unknown interrupt received");
 		}
-		procs[proc_ctr].get_return_state(regs);
-		global->gdt->set_kernel_stack(procs[proc_ctr].get_kernel_stack_top());
+		procs[proc_ctr]->get_return_state(regs);
+		procs[proc_ctr]->install_page_directory();
+		global->gdt->set_kernel_stack(procs[proc_ctr]->get_kernel_stack_top());
 	}
 private:
 	global_state *global;
-	cloudos::process_fd procs[3];
+	static constexpr int MAX_PROCS = 20;
+	cloudos::process_fd *procs[MAX_PROCS];
 	int proc_ctr;
 	bool int_first;
 };
@@ -247,10 +256,15 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	global.gdt = &gdt;
 	stream << "Global Descriptor Table loaded, segmentation is in effect\n";
 
-	paging.install();
-	stream << "Paging directory loaded, paging is in effect\n";
-
 	interrupt_handler handler(&global);
+
+	process_fd init_fd(&paging, "init");
+	init_fd.initialize(0, reinterpret_cast<void*>(process_main), &alloc_);
+	handler.add_process(&init_fd);
+	stream << "Init process created\n";
+
+	init_fd.install_page_directory();
+	stream << "Paging directory loaded, paging is in effect\n";
 
 	interrupt_table interrupts;
 	interrupt_global interrupts_global(&handler);

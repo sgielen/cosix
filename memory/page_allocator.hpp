@@ -9,6 +9,7 @@
 namespace cloudos {
 
 typedef linked_list<uint64_t> page_list;
+struct process_fd;
 
 template <typename Functor>
 void iterate_through_mem_map(memory_map_entry *m, size_t mmap_size, Functor f) {
@@ -51,9 +52,13 @@ struct page_allocator {
 
 	void install();
 
+	// for kernel data
 	void *to_physical_address(void*);
+	// for userland and kernel data
+	void *to_physical_address(process_fd*, void*);
 
 	error_t allocate(page_allocation*);
+	void fill_kernel_pages(uint32_t *page_directory);
 
 	// TODO: produce some statistics
 	// TODO: allow deallocating a page, which will take the entry pointer
@@ -61,19 +66,24 @@ struct page_allocator {
 	// back in free_pages
 
 private:
+	// never allocate_phys outside of the page allocator -- such pages will not be
+	// accessible, not even if you add _kernel_virtual_base. Instead, you should use
+	// the allocate function, and use to_physical_adress() if you need it
 	error_t allocate_phys(page_allocation*);
 
 	page_list *used_pages;
 	page_list *free_pages;
 
 	static const int PAGE_SIZE = 4096 /* bytes */;
-	static const int PAGING_DIRECTORY_SIZE = 1024 /* entries */;
 	static const int PAGING_TABLE_SIZE = 1024 /* entries */;
 	static const int PAGING_ALIGNMENT = 4096 /* bytes for entry alignment */;
+	static const int NUM_KERNEL_PAGES = 0x100 /* number of pages for the kernel */;
 
-	uint32_t *get_page_table(int i);
-
-	uint32_t *directory;
+	// kernel_page_tables is filled with pointers to the page tables for
+	// the kernel. These values are copied into every process page
+	// directory, so that the kernel pages are mapped into every process.
+	// The allocations are already page-aligned.
+	uint32_t *kernel_page_tables[NUM_KERNEL_PAGES];
 };
 
 }

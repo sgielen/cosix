@@ -2,6 +2,33 @@
 #include <oslibc/string.h>
 #include <hw/vga_stream.hpp>
 #include <memory/allocator.hpp>
+#include <memory/page_allocator.hpp>
+#include <global.hpp>
+
+extern uint32_t _kernel_virtual_base;
+
+using namespace cloudos;
+
+process_fd::process_fd(page_allocator *a, const char *n)
+: fd(fd_type_t::process, n)
+{
+	page_allocation p;
+	auto res = a->allocate(&p);
+	if(res != error_t::no_error) {
+		kernel_panic("Failed to allocate process paging directory");
+	}
+	page_directory = reinterpret_cast<uint32_t*>(p.address);
+	a->fill_kernel_pages(page_directory);
+
+	res = a->allocate(&p);
+	if(res != error_t::no_error) {
+		kernel_panic("Failed to allocate page table list");
+	}
+	page_tables = reinterpret_cast<uint32_t**>(p.address);
+	for(size_t i = 0; i < 0x300; ++i) {
+		page_tables[i] = nullptr;
+	}
+}
 
 void cloudos::process_fd::initialize(int p, void *start_addr, cloudos::allocator *alloc) {
 	pid = p;
@@ -58,3 +85,40 @@ void cloudos::process_fd::handle_syscall(vga_stream &stream) {
 void *cloudos::process_fd::get_kernel_stack_top() {
 	return reinterpret_cast<char*>(kernel_stack_bottom) + kernel_stack_size;
 }
+
+uint32_t *process_fd::get_page_table(int i) {
+	if(i >= 0x300) {
+		kernel_panic("process_fd::get_page_table() cannot answer for kernel pages");
+	}
+	if(page_directory[i] & 0x1 /* present */) {
+		return page_tables[i];
+	} else {
+		return nullptr;
+	}
+}
+
+void process_fd::install_page_directory() {
+	/* some sanity checks to warn early if the page directory looks incorrect */
+	if(get_page_allocator()->to_physical_address(this, reinterpret_cast<void*>(0xc00b8000)) != reinterpret_cast<void*>(0xb8000)) {
+		kernel_panic("Failed to map VGA page, VGA stream will fail later");
+	}
+	if(get_page_allocator()->to_physical_address(this, reinterpret_cast<void*>(0xc01031c6)) != reinterpret_cast<void*>(0x1031c6)) {
+		kernel_panic("Kernel will fail to execute");
+	}
+
+#ifndef TESTING_ENABLED
+	auto page_phys_address = get_page_allocator()->to_physical_address(&page_directory[0]);
+	if((reinterpret_cast<uint32_t>(page_phys_address) & 0xfff) != 0) {
+		kernel_panic("Physically allocated memory is not page-aligned");
+	}
+	// Set the paging directory in cr3
+	asm volatile("mov %0, %%cr3" : : "a"(reinterpret_cast<uint32_t>(page_phys_address)) : "memory");
+
+	// Turn on paging in cr0
+	int cr0;
+	asm volatile("mov %%cr0, %0" : "=a"(cr0));
+	cr0 |= 0x80000000;
+	asm volatile("mov %0, %%cr0" : : "a"(cr0) : "memory");
+#endif
+}
+
