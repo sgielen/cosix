@@ -11,6 +11,7 @@ add_library(net
 	icmp.cpp icmp.hpp
 	dhcp.cpp dhcp.hpp
 	protocol_store.cpp protocol_store.hpp
+	elfrun.cpp elfrun.hpp
 	)
 list(APPEND net_tests)
 target_link_libraries(net oslibc)

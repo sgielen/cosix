@@ -8,6 +8,7 @@ struct arp_implementation;
 struct icmp_implementation;
 struct udp_implementation;
 struct tcp_implementation;
+struct elfrun_implementation;
 struct dhcp_client;
 
 enum class protocol_t {
@@ -28,6 +29,7 @@ struct protocol_store {
 	icmp_implementation *icmp;
 	udp_implementation *udp;
 	tcp_implementation *tcp;
+	elfrun_implementation *elfrun;
 
 	// TODO: should make this per-interface and shouldn't store it here:
 	dhcp_client *dhcp;

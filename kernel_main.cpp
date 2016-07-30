@@ -66,6 +66,44 @@ static void send_udp_test_packet() {
 	}
 }
 
+static void request_process_binary() {
+	auto *eth0 = get_interface_store()->get_interface("eth0");
+	if(!eth0) {
+		return;
+	}
+
+	auto *list = eth0->get_ipv4addr_list();
+	if(!list) {
+		return;
+	}
+
+	ipv4addr_t source, destination;
+	memcpy(source, list->data, 4);
+	// 192.168.178.27
+	destination[0] = 192;
+	destination[1] = 168;
+	destination[2] = 178;
+	destination[3] = 27;
+	// 192.168.0.133
+	/*destination[0] = 192;
+	destination[1] = 168;
+	destination[2] = 0;
+	destination[3] = 133;*/
+	// 192.168.2.106
+	/*destination[0] = 192;
+	destination[1] = 168;
+	destination[2] = 2;
+	destination[3] = 106;*/
+	const char *payload = "process.bin";
+	error_t res = get_protocol_store()->udp->send_ipv4_udp(
+		reinterpret_cast<const uint8_t*>(payload), strlen(payload), source, 4445, destination, 4444);
+	if(res == error_t::no_error) {
+		get_vga_stream() << "Requested a binary!\n";
+	} else {
+		get_vga_stream() << "Failed to send a packet: " << res << "\n";
+	}
+}
+
 struct interrupt_handler : public interrupt_functor {
 	void operator()(interrupt_state_t *regs) {
 		vga_stream *stream = &get_vga_stream();
@@ -76,7 +114,10 @@ struct interrupt_handler : public interrupt_functor {
 
 		int int_no = regs->int_no;
 		int err_code = regs->err_code;
-		if(int_no == 0x0e) {
+		if(int_no == 0x0d) {
+			*stream << "General protection fault in process " << running_process << "\n";
+			kernel_panic("Received #GP interrupt");
+		} else if(int_no == 0x0e) {
 			*stream << "Page fault in process " << running_process << "\n";
 			if(err_code & 0x01) {
 				*stream << "  Caused by a page-protection violation during page ";
@@ -95,6 +136,7 @@ struct interrupt_handler : public interrupt_functor {
 			uint32_t address;
 			asm volatile("mov %%cr2, %0" : "=a"(address));
 			*stream << "  Virtual address accessed: 0x" << hex << address << dec << "\n";
+			*stream << "  Instruction ptr at point of fault: 0x" << hex << regs->eip << dec << "\n";
 			kernel_panic("Received #PF interrupt");
 		} else if(int_no == 0x20) {
 			get_root_device()->timer_event_recursive();
@@ -113,6 +155,8 @@ struct interrupt_handler : public interrupt_functor {
 				buf[0] = scancode_to_key[scancode];
 				if(buf[0] == 'u') {
 					send_udp_test_packet();
+				} else if(buf[0] == 'p') {
+					request_process_binary();
 				}
 				buf[1] = 0;
 				if(buf[0] == '\n') {
@@ -230,19 +274,6 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 
 	init_fd.install_page_directory();
 	stream << "Paging directory loaded, paging is in effect\n";
-
-	process_fd *fd[4];
-	fd[0] = &init_fd;
-	fd[1] = get_allocator()->allocate<process_fd>();
-	new(fd[1]) process_fd(get_page_allocator(), "process1");
-	fd[2] = get_allocator()->allocate<process_fd>();
-	new(fd[2]) process_fd(get_page_allocator(), "process2");
-	fd[3] = get_allocator()->allocate<process_fd>();
-	new(fd[3]) process_fd(get_page_allocator(), "process3");
-	for(size_t i = 0; i < 4; ++i) {
-		fd[i]->initialize(reinterpret_cast<void*>(process_main), &alloc_);
-		sched.process_fd_ready(fd[i]);
-	}
 
 	interrupt_table interrupts;
 	interrupt_global interrupts_global(&handler);

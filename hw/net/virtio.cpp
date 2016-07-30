@@ -259,7 +259,7 @@ error_t virtio_net_device::eth_init()
 	// TODO: ensure there are always read buffers available
 	{
 		auto avail = readq->get_virtq_avail();
-		for(int i = 0; i < 10; ++i) {
+		for(int i = 0; i < 20; ++i) {
 			auto desc = readq->get_virtq_desc(i);
 			void *address = get_allocator()->allocate(2048);
 
@@ -278,7 +278,7 @@ error_t virtio_net_device::eth_init()
 			avail->ring[i] = i;
 		}
 		avail->flags = 0;
-		avail->idx = 10;
+		avail->idx = 20;
 	}
 
 	outb(device_status, 4); /* driver ready */

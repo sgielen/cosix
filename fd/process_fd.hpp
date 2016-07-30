@@ -38,7 +38,10 @@ struct process_fd : public fd {
 	void install_page_directory();
 	uint32_t *get_page_table(int i);
 
+	void map_at(void *kernel_ptr, void *userland_ptr, size_t size);
+
 private:
+	static const int PAGE_SIZE = 4096 /* bytes */;
 
 	/* file descriptor mapping to global FD pointers... */
 

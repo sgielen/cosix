@@ -43,7 +43,9 @@ void cloudos::process_fd::initialize(void *start_addr, cloudos::allocator *alloc
 	state.cs = 0x1b;
 
 	// stack location for new process
-	state.useresp = reinterpret_cast<uint32_t>(userland_stack_bottom) + userland_stack_size;
+	uint32_t stack_address = 0x80000000;
+	map_at(userland_stack_bottom, reinterpret_cast<void*>(stack_address - userland_stack_size), userland_stack_size);
+	state.useresp = stack_address;
 
 	// initial instruction pointer
 	state.eip = reinterpret_cast<uint32_t>(start_addr);
@@ -121,3 +123,61 @@ void process_fd::install_page_directory() {
 #endif
 }
 
+void process_fd::map_at(void *kernel_virt, void *userland_virt, size_t length)
+{
+	if(reinterpret_cast<uint32_t>(kernel_virt) < _kernel_virtual_base) {
+		kernel_panic("Got non-kernel address in map_at()");
+	}
+	if(reinterpret_cast<uint32_t>(userland_virt) + length > _kernel_virtual_base) {
+		kernel_panic("Got kernel address in map_at()");
+	}
+	if(reinterpret_cast<uint32_t>(kernel_virt) % PAGE_SIZE != 0) {
+		kernel_panic("kernel_virt is not page aligned in map_at");
+	}
+	if(reinterpret_cast<uint32_t>(userland_virt) % PAGE_SIZE != 0) {
+		kernel_panic("userland_virt is not page aligned in map_at");
+	}
+
+	void *phys_addr = get_page_allocator()->to_physical_address(kernel_virt);
+	if(reinterpret_cast<uint32_t>(phys_addr) % PAGE_SIZE != 0) {
+		kernel_panic("phys_addr is not page aligned in map_at");
+	}
+
+	uint16_t page_table_num = reinterpret_cast<uint64_t>(userland_virt) >> 22;
+	if((page_directory[page_table_num] & 0x1) == 0) {
+		// allocate page table
+		page_allocation p;
+		auto res = get_page_allocator()->allocate(&p);
+		if(res != error_t::no_error) {
+			kernel_panic("Failed to allocate kernel paging table in map_to");
+		}
+
+		auto address = get_page_allocator()->to_physical_address(p.address);
+		if((reinterpret_cast<uint32_t>(address) & 0xfff) != 0) {
+			kernel_panic("physically allocated memory is not page-aligned");
+		}
+
+		page_directory[page_table_num] = reinterpret_cast<uint64_t>(address) | 0x07 /* read-write userspace-accessible present table */;
+		page_tables[page_table_num] = reinterpret_cast<uint32_t*>(p.address);
+	}
+	uint32_t *page_table = get_page_table(page_table_num);
+	if(page_table == 0) {
+		kernel_panic("Failed to map kernel paging table in map_to");
+	}
+
+	uint16_t page_entry_num = reinterpret_cast<uint64_t>(userland_virt) >> 12 & 0x03ff;
+	uint32_t &page_entry = page_table[page_entry_num];
+	if(page_entry & 0x1) {
+		get_vga_stream() << "Page table " << page_table_num << ", page entry " << page_entry_num << " already mapped\n";
+		get_vga_stream() << "Value: 0x" << hex << page_entry << dec << "\n";
+		kernel_panic("Page in map_to already present");
+	} else {
+		page_entry = reinterpret_cast<uint32_t>(phys_addr) | 0x07; // read-write userspace-accessible present entry
+	}
+
+	if(length > PAGE_SIZE) {
+		return map_at(reinterpret_cast<void*>(reinterpret_cast<uint32_t>(kernel_virt) + PAGE_SIZE),
+			reinterpret_cast<void*>(reinterpret_cast<uint32_t>(userland_virt) + PAGE_SIZE),
+			length - PAGE_SIZE);
+	}
+}

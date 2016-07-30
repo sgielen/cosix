@@ -6,6 +6,7 @@
 #include "net/udp.hpp"
 #include "net/tcp.hpp"
 #include "net/dhcp.hpp"
+#include "net/elfrun.hpp"
 #include "memory/allocator.hpp"
 #include "global.hpp"
 
@@ -22,6 +23,7 @@ protocol_store::protocol_store() {
 	REGISTER_PROTOCOL(arp);
 	REGISTER_PROTOCOL(udp);
 	REGISTER_PROTOCOL(tcp);
+	REGISTER_PROTOCOL(elfrun);
 
 	dhcp = a->allocate<dhcp_client>();
 	new (dhcp) dhcp_client();
