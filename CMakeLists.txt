@@ -48,4 +48,8 @@ if(BAREMETAL_ENABLED)
 		COMMAND qemu-system-i386 -kernel cloudkernel -net nic,model=virtio -net dump,file=dump.pcap -net user
 		DEPENDS cloudkernel
 	)
+	add_custom_target(gdbboot
+		COMMAND qemu-system-i386 -kernel cloudkernel -net nic,model=virtio -net dump,file=dump.pcap -net user -watchdog-action debug -S -s
+		DEPENDS cloudkernel
+	)
 endif()
