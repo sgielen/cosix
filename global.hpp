@@ -12,6 +12,7 @@ struct driver_store;
 struct protocol_store;
 struct interface_store;
 struct device;
+struct scheduler;
 
 extern global_state *global_state_;
 
@@ -26,6 +27,7 @@ struct global_state {
 	cloudos::protocol_store *protocol_store;
 	cloudos::interface_store *interface_store;
 	cloudos::device *root_device;
+	cloudos::scheduler *scheduler;
 };
 
 __attribute__((noreturn)) inline void kernel_panic(const char *message) {
@@ -50,6 +52,14 @@ inline page_allocator *get_page_allocator() {
 	}
 
 	return global_state_->page_allocator;
+}
+
+inline segment_table *get_gdt() {
+	if(!global_state_ || !global_state_->gdt) {
+		kernel_panic("No gdt is set");
+	}
+
+	return global_state_->gdt;
 }
 
 inline driver_store *get_driver_store() {
@@ -90,6 +100,14 @@ inline device *get_root_device() {
 	}
 
 	return global_state_->root_device;
+}
+
+inline scheduler *get_scheduler() {
+	if(!global_state_ || !global_state_->scheduler) {
+		kernel_panic("No scheduler is set");
+	}
+
+	return global_state_->scheduler;
 }
 
 }

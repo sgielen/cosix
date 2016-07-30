@@ -1,7 +1,13 @@
+#pragma once
+
 #include "fd.hpp"
 #include "hw/interrupt.hpp"
+#include <oslibc/list.hpp>
 
 namespace cloudos {
+
+struct process_fd;
+typedef linked_list<process_fd*> process_list;
 
 struct vga_stream;
 
@@ -15,13 +21,16 @@ struct page_allocator;
 struct process_fd : public fd {
 	process_fd(page_allocator *alloc, const char *n);
 
+	// TODO remove
+	int pid;
+
 	/* When a process FD refcount becomes 0, the process must be exited.
 	 * This means all FDs in the file descriptor list are de-refcounted
 	 * (and possibly cleaned up). Also, we must ensure that the process FD
 	 * does not end up in the ready/blocked list again.
 	 */
 
-	void initialize(int pid, void *start_addr, allocator *alloc);
+	void initialize(void *start_addr, allocator *alloc);
 	void set_return_state(interrupt_state_t*);
 	void get_return_state(interrupt_state_t*);
 	void handle_syscall(vga_stream &stream);
@@ -33,7 +42,6 @@ private:
 
 	/* file descriptor mapping to global FD pointers... */
 
-	int pid;
 	// Page directory, filled with physical addresses to page tables
 	uint32_t *page_directory;
 	// The actual backing table virtual addresses; only the first 0x300

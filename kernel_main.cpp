@@ -17,6 +17,7 @@
 #include "cloudos_version.h"
 #include "userland/process.hpp"
 #include "fd/process_fd.hpp"
+#include "fd/scheduler.hpp"
 #include "memory/allocator.hpp"
 #include "memory/page_allocator.hpp"
 #include "global.hpp"
@@ -66,38 +67,17 @@ static void send_udp_test_packet() {
 }
 
 struct interrupt_handler : public interrupt_functor {
-	interrupt_handler(global_state *g) : global(g), proc_ctr(0), int_first(true) {
-		for(size_t i = 0; i < MAX_PROCS; ++i) {
-			procs[i] = 0;
-		}
-	}
-
-	void add_process(process_fd *d) {
-		for(size_t i = 0; i < MAX_PROCS; ++i) {
-			if(procs[i] == 0) {
-				procs[i] = d;
-			}
-		}
-	}
-
 	void operator()(interrupt_state_t *regs) {
-		vga_stream *stream = global->vga;
-		if(int_first) {
-			// This boolean is only set to true for the first interrupt, because we only
-			// switch to the first process on the first interrupt, and after that all
-			// interrupts are from the userland.
-			// TODO: Instead, we should detect whether an interrupt is coming from kernel
-			// or userland, and what process, so we can make that difference and don't
-			// need this boolean anymore.
-			int_first = false;
-		} else {
-			procs[proc_ctr]->set_return_state(regs);
+		vga_stream *stream = &get_vga_stream();
+		auto running_process = get_scheduler()->get_running_process();
+		if(running_process) {
+			running_process->set_return_state(regs);
 		}
 
 		int int_no = regs->int_no;
 		int err_code = regs->err_code;
 		if(int_no == 0x0e) {
-			*stream << "Page fault in process " << proc_ctr << "\n";
+			*stream << "Page fault in process " << running_process << "\n";
 			if(err_code & 0x01) {
 				*stream << "  Caused by a page-protection violation during page ";
 			} else {
@@ -118,15 +98,7 @@ struct interrupt_handler : public interrupt_functor {
 			kernel_panic("Received #PF interrupt");
 		} else if(int_no == 0x20) {
 			get_root_device()->timer_event_recursive();
-			// timer interrupt, round robin through processes
-			while(1) {
-				if(++proc_ctr == MAX_PROCS) {
-					proc_ctr = 0;
-				}
-				if(procs[proc_ctr] != 0) {
-					break;
-				}
-			}
+			get_scheduler()->schedule_next();
 		} else if(int_no == 0x21) {
 			// keyboard input!
 			// wait for the ready bit to turn on
@@ -152,21 +124,13 @@ struct interrupt_handler : public interrupt_functor {
 				*stream << "Waited for scancode for too long\n";
 			}
 		} else if(int_no == 0x80) {
-			procs[proc_ctr]->handle_syscall(*stream);
+			running_process->handle_syscall(*stream);
 		} else {
 			*stream << "Got interrupt " << int_no << " (0x" << hex << int_no << dec << ", err code " << err_code << ")\n";
 			kernel_panic("Unknown interrupt received");
 		}
-		procs[proc_ctr]->get_return_state(regs);
-		procs[proc_ctr]->install_page_directory();
-		global->gdt->set_kernel_stack(procs[proc_ctr]->get_kernel_stack_top());
+		get_scheduler()->resume_running(regs);
 	}
-private:
-	global_state *global;
-	static constexpr int MAX_PROCS = 20;
-	cloudos::process_fd *procs[MAX_PROCS];
-	int proc_ctr;
-	bool int_first;
 };
 
 cloudos::global_state *cloudos::global_state_;
@@ -256,15 +220,29 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	global.gdt = &gdt;
 	stream << "Global Descriptor Table loaded, segmentation is in effect\n";
 
-	interrupt_handler handler(&global);
+	scheduler sched;
+	global.scheduler = &sched;
+
+	interrupt_handler handler;
 
 	process_fd init_fd(&paging, "init");
-	init_fd.initialize(0, reinterpret_cast<void*>(process_main), &alloc_);
-	handler.add_process(&init_fd);
 	stream << "Init process created\n";
 
 	init_fd.install_page_directory();
 	stream << "Paging directory loaded, paging is in effect\n";
+
+	process_fd *fd[4];
+	fd[0] = &init_fd;
+	fd[1] = get_allocator()->allocate<process_fd>();
+	new(fd[1]) process_fd(get_page_allocator(), "process1");
+	fd[2] = get_allocator()->allocate<process_fd>();
+	new(fd[2]) process_fd(get_page_allocator(), "process2");
+	fd[3] = get_allocator()->allocate<process_fd>();
+	new(fd[3]) process_fd(get_page_allocator(), "process3");
+	for(size_t i = 0; i < 4; ++i) {
+		fd[i]->initialize(reinterpret_cast<void*>(process_main), &alloc_);
+		sched.process_fd_ready(fd[i]);
+	}
 
 	interrupt_table interrupts;
 	interrupt_global interrupts_global(&handler);

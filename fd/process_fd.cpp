@@ -30,8 +30,7 @@ process_fd::process_fd(page_allocator *a, const char *n)
 	}
 }
 
-void cloudos::process_fd::initialize(int p, void *start_addr, cloudos::allocator *alloc) {
-	pid = p;
+void cloudos::process_fd::initialize(void *start_addr, cloudos::allocator *alloc) {
 	userland_stack_size = kernel_stack_size = 0x10000 /* 64 kb */;
 	userland_stack_bottom = reinterpret_cast<uint8_t*>(alloc->allocate(userland_stack_size));
 	kernel_stack_bottom   = reinterpret_cast<uint8_t*>(alloc->allocate(kernel_stack_size));
