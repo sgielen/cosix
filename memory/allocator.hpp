@@ -35,6 +35,7 @@ public:
 
 private:
 	uint8_t *handout;
+	uint8_t *handout_end;
 	size_t capacity;
 };
 
