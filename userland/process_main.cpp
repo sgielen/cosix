@@ -1,32 +1,51 @@
+#include <stdint.h>
+#include <stddef.h>
+
 extern "C"
 int getpid();
 
 extern "C"
 void putstring(const char*, unsigned int len);
 
-int pid;
+size_t
+strlen(const char* str) {
+	size_t ret = 0;
+	while ( str[ret] != 0 )
+		ret++;
+	return ret;
+}
+
+void putstring(const char *buf) {
+	putstring(buf, strlen(buf));
+}
+
+char *ui64toa_s(uint64_t value, char *buffer, size_t bufsize, int base) {
+	static const char xlat[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+	if(buffer == NULL || bufsize == 0 || base == 0 || base > 36) {
+		return NULL;
+	}
+	size_t i = bufsize;
+	buffer[--i] = 0;
+	do {
+		if(i == 0) {
+			return NULL;
+		}
+
+		buffer[--i] = xlat[value % base];
+	} while(value /= base);
+
+	return buffer + i;
+}
 
 extern "C"
 void _start() {
-	putstring("Hello ", 6);
-	putstring("world!\n", 7);
-	pid = getpid();
-	if(pid == 0) {
-		putstring("Process 0\n", 10);
-	} else if(pid == 1) {
-		putstring("Process 1\n", 10);
-	} else if(pid == 2) {
-		putstring("Process 2\n", 10);
-	} else if(pid == 3) {
-		putstring("Process 3\n", 10);
-	} else if(pid == 4) {
-		putstring("Process 4\n", 10);
-	} else if(pid == 5) {
-		putstring("Process 5\n", 10);
-	} else if(pid == 6) {
-		putstring("Process 6\n", 10);
-	} else {
-		putstring("High process\n", 13);
-	}
+	putstring("Hello ");
+	putstring("world!\n");
+
+	int pid = getpid();
+	char buf[10];
+	putstring("This is process ");
+	putstring(ui64toa_s(pid, buf, sizeof(buf), 10));
+	putstring("!\n");
 	while(1) {}
 }
