@@ -29,12 +29,13 @@ struct virtio_net_device : public ethernet_device {
 	void timer_event() override;
 
 private:
+	error_t add_buffer_to_avail(virtq *virtq, int buffer);
 	error_t check_new_packets();
 
 	uint8_t mac[6];
 	pci_bus *bus;
 	int bus_device;
-	int last_readq_idx;
+	int last_readq_used_idx;
 	int last_writeq_idx;
 	virtq *readq;
 	virtq *writeq;

@@ -14,7 +14,7 @@ using namespace cloudos;
 
 namespace cloudos {
 
-struct virtq_desc {
+struct virtq_buffer {
 	/* Address (guest-physical). */
 	uint64_t addr;
 	/* Length. */
@@ -59,8 +59,8 @@ struct virtq {
 		/* Each virtq occupies two or more physically-contiguous pages (usually defined as
 		   4096 bytes, but depending on the transport; henceforth referred to as Queue Align) */
 		size_t iovirtq_bytes = 0;
-		/* the ring descriptors */
-		iovirtq_bytes += sizeof(virtq_desc) * queue_size;
+		/* the ring buffers */
+		iovirtq_bytes += sizeof(virtq_buffer) * queue_size;
 		/* availability list */
 		iovirtq_bytes += 2 + queue_size * 2;
 		/* pad to the next page */
@@ -86,25 +86,24 @@ struct virtq {
 		return get_page_allocator()->to_physical_address(data);
 	}
 
-	virtq_desc *get_virtq_desc(int i) {
-		/* TODO: assertion */
+	virtq_buffer *get_virtq_buffer(int i) {
 		if(i >= queue_size) {
-			kernel_panic("get_virtq_desc");
+			kernel_panic("get_virtq_buffer: buffer index too high");
 		}
-		auto iovirtdesc = reinterpret_cast<virtq_desc*>(data);
-		return iovirtdesc + i;
+		auto buf = reinterpret_cast<virtq_buffer*>(data);
+		return buf + i;
 	}
 
 	virtq_avail *get_virtq_avail() {
-		return reinterpret_cast<virtq_avail*>(data + sizeof(virtq_desc) * queue_size);
+		return reinterpret_cast<virtq_avail*>(data + sizeof(virtq_buffer) * queue_size);
 	}
 
 	uint8_t *get_padding() {
-		return data + 2 + (sizeof(virtq_desc) + 2) * queue_size;
+		return data + 2 + (sizeof(virtq_buffer) + 2) * queue_size;
 	}
 
 	virtq_used *get_virtq_used() {
-		return reinterpret_cast<virtq_used*>(data + 2 + (sizeof(virtq_desc) + 2) * queue_size + padding_used);
+		return reinterpret_cast<virtq_used*>(data + 2 + (sizeof(virtq_buffer) + 2) * queue_size + padding_used);
 	}
 
 private:
@@ -158,12 +157,37 @@ virtio_net_device::virtio_net_device(pci_bus *parent, int d)
 : ethernet_device(parent)
 , bus(parent)
 , bus_device(d)
-, last_readq_idx(0)
+, last_readq_used_idx(0)
 , last_writeq_idx(0)
 , readq(nullptr)
 , writeq(nullptr)
 , mappings(0)
 {
+}
+
+error_t virtio_net_device::add_buffer_to_avail(virtq *queue, int buffer_id) {
+	auto *avail = queue->get_virtq_avail();
+	avail->ring[avail->idx % queue->get_queue_size()] = buffer_id;
+
+	// memory barrier
+	asm volatile ("": : :"memory");
+
+	avail->idx += 1;
+
+	// memory barrier
+	asm volatile ("": : :"memory");
+
+	uint32_t bar0 = bus->get_bar0(bus_device);
+	if((bar0 & 0x01) != 1) {
+		get_vga_stream() << "Not I/O space BAR type, skipping.\n";
+		return error_t::dev_not_supported;
+	}
+	bar0 = bar0 & 0xfffffffc;
+
+	uint32_t const queue_notify = bar0 + 0x10;
+	outw(queue_notify, queue->get_queue_select());
+
+	return error_t::no_error;
 }
 
 error_t virtio_net_device::eth_init()
@@ -253,32 +277,33 @@ error_t virtio_net_device::eth_init()
 		(queue == 0 ? readq : writeq) = q;
 	}
 
-	last_readq_idx = readq->get_virtq_used()->idx;
+	// make some buffers available -- the more buffers we allocate,
+	// the more data the virtio NIC can feed us between processing, but the
+	// more memory we're using.
+	auto avail = readq->get_virtq_avail();
+	avail->flags = 0;
+	for(int i = 0; i < 20; ++i) {
+		auto buffer = readq->get_virtq_buffer(i);
 
-	// make some read buffers available
-	// TODO: ensure there are always read buffers available
-	{
-		auto avail = readq->get_virtq_avail();
-		for(int i = 0; i < 20; ++i) {
-			auto desc = readq->get_virtq_desc(i);
-			void *address = get_allocator()->allocate(2048);
+		// TODO: use MTU instead of fixed size
+		buffer->len = 2048;
+		void *address = get_allocator()->allocate(buffer->len);
+		buffer->addr = reinterpret_cast<uint64_t>(get_page_allocator()->to_physical_address(address));
+		buffer->flags = VIRTQ_DESC_F_WRITE;
+		buffer->next = 0;
 
-			address_mapping *mapping = get_allocator()->allocate<address_mapping>();
-			address_mapping_list *mappingl = get_allocator()->allocate<address_mapping_list>();
-			mapping->logical = address;
-			mapping->physical = get_page_allocator()->to_physical_address(mapping->logical);
-			mappingl->data = mapping;
-			mappingl->next = nullptr;
-			append(&mappings, mappingl);
+		address_mapping *mapping = get_allocator()->allocate<address_mapping>();
+		address_mapping_list *mappingl = get_allocator()->allocate<address_mapping_list>();
+		mapping->logical = address;
+		mapping->physical = reinterpret_cast<void*>(buffer->addr);
+		mappingl->data = mapping;
+		mappingl->next = nullptr;
+		append(&mappings, mappingl);
 
-			desc->addr = reinterpret_cast<uint64_t>(mapping->physical);
-			desc->len = 2048;
-			desc->flags = VIRTQ_DESC_F_WRITE;
-			desc->next = 0;
-			avail->ring[i] = i;
+		auto res = add_buffer_to_avail(readq, i);
+		if(res != error_t::no_error) {
+			kernel_panic("Failed to add initial buffers to virtio NIC");
 		}
-		avail->flags = 0;
-		avail->idx = 20;
 	}
 
 	outb(device_status, 4); /* driver ready */
@@ -294,12 +319,12 @@ error_t virtio_net_device::check_new_packets() {
 	}
 
 	auto *virtq_used = readq->get_virtq_used();
-	while(virtq_used->idx > last_readq_idx) {
-		uint32_t id = virtq_used->ring[last_readq_idx].id;
-		uint32_t length = virtq_used->ring[last_readq_idx].len;
-		auto *descriptor = readq->get_virtq_desc(id);
+	while(virtq_used->idx > last_readq_used_idx) {
+		uint32_t buffer_id = virtq_used->ring[last_readq_used_idx % readq->get_queue_size()].id;
+		uint32_t length = virtq_used->ring[last_readq_used_idx % readq->get_queue_size()].len;
+		auto *buffer = readq->get_virtq_buffer(buffer_id);
 
-		uint32_t nethdr_phys = descriptor->addr & 0xffffffff;
+		uint32_t nethdr_phys = buffer->addr & 0xffffffff;
 
 		address_mapping_list *found = find(mappings, [nethdr_phys](address_mapping_list *item) {
 			return reinterpret_cast<uint32_t>(item->data->physical) == nethdr_phys;
@@ -313,15 +338,16 @@ error_t virtio_net_device::check_new_packets() {
 		}
 		auto res = ethernet_frame_received(nethdr + 12, length - 12);
 
-		last_readq_idx++;
+		last_readq_used_idx++;
+		auto res2 = add_buffer_to_avail(readq, buffer_id);
 
-		// TODO: add the buffer back into the available buffer
 		if(res != error_t::no_error) {
 			return res;
 		}
+		if(res2 != error_t::no_error) {
+			return res2;
+		}
 	}
-
-	// TODO: free sent buffers
 
 	return error_t::no_error;
 }
@@ -336,11 +362,6 @@ error_t virtio_net_device::get_mac_address(char m[6]) {
 }
 
 error_t virtio_net_device::send_ethernet_frame(uint8_t *frame, size_t length) {
-	if(writeq == nullptr) {
-		return error_t::invalid_argument;
-	}
-
-	/* TODO: this must be in DMA phys memory */
 	uint8_t net_hdr[] = {
 		0x01, /* needs checksum */
 		0x00, /* no segmentation */
@@ -351,11 +372,18 @@ error_t virtio_net_device::send_ethernet_frame(uint8_t *frame, size_t length) {
 		0x00, 0x00, /* buffer count */
 	};
 
-	// TODO: allocate actual descriptors
 	size_t first_desc = last_writeq_idx++;
 	size_t second_desc = last_writeq_idx++;
-	auto d0 = writeq->get_virtq_desc(first_desc);
-	auto d1 = writeq->get_virtq_desc(second_desc);
+
+	if(last_writeq_idx >= writeq->get_queue_size()) {
+		// TODO: instead of adding our buffers to the virtio NIC constantly,
+		// allocate some actual write buffers in the constructor and cycle
+		// through their indices in the writeq like we do for the readq
+		kernel_panic("Trying to write more buffers to virtio device than fit in the queue, fix the virtio driver");
+	}
+
+	auto d0 = writeq->get_virtq_buffer(first_desc);
+	auto d1 = writeq->get_virtq_buffer(second_desc);
 
 	address_mapping *mapping0 = get_allocator()->allocate<address_mapping>();
 	address_mapping_list *mappingl0 = get_allocator()->allocate<address_mapping_list>();
@@ -383,27 +411,7 @@ error_t virtio_net_device::send_ethernet_frame(uint8_t *frame, size_t length) {
 
 	auto avail = writeq->get_virtq_avail();
 	avail->flags = 0;
-	avail->ring[avail->idx] = first_desc;
-
-	// memory barrier
-	asm volatile ("": : :"memory");
-
-	avail->idx += 1;
-
-	// memory barrier
-	asm volatile ("": : :"memory");
-
-	uint32_t bar0 = bus->get_bar0(bus_device);
-	if((bar0 & 0x01) != 1) {
-		get_vga_stream() << "Not I/O space BAR type, skipping.\n";
-		return error_t::dev_not_supported;
-	}
-	bar0 = bar0 & 0xfffffffc;
-
-	uint32_t const queue_notify = bar0 + 0x10;
-	outw(queue_notify, writeq->get_queue_select());
-
-	return error_t::no_error;
+	return add_buffer_to_avail(writeq, first_desc);
 }
 
 void virtio_net_device::timer_event() {
