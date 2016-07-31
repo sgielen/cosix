@@ -379,6 +379,9 @@ error_t virtio_net_device::send_ethernet_frame(uint8_t *frame, size_t length) {
 		// TODO: instead of adding our buffers to the virtio NIC constantly,
 		// allocate some actual write buffers in the constructor and cycle
 		// through their indices in the writeq like we do for the readq
+		// --- or, alternatively, reuse buffer indices from earlier sent
+		// packets that aren't used anymore, so we don't have to copy into
+		// send buffers.
 		kernel_panic("Trying to write more buffers to virtio device than fit in the queue, fix the virtio driver");
 	}
 
