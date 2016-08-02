@@ -15,5 +15,11 @@ putstring:
 	mov 4(%esp), %ecx
 	/* size of string in edx */
 	mov 8(%esp), %edx
+	/* save old value of ebx */
+	push %ebx
+	/* fd number */
+	mov $0, %ebx
 	int $0x80
+	/* pop old value of ebx */
+	pop %ebx
 	ret

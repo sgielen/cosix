@@ -12,7 +12,7 @@ enum class fd_type_t {
 	process,
 	file,
 	directory,
-	fifo
+	pipe
 };
 
 /** CloudOS file descriptors
@@ -35,6 +35,11 @@ struct fd_t {
 	virtual size_t read(size_t /*offset*/, void * /*dest*/, size_t /*count*/) {
 		error = error_t::invalid_argument;
 		return 0;
+	}
+
+	virtual error_t putstring(const char * /*str*/, size_t /*count*/) {
+		error = error_t::invalid_argument;
+		return error;
 	}
 
 protected:

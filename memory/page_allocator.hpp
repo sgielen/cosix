@@ -53,9 +53,9 @@ struct page_allocator {
 	void install();
 
 	// for kernel data
-	void *to_physical_address(void*);
+	void *to_physical_address(const void*);
 	// for userland and kernel data
-	void *to_physical_address(process_fd*, void*);
+	void *to_physical_address(process_fd*, const void*);
 
 	error_t allocate(page_allocation*);
 	void fill_kernel_pages(uint32_t *page_directory);

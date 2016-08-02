@@ -4,6 +4,7 @@
 #include <memory/allocator.hpp>
 #include <memory/page_allocator.hpp>
 #include <global.hpp>
+#include <fd/vga_fd.hpp>
 
 extern uint32_t _kernel_virtual_base;
 
@@ -28,6 +29,27 @@ process_fd::process_fd(page_allocator *a, const char *n)
 	for(size_t i = 0; i < 0x300; ++i) {
 		page_tables[i] = nullptr;
 	}
+
+	vga_fd *fd = get_allocator()->allocate<vga_fd>();
+	new (fd) vga_fd("vga_fd");
+
+	add_fd(fd);
+}
+
+int process_fd::add_fd(fd_t *fd) {
+	if(last_fd >= MAX_FD - 1) {
+		kernel_panic("fd's expired for process");
+	}
+	int fdnum = ++last_fd;
+	fds[fdnum] = fd;
+	return fdnum;
+}
+
+fd_t *process_fd::get_fd(int num) {
+	if(num < 0 || num > last_fd || num >= MAX_FD) {
+		return nullptr;
+	}
+	return fds[num];
 }
 
 void cloudos::process_fd::initialize(void *start_addr, cloudos::allocator *alloc) {
@@ -67,17 +89,32 @@ void cloudos::process_fd::handle_syscall(vga_stream &stream) {
 	// software interrupt
 	int syscall = state.eax;
 	if(syscall == 1) {
-		// getpid
+		// getpid(), returns eax=pid
 		state.eax = pid;
 	} else if(syscall == 2) {
-		// putstring
+		// putstring(ebx=fd, ecx=ptr, edx=size), returns eax=0 or eax=-1 on error
+		int fdnum = state.ebx;
+		fd_t *global_fd = get_fd(fdnum);
+		if(!global_fd) {
+			get_vga_stream() << "fdnum " << fdnum << " is not a valid fd\n";
+			state.eax = -1;
+			return;
+		}
+
 		const char *str = reinterpret_cast<const char*>(state.ecx);
 		const size_t size = state.edx;
-		state.edx = 0;
-		for(size_t i = 0; i < size; ++i) {
-			stream << str[i];
-			state.edx += 1;
+
+		if(reinterpret_cast<uint32_t>(str) >= _kernel_virtual_base
+		|| reinterpret_cast<uint32_t>(str) + size >= _kernel_virtual_base
+		|| size >= 0x40000000
+		|| get_page_allocator()->to_physical_address(this, reinterpret_cast<const void*>(str)) == nullptr) {
+			get_vga_stream() << "putstring() of a non-userland-accessible string\n";
+			state.eax = -1;
+			return;
 		}
+
+		auto res = global_fd->putstring(str, size);
+		state.eax = res == error_t::no_error ? 0 : -1;
 	} else {
 		stream << "Syscall " << state.eax << " unknown\n";
 	}

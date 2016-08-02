@@ -16,19 +16,28 @@ struct page_allocator;
 
 /** Process file descriptor
  *
- * This file descriptor contains all information necessary for running a process.
+ * This file descriptor contains all information necessary for running a
+ * process.
+ *
+ * A process_fd holds its file descriptors, but does not own them, because they
+ * may be shared by multiple processes.
+ *
+ * A process_fd holds and owns its own page directory and the lower 0x300 page
+ * tables. The upper 0x100 page tables are in the page directory, but owned by
+ * the page_allocator.
+ *
+ * The process_fd also holds and owns its kernel and userland stack.
+ *
+ * When a process FD refcount becomes 0, the process must be exited. This means
+ * all FDs in the file descriptor list are de-refcounted (and possibly cleaned
+ * up). Also, we must ensure that the process FD does not end up in the
+ * ready/blocked list again.
  */
 struct process_fd : public fd_t {
 	process_fd(page_allocator *alloc, const char *n);
 
 	// TODO remove
 	int pid;
-
-	/* When a process FD refcount becomes 0, the process must be exited.
-	 * This means all FDs in the file descriptor list are de-refcounted
-	 * (and possibly cleaned up). Also, we must ensure that the process FD
-	 * does not end up in the ready/blocked list again.
-	 */
 
 	void initialize(void *start_addr, allocator *alloc);
 	void set_return_state(interrupt_state_t*);
@@ -39,11 +48,15 @@ struct process_fd : public fd_t {
 	uint32_t *get_page_table(int i);
 
 	void map_at(void *kernel_ptr, void *userland_ptr, size_t size);
+	int add_fd(fd_t*);
+	fd_t *get_fd(int num);
 
 private:
 	static const int PAGE_SIZE = 4096 /* bytes */;
 
-	/* file descriptor mapping to global FD pointers... */
+	static const int MAX_FD = 256 /* file descriptors */;
+	fd_t *fds[MAX_FD];
+	int last_fd = -1;
 
 	// Page directory, filled with physical addresses to page tables
 	uint32_t *page_directory;

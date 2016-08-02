@@ -101,11 +101,11 @@ page_allocator::page_allocator(void *h, memory_map_entry *mmap, size_t mmap_size
 	}
 }
 
-void *page_allocator::to_physical_address(void *logical) {
+void *page_allocator::to_physical_address(const void *logical) {
 	return to_physical_address(0, logical);
 }
 
-void *page_allocator::to_physical_address(process_fd *fd, void *logical) {
+void *page_allocator::to_physical_address(process_fd *fd, const void *logical) {
 	if(logical == 0) {
 		return 0;
 	}
