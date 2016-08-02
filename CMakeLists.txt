@@ -40,7 +40,7 @@ if(BAREMETAL_ENABLED)
 	include_directories(${CMAKE_BINARY_DIR})
 	set_source_files_properties(boot.s PROPERTIES COMPILE_FLAGS "-x assembler-with-cpp")
 	add_executable(cloudkernel boot.s kernel_main.cpp)
-	target_link_libraries(cloudkernel compiler_rt_builtins oslibc hw userland fd memory net)
+	target_link_libraries(cloudkernel compiler_rt_builtins oslibc hw fd memory net)
 	set_target_properties(cloudkernel PROPERTIES LINK_DEPENDS "${CMAKE_SOURCE_DIR}/linker.ld")
 	set_target_properties(cloudkernel PROPERTIES LINK_FLAGS "-T ${CMAKE_SOURCE_DIR}/linker.ld")
 
