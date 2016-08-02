@@ -10,7 +10,7 @@ extern uint32_t _kernel_virtual_base;
 using namespace cloudos;
 
 process_fd::process_fd(page_allocator *a, const char *n)
-: fd(fd_type_t::process, n)
+: fd_t(fd_type_t::process, n)
 {
 	page_allocation p;
 	auto res = a->allocate(&p);

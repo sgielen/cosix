@@ -18,7 +18,7 @@ struct page_allocator;
  *
  * This file descriptor contains all information necessary for running a process.
  */
-struct process_fd : public fd {
+struct process_fd : public fd_t {
 	process_fd(page_allocator *alloc, const char *n);
 
 	// TODO remove

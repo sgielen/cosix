@@ -23,7 +23,7 @@ enum class fd_type_t {
  * From there, file descriptors form a directed acyclic graph.
  */
 
-struct fd {
+struct fd_t {
 	fd_type_t type;
 
 	size_t refcount;
@@ -32,16 +32,18 @@ struct fd {
 	char name[64]; /* for debugging */
 	error_t error;
 
-	size_t read(size_t /*offset*/, void * /*dest*/, size_t /*count*/) {
+	virtual size_t read(size_t /*offset*/, void * /*dest*/, size_t /*count*/) {
 		error = error_t::invalid_argument;
 		return 0;
 	}
 
 protected:
-	inline fd(fd_type_t t, const char *n) : type(t), refcount(1), invalid(false), error(error_t::no_error) {
+	inline fd_t(fd_type_t t, const char *n) : type(t), refcount(1), invalid(false), error(error_t::no_error) {
 		strncpy(name, n, sizeof(name));
 		name[sizeof(name)-1] = 0;
 	}
+
+	virtual ~fd_t() {}
 };
 
 };

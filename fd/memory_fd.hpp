@@ -7,10 +7,10 @@ namespace cloudos {
  * This file descriptor takes ownership of the given buffer. Reads on this
  * file descriptor will read from the buffer. Writes are not supported.
  */
-struct memory_fd : public fd {
-	inline memory_fd(void *a, size_t l, const char *n) : fd(fd_type_t::memory, n), addr(a), length(l) {}
+struct memory_fd : public fd_t {
+	inline memory_fd(void *a, size_t l, const char *n) : fd_t(fd_type_t::memory, n), addr(a), length(l) {}
 
-	size_t read(size_t offset, void *dest, size_t count) {
+	size_t read(size_t offset, void *dest, size_t count) override {
 		if(offset + count >= length) {
 			// EOF
 			error = error_t::no_error;
