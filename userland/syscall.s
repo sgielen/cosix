@@ -15,10 +15,24 @@ putstring:
 	mov 4(%esp), %ecx
 	/* size of string in edx */
 	mov 8(%esp), %edx
-	/* save old value of ebx */
-	push %ebx
 	/* fd number */
+	push %ebx
 	mov $0, %ebx
+	int $0x80
+	/* pop old value of ebx */
+	pop %ebx
+	ret
+
+.global getchar
+.type getchar, @function
+getchar:
+	/* syscall num */
+	mov $3, %eax
+	/* offset of char in fd */
+	mov 4(%esp), %ecx
+	/* fd number */
+	push %ebx
+	mov $1, %ebx
 	int $0x80
 	/* pop old value of ebx */
 	pop %ebx

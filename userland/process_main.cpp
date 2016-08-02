@@ -7,6 +7,9 @@ int getpid();
 extern "C"
 void putstring(const char*, unsigned int len);
 
+extern "C"
+int getchar(int offset);
+
 size_t
 strlen(const char* str) {
 	size_t ret = 0;
@@ -43,9 +46,21 @@ void _start() {
 	putstring("world!\n");
 
 	int pid = getpid();
-	char buf[10];
+	char buf[100];
 	putstring("This is process ");
 	putstring(ui64toa_s(pid, buf, sizeof(buf), 10));
 	putstring("!\n");
+
+	size_t len;
+	for(len = 0; len < sizeof(buf); ++len) {
+		int c = getchar(len);
+		if(c < 0) {
+			break;
+		}
+		buf[len] = c;
+	}
+	buf[len] = 0;
+	putstring(buf, len);
+
 	while(1) {}
 }

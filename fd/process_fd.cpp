@@ -5,6 +5,7 @@
 #include <memory/page_allocator.hpp>
 #include <global.hpp>
 #include <fd/vga_fd.hpp>
+#include <fd/memory_fd.hpp>
 
 extern uint32_t _kernel_virtual_base;
 
@@ -34,6 +35,13 @@ process_fd::process_fd(page_allocator *a, const char *n)
 	new (fd) vga_fd("vga_fd");
 
 	add_fd(fd);
+
+	char *fd_buf = get_allocator()->allocate<char>(200);
+	strncpy(fd_buf, "These are the contents of my buffer!\n", 200);
+
+	memory_fd *fd2 = get_allocator()->allocate<memory_fd>();
+	new (fd2) memory_fd(fd_buf, strlen(fd_buf) + 1, "memory_fd");
+	add_fd(fd2);
 }
 
 int process_fd::add_fd(fd_t *fd) {
@@ -115,6 +123,25 @@ void cloudos::process_fd::handle_syscall(vga_stream &stream) {
 
 		auto res = global_fd->putstring(str, size);
 		state.eax = res == error_t::no_error ? 0 : -1;
+	} else if(syscall == 3) {
+		// getchar(ebx=fd, ecx=offset), returns eax=resultchar or eax=-1 on error
+		int fdnum = state.ebx;
+		fd_t *global_fd = get_fd(fdnum);
+		if(!global_fd) {
+			get_vga_stream() << "fdnum " << fdnum << " is not a valid fd\n";
+			state.eax = -1;
+			return;
+		}
+
+		size_t offset = state.ecx;
+		char buf[1];
+
+		size_t r = global_fd->read(offset, &buf[0], 1);
+		if(r != 1 || global_fd->error != error_t::no_error) {
+			state.eax = -1;
+			return;
+		}
+		state.eax = buf[0];
 	} else {
 		stream << "Syscall " << state.eax << " unknown\n";
 	}
