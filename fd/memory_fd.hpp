@@ -11,15 +11,15 @@ struct memory_fd : public fd_t {
 	inline memory_fd(char *a, size_t l, const char *n) : fd_t(fd_type_t::memory, n), addr(a), length(l) {}
 
 	size_t read(size_t offset, void *dest, size_t count) override {
-		if(offset + count >= length) {
-			// EOF
-			error = error_t::no_error;
+		error = error_t::no_error;
+		if(offset + count > length) {
+			// EOF, don't change dest
 			return 0;
 		}
 
-		size_t bytes_left = length - offset - count;
+		size_t bytes_left = length - offset;
 		size_t copied = count < bytes_left ? count : bytes_left;
-		memcpy(static_cast<char*>(dest), addr + offset, copied);
+		memcpy(reinterpret_cast<char*>(dest), addr + offset, copied);
 		return copied;
 	}
 

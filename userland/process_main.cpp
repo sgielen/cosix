@@ -54,7 +54,7 @@ void _start() {
 	size_t len;
 	for(len = 0; len < sizeof(buf); ++len) {
 		int c = getchar(len);
-		if(c < 0) {
+		if(c <= 0) {
 			break;
 		}
 		buf[len] = c;
