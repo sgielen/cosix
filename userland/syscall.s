@@ -29,10 +29,10 @@ getchar:
 	/* syscall num */
 	mov $3, %eax
 	/* offset of char in fd */
-	mov 4(%esp), %ecx
+	mov 8(%esp), %ecx
 	/* fd number */
 	push %ebx
-	mov $1, %ebx
+	mov 8(%esp), %ebx
 	int $0x80
 	/* pop old value of ebx */
 	pop %ebx

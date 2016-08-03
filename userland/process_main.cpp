@@ -8,7 +8,7 @@ extern "C"
 void putstring(const char*, unsigned int len);
 
 extern "C"
-int getchar(int offset);
+int getchar(int fd, int offset);
 
 size_t
 strlen(const char* str) {
@@ -53,7 +53,7 @@ void _start() {
 
 	size_t len;
 	for(len = 0; len < sizeof(buf); ++len) {
-		int c = getchar(len);
+		int c = getchar(1, len);
 		if(c <= 0) {
 			break;
 		}
