@@ -6,6 +6,7 @@
 #include <global.hpp>
 #include <fd/vga_fd.hpp>
 #include <fd/memory_fd.hpp>
+#include <fd/procfs.hpp>
 
 extern uint32_t _kernel_virtual_base;
 
@@ -42,6 +43,8 @@ process_fd::process_fd(page_allocator *a, const char *n)
 	memory_fd *fd2 = get_allocator()->allocate<memory_fd>();
 	new (fd2) memory_fd(fd_buf, strlen(fd_buf) + 1, "memory_fd");
 	add_fd(fd2);
+
+	add_fd(procfs::get_root_fd());
 }
 
 int process_fd::add_fd(fd_t *fd) {
@@ -142,6 +145,28 @@ void cloudos::process_fd::handle_syscall(vga_stream &stream) {
 			return;
 		}
 		state.eax = buf[0];
+	} else if(syscall == 4) {
+		// openat(ebx=fd, ecx=pathname, edx=as_directory) returns eax=fd or eax=-1 on error
+		int fdnum = state.edx;
+		fd_t *global_fd = get_fd(fdnum);
+		if(!global_fd) {
+			get_vga_stream() << "fdnum " << fdnum << " is not a valid fd\n";
+			state.eax = -1;
+			return;
+		}
+
+		const char *pathname = reinterpret_cast<const char*>(state.ecx);
+		int directory = state.ebx;
+
+		fd_t *new_fd = global_fd->openat(pathname, directory == 1);
+		if(!new_fd || global_fd->error != error_t::no_error) {
+			get_vga_stream() << "failed to openat()\n";
+			state.eax = -1;
+			return;
+		}
+
+		int new_fdnum = add_fd(new_fd);
+		state.eax = new_fdnum;
 	} else {
 		stream << "Syscall " << state.eax << " unknown\n";
 	}

@@ -4,5 +4,6 @@ if(BAREMETAL_ENABLED)
 		memory_fd.hpp
 		process_fd.cpp process_fd.hpp
 		scheduler.cpp scheduler.hpp
+		procfs.cpp procfs.hpp
 	)
 endif()

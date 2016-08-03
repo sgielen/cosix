@@ -37,3 +37,20 @@ getchar:
 	/* pop old value of ebx */
 	pop %ebx
 	ret
+
+.global openat
+.type openat, @function
+openat:
+	/* syscall num */
+	mov $4, %eax
+	/* pathname */
+	mov 8(%esp), %ecx
+	/* directory */
+	mov 4(%esp), %edx
+	/* fd number */
+	push %ebx
+	mov 16(%esp), %ebx
+	int $0x80
+	/* pop old value of ebx */
+	pop %ebx
+	ret
