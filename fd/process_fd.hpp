@@ -69,6 +69,10 @@ private:
 	size_t userland_stack_size;
 	void *kernel_stack_bottom;
 	size_t kernel_stack_size;
+	void *vdso_image;
+	size_t vdso_size;
+	void *auxv_buf;
+	size_t auxv_size;
 };
 
 }

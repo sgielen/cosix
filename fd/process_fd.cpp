@@ -7,6 +7,8 @@
 #include <fd/vga_fd.hpp>
 #include <fd/memory_fd.hpp>
 #include <fd/procfs.hpp>
+#include <userland/vdso_support.h>
+#include <cloudabi/headers/cloudabi_types.h>
 
 extern uint32_t _kernel_virtual_base;
 
@@ -79,6 +81,29 @@ void cloudos::process_fd::initialize(void *start_addr, cloudos::allocator *alloc
 	uint32_t stack_address = 0x80000000;
 	map_at(userland_stack_bottom, reinterpret_cast<void*>(stack_address - userland_stack_size), userland_stack_size);
 	state.useresp = stack_address;
+
+	// initialize vdso address
+	vdso_size = vdso_blob_size;
+	vdso_image = alloc->allocate(vdso_size);
+	memcpy(vdso_image, vdso_blob, vdso_size);
+	uint32_t vdso_address = 0x80040000;
+	map_at(vdso_image, reinterpret_cast<void*>(vdso_address), vdso_size);
+
+	// initialize auxv
+	size_t auxv_entries = 2; // including CLOUDABI_AT_NULL
+	auxv_size = auxv_entries * sizeof(cloudabi_auxv_t);
+	auxv_buf = alloc->allocate_aligned(auxv_size, 4096);
+	cloudabi_auxv_t *auxv = reinterpret_cast<cloudabi_auxv_t*>(auxv_buf);
+	auxv->a_type = CLOUDABI_AT_SYSINFO_EHDR;
+	auxv->a_val = vdso_address;
+	auxv++;
+	auxv->a_type = CLOUDABI_AT_NULL;
+	uint32_t auxv_address = 0x80010000;
+	map_at(auxv_buf, reinterpret_cast<void*>(auxv_address), auxv_size);
+
+	// put auxv on stack, so it looks like a function argument for _start
+	state.useresp -= 2 * sizeof(void*);
+	memcpy(reinterpret_cast<uint8_t*>(userland_stack_bottom) + userland_stack_size - sizeof(void*), &auxv_address, sizeof(void*));
 
 	// initial instruction pointer
 	state.eip = reinterpret_cast<uint32_t>(start_addr);

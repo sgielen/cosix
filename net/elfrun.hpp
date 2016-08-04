@@ -17,7 +17,7 @@ struct elfrun_implementation : public udp_listener {
 private:
 	error_t run_binary();
 
-	uint8_t buffer[16192];
+	uint8_t buffer[32384];
 	size_t pos;
 	bool awaiting;
 };

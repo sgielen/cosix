@@ -1,5 +1,7 @@
 SET(CMAKE_SYSTEM_NAME Generic)
 
+set(CMAKE_VDSO_MODULE_LINKER i686-unknown-cloudabi-ld)
+
 if(CMAKE_VERSION VERSION_LESS "3.6.0")
 	INCLUDE(CMakeForceCompiler)
 	CMAKE_FORCE_C_COMPILER(i686-unknown-cloudabi-cc Clang)

@@ -1,5 +1,8 @@
 #include <stdint.h>
 #include <stddef.h>
+#include <cloudlibc/src/include/elf.h>
+#include <cloudlibc/src/include/link.h>
+#include <cloudabi/headers/cloudabi_types.h>
 
 extern "C"
 int getpid();
@@ -13,12 +16,26 @@ int getchar(int fd, int offset);
 extern "C"
 int openat(int fd, const char*, int directory);
 
+int (*get_vdso_int)();
+const char * (*get_vdso_text)();
+
 size_t
 strlen(const char* str) {
 	size_t ret = 0;
 	while ( str[ret] != 0 )
 		ret++;
 	return ret;
+}
+
+int
+strcmp(const char *left, const char *right) {
+	while(1) {
+		if(*left == 0 && *right == 0) return 0;
+		if(*left < *right) return -1;
+		if(*left > *right) return 1;
+		left++;
+		right++;
+	}
 }
 
 void putstring(const char *buf) {
@@ -57,8 +74,65 @@ char *i64toa_s(int64_t value, char *buffer, size_t bufsize, int base) {
 	return b;
 }
 
+static void link_vdso(const ElfW(Ehdr) * ehdr) {
+  // Extract the Dynamic Section of the vDSO.
+  const char *base = (const char *)ehdr;
+  const ElfW(Phdr) *phdr = (const ElfW(Phdr) *)(base + ehdr->e_phoff);
+  size_t phnum = ehdr->e_phnum;
+  for (;;) {
+    if (phnum == 0)
+      return;
+    if (phdr->p_type == PT_DYNAMIC)
+      break;
+    phnum--;
+    phdr++;
+  }
+
+  // Extract the symbol and string tables.
+  const ElfW(Dyn) *dyn = (const ElfW(Dyn) *)(base + phdr->p_offset);
+  const char *str = NULL;
+  const ElfW(Sym) *sym = NULL;
+  size_t symsz = 0;
+  while (dyn->d_tag != DT_NULL) {
+    switch (dyn->d_tag) {
+      case DT_HASH:
+        // Number of symbols in the symbol table can only be extracted
+        // by fetching the number of chains in the symbol hash table.
+        symsz = ((const Elf32_Word *)(base + dyn->d_un.d_ptr))[1];
+        break;
+      case DT_STRTAB:
+        str = base + dyn->d_un.d_ptr;
+        break;
+      case DT_SYMTAB:
+        sym = (const ElfW(Sym) *)(base + dyn->d_un.d_ptr);
+        break;
+    }
+    ++dyn;
+  }
+
+  // Scan through all of the symbols and find the implementations of the
+  // system calls.
+  while (symsz-- > 0) {
+    if (ELFW(ST_BIND)(sym->st_info) == STB_GLOBAL &&
+        ELFW(ST_TYPE)(sym->st_info) == STT_FUNC &&
+        ELFW(ST_VISIBILITY)(sym->st_other) == STV_DEFAULT && sym->st_name > 0) {
+      const char *name = str + sym->st_name;
+      if (strcmp(name, "get_vdso_int") == 0) {
+        get_vdso_int = (decltype(get_vdso_int))(base + sym->st_value);
+      } else if(strcmp(name, "get_vdso_text") == 0) {
+        get_vdso_text = (decltype(get_vdso_text))(base + sym->st_value);
+      } else {
+        putstring("Saw unknown symbol named \"");
+        putstring(name);
+        putstring("\"\n");
+      }
+    }
+    ++sym;
+  }
+}
+
 extern "C"
-void _start() {
+void _start(const cloudabi_auxv_t *auxv) {
 	putstring("Hello ");
 	putstring("world!\n");
 
@@ -135,6 +209,37 @@ void _start() {
 	buf[len] = 0;
 	putstring(buf);
 	putstring("\n");
+
+	if(auxv == 0) {
+		putstring("No auxv found, this is required!\n");
+		while(1) {}
+	} else {
+		get_vdso_int = 0;
+		get_vdso_text = 0;
+
+		const ElfW(Ehdr) *at_sysinfo_ehdr = NULL;
+		for(; auxv->a_type != CLOUDABI_AT_NULL; ++auxv) {
+			if(auxv->a_type == CLOUDABI_AT_SYSINFO_EHDR) {
+				at_sysinfo_ehdr = (ElfW(Ehdr)*)auxv->a_ptr;
+			}
+		}
+		if(at_sysinfo_ehdr) {
+			link_vdso(at_sysinfo_ehdr);
+		}
+	}
+
+	if(get_vdso_int != nullptr) {
+		putstring("VDSO int: ");
+		putstring(i64toa_s(get_vdso_int(), buf, sizeof(buf), 10));
+		putstring("\n");
+	}
+	if(get_vdso_text != nullptr) {
+		putstring("VDSO text: ");
+		putstring(get_vdso_text());
+		putstring("\n");
+	}
+
+	putstring("Binary done!\n");
 
 	while(1) {}
 }

@@ -4,3 +4,9 @@
 [submodule "catch"]
 	path = catch
 	url = https://github.com/philsquared/Catch.git
+[submodule "cloudabi"]
+	path = cloudabi
+	url = https://github.com/NuxiNL/cloudabi.git
+[submodule "cloudlibc"]
+	path = cloudlibc
+	url = https://github.com/NuxiNL/cloudlibc.git

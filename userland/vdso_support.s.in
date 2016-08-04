@@ -1,0 +1,8 @@
+.section .rodata
+.global vdso_blob
+vdso_blob:
+	.incbin "$<TARGET_FILE:vdso>"
+1:
+.global vdso_blob_size
+vdso_blob_size:
+	.int 1b - vdso_blob
