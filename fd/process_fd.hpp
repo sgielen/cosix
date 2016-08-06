@@ -53,6 +53,7 @@ struct process_fd : public fd_t {
 
 private:
 	static const int PAGE_SIZE = 4096 /* bytes */;
+	static const int PAGE_DIRECTORY_SIZE = 1024 /* entries */;
 
 	static const int MAX_FD = 256 /* file descriptors */;
 	fd_t *fds[MAX_FD];

@@ -23,6 +23,7 @@ process_fd::process_fd(page_allocator *a, const char *n)
 		kernel_panic("Failed to allocate process paging directory");
 	}
 	page_directory = reinterpret_cast<uint32_t*>(p.address);
+	memset(page_directory, 0, PAGE_DIRECTORY_SIZE * sizeof(uint32_t));
 	a->fill_kernel_pages(page_directory);
 
 	res = a->allocate(&p);
