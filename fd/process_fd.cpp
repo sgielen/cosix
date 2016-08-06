@@ -68,8 +68,8 @@ fd_t *process_fd::get_fd(int num) {
 
 void cloudos::process_fd::initialize(void *start_addr, cloudos::allocator *alloc) {
 	userland_stack_size = kernel_stack_size = 0x10000 /* 64 kb */;
-	userland_stack_bottom = reinterpret_cast<uint8_t*>(alloc->allocate(userland_stack_size));
-	kernel_stack_bottom   = reinterpret_cast<uint8_t*>(alloc->allocate(kernel_stack_size));
+	userland_stack_bottom = reinterpret_cast<uint8_t*>(alloc->allocate_aligned(userland_stack_size, 4096));
+	kernel_stack_bottom   = reinterpret_cast<uint8_t*>(alloc->allocate_aligned(kernel_stack_size, 4096));
 
 	// initialize all registers and return state to zero
 	memset(&state, 0, sizeof(state));
@@ -85,7 +85,7 @@ void cloudos::process_fd::initialize(void *start_addr, cloudos::allocator *alloc
 
 	// initialize vdso address
 	vdso_size = vdso_blob_size;
-	vdso_image = alloc->allocate(vdso_size);
+	vdso_image = alloc->allocate_aligned(vdso_size, 4096);
 	memcpy(vdso_image, vdso_blob, vdso_size);
 	uint32_t vdso_address = 0x80040000;
 	map_at(vdso_image, reinterpret_cast<void*>(vdso_address), vdso_size);
