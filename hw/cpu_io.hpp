@@ -35,4 +35,27 @@ static inline void outl(uint16_t port, uint32_t val) {
 	asm volatile("outl %0, %1" : : "a"(val), "Nd"(port) );
 }
 
+static inline void cpuid(int page, uint32_t result[4]) {
+	asm volatile("cpuid" : "=a"(result[0]), "=b"(result[1]),
+		"=c"(result[2]), "=d"(result[3]) : "a"(page));
+}
+
+static inline void get_cpu_name(char cpuname[13]) {
+	uint32_t result[4];
+	cpuid(0, result);
+	cpuname[ 0] = result[1]       & 0xff;
+	cpuname[ 1] = result[1] >> 8  & 0xff;
+	cpuname[ 2] = result[1] >> 16 & 0xff;
+	cpuname[ 3] = result[1] >> 24       ;
+	cpuname[ 4] = result[3]       & 0xff;
+	cpuname[ 5] = result[3] >> 8  & 0xff;
+	cpuname[ 6] = result[3] >> 16 & 0xff;
+	cpuname[ 7] = result[3] >> 24       ;
+	cpuname[ 8] = result[2]       & 0xff;
+	cpuname[ 9] = result[2] >> 8  & 0xff;
+	cpuname[10] = result[2] >> 16 & 0xff;
+	cpuname[11] = result[2] >> 24       ;
+	cpuname[12] = 0;
+}
+
 }

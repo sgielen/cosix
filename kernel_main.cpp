@@ -190,6 +190,9 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	vga_stream stream(buf);
 	global.vga = &stream;
 	stream << "CloudOS v" cloudos_VERSION " -- starting up\n";
+	char cpu_name[13];
+	get_cpu_name(cpu_name);
+	stream << "Running on CPU: " << cpu_name << "\n";
 
 	multiboot_info boot_info(bi_ptr, multiboot_magic);
 
