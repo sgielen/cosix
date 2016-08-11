@@ -44,9 +44,11 @@ struct process_fd : public fd_t {
 	void get_return_state(interrupt_state_t*);
 	void handle_syscall(vga_stream &stream);
 	void *get_kernel_stack_top();
+	void *get_fsbase();
 	void install_page_directory();
 	uint32_t *get_page_table(int i);
 
+	void copy_and_map_elf(uint8_t *elf_buffer, size_t size);
 	void map_at(void *kernel_ptr, void *userland_ptr, size_t size);
 	int add_fd(fd_t*);
 	fd_t *get_fd(int num);
@@ -60,20 +62,25 @@ private:
 	int last_fd = -1;
 
 	// Page directory, filled with physical addresses to page tables
-	uint32_t *page_directory;
+	uint32_t *page_directory = 0;
 	// The actual backing table virtual addresses; only the first 0x300
 	// entries are valid, the others are in page_allocator.kernel_page_tables
-	uint32_t **page_tables;
+	uint32_t **page_tables = 0;
 
 	interrupt_state_t state;
-	void *userland_stack_bottom;
-	size_t userland_stack_size;
-	void *kernel_stack_bottom;
-	size_t kernel_stack_size;
-	void *vdso_image;
-	size_t vdso_size;
-	void *auxv_buf;
-	size_t auxv_size;
+	void *userland_stack_bottom = 0;
+	size_t userland_stack_size = 0;
+	void *userland_stack_address = 0;
+	void *kernel_stack_bottom = 0;
+	size_t kernel_stack_size = 0;
+	void *vdso_image = 0;
+	size_t vdso_size = 0;
+	void *auxv_buf = 0;
+	size_t auxv_size = 0;
+
+	void *elf_phdr = 0;
+	size_t elf_phnum = 0;
+	size_t elf_ph_size = 0;
 };
 
 }

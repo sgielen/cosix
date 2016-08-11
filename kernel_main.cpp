@@ -242,23 +242,25 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	// first entry is always null
 	gdt.add_entry(0, 0, 0, 0);
 	// second entry: entire 4GiB address space is readable code
-	gdt.add_entry(0xffffff, 0,
+	gdt.add_entry(0xffffffff, 0,
 		SEGMENT_RW | SEGMENT_EXEC | SEGMENT_ALWAYS | SEGMENT_PRIV_RING0 | SEGMENT_PRESENT,
 		SEGMENT_PAGE_GRANULARITY | SEGMENT_32BIT);
 	// third entry: entire 4GiB address space is writable data
-	gdt.add_entry(0xffffff, 0,
+	gdt.add_entry(0xffffffff, 0,
 		SEGMENT_RW | SEGMENT_ALWAYS | SEGMENT_PRIV_RING0 | SEGMENT_PRESENT,
 		SEGMENT_PAGE_GRANULARITY | SEGMENT_32BIT);
 	// fourth entry: entire 4GiB address space is ring 3 readable code
-	gdt.add_entry(0xfffff, 0,
+	gdt.add_entry(0xffffffff, 0,
 		SEGMENT_RW | SEGMENT_EXEC | SEGMENT_ALWAYS | SEGMENT_PRIV_RING3 | SEGMENT_PRESENT,
 		SEGMENT_PAGE_GRANULARITY | SEGMENT_32BIT | SEGMENT_AVAILABLE);
 	// fifth entry: entire 4GiB address space is ring 3 writable data
-	gdt.add_entry(0xffffff, 0,
+	gdt.add_entry(0xffffffff, 0,
 		SEGMENT_RW | SEGMENT_ALWAYS | SEGMENT_PRIV_RING3 | SEGMENT_PRESENT,
 		SEGMENT_PAGE_GRANULARITY | SEGMENT_32BIT | SEGMENT_AVAILABLE);
 	// and then a TSS entry
 	gdt.add_tss_entry();
+	// lastly, add an entry for the %fs segment, used for thread-local storage
+	gdt.add_fs_entry();
 	gdt.load();
 	global.gdt = &gdt;
 	stream << "Global Descriptor Table loaded, segmentation is in effect\n";

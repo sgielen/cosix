@@ -7,10 +7,12 @@ idt_load:
 isr_common:
 	/* store registers */
 	pusha
-	/* store segment */
+	/* store segment selectors */
+	mov %fs, %ax
+	push %eax
 	mov %ds, %ax
 	push %eax
-	/* switch to kernel segment */
+	/* switch to kernel segments */
 	mov $0x10, %ax
 	mov %ax, %ds
 	mov %ax, %es
@@ -20,10 +22,11 @@ isr_common:
 	cld
 	/* call into C */
 	call isr_handler
-	/* switch back to original segment */
+	/* switch back to original segments */
 	pop %eax
 	mov %ax, %ds
 	mov %ax, %es
+	pop %eax
 	mov %ax, %fs
 	mov %ax, %gs
 	/* restore registers */

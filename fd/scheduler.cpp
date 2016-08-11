@@ -31,6 +31,7 @@ void scheduler::resume_running(interrupt_state_t *regs)
 		process_fd *fh = running->data;
 		fh->get_return_state(regs);
 		fh->install_page_directory();
+		get_gdt()->set_fsbase(fh->get_fsbase());
 		get_gdt()->set_kernel_stack(fh->get_kernel_stack_top());
 	}
 }

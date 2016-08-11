@@ -1,6 +1,7 @@
 #include "process_fd.hpp"
 #include <oslibc/string.h>
 #include <hw/vga_stream.hpp>
+#include <net/elfrun.hpp> /* for elf_endian */
 #include <memory/allocator.hpp>
 #include <memory/page_allocator.hpp>
 #include <global.hpp>
@@ -66,6 +67,13 @@ fd_t *process_fd::get_fd(int num) {
 	return fds[num];
 }
 
+template <typename T>
+static inline T *allocate_on_stack(uint32_t *&stack_addr, uint32_t &useresp) {
+	stack_addr = reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(stack_addr) - sizeof(T));
+	useresp -= sizeof(T);
+	return reinterpret_cast<T*>(stack_addr);
+}
+
 void cloudos::process_fd::initialize(void *start_addr, cloudos::allocator *alloc) {
 	userland_stack_size = kernel_stack_size = 0x10000 /* 64 kb */;
 	userland_stack_bottom = reinterpret_cast<uint8_t*>(alloc->allocate_aligned(userland_stack_size, 4096));
@@ -77,11 +85,14 @@ void cloudos::process_fd::initialize(void *start_addr, cloudos::allocator *alloc
 	// set ring 3 data, stack & code segments
 	state.ds = state.ss = 0x23;
 	state.cs = 0x1b;
+	// set fsbase
+	state.fs = 0x33;
 
 	// stack location for new process
-	uint32_t stack_address = 0x80000000;
-	map_at(userland_stack_bottom, reinterpret_cast<void*>(stack_address - userland_stack_size), userland_stack_size);
-	state.useresp = stack_address;
+	uint32_t *stack_addr = reinterpret_cast<uint32_t*>(reinterpret_cast<uint32_t>(userland_stack_bottom) + userland_stack_size);
+	userland_stack_address = reinterpret_cast<void*>(0x80000000);
+	map_at(userland_stack_bottom, reinterpret_cast<void*>(reinterpret_cast<uint32_t>(userland_stack_address) - userland_stack_size), userland_stack_size);
+	state.useresp = reinterpret_cast<uint32_t>(userland_stack_address);
 
 	// initialize vdso address
 	vdso_size = vdso_blob_size;
@@ -90,21 +101,47 @@ void cloudos::process_fd::initialize(void *start_addr, cloudos::allocator *alloc
 	uint32_t vdso_address = 0x80040000;
 	map_at(vdso_image, reinterpret_cast<void*>(vdso_address), vdso_size);
 
+	// initialize elf phdr address
+	uint32_t elf_phdr_address = 0x80060000;
+	map_at(elf_phdr, reinterpret_cast<void*>(elf_phdr_address), elf_ph_size);
+
 	// initialize auxv
-	size_t auxv_entries = 2; // including CLOUDABI_AT_NULL
+	if(elf_ph_size == 0 || elf_phdr == 0) {
+		kernel_panic("About to start process but no elf_phdr present");
+	}
+	size_t auxv_entries = 6; // including CLOUDABI_AT_NULL
 	auxv_size = auxv_entries * sizeof(cloudabi_auxv_t);
 	auxv_buf = alloc->allocate_aligned(auxv_size, 4096);
 	cloudabi_auxv_t *auxv = reinterpret_cast<cloudabi_auxv_t*>(auxv_buf);
+	auxv->a_type = CLOUDABI_AT_BASE;
+	auxv->a_ptr = nullptr; /* because we don't do address randomization */
+	auxv++;
+	auxv->a_type = CLOUDABI_AT_PAGESZ;
+	auxv->a_val = PAGE_SIZE;
+	auxv++;
 	auxv->a_type = CLOUDABI_AT_SYSINFO_EHDR;
 	auxv->a_val = vdso_address;
+	auxv++;
+	auxv->a_type = CLOUDABI_AT_PHDR;
+	auxv->a_val = elf_phdr_address;
+	auxv++;
+	auxv->a_type = CLOUDABI_AT_PHNUM;
+	auxv->a_val = elf_phnum;
 	auxv++;
 	auxv->a_type = CLOUDABI_AT_NULL;
 	uint32_t auxv_address = 0x80010000;
 	map_at(auxv_buf, reinterpret_cast<void*>(auxv_address), auxv_size);
 
-	// put auxv on stack, so it looks like a function argument for _start
-	state.useresp -= 2 * sizeof(void*);
-	memcpy(reinterpret_cast<uint8_t*>(userland_stack_bottom) + userland_stack_size - sizeof(void*), &auxv_address, sizeof(void*));
+	// memory for the TCB pointer and area
+	void **tcb_address = allocate_on_stack<void*>(stack_addr, state.useresp);
+	cloudabi_tcb_t *tcb = allocate_on_stack<cloudabi_tcb_t>(stack_addr, state.useresp);
+	*tcb_address = reinterpret_cast<void*>(state.useresp);
+	// we don't currently use the TCB pointer, so set it to zero
+	memset(tcb, 0, sizeof(*tcb));
+
+	// initialize stack so that it looks like _start(auxv_address) is called
+	*allocate_on_stack<void*>(stack_addr, state.useresp) = reinterpret_cast<void*>(auxv_address);
+	*allocate_on_stack<void*>(stack_addr, state.useresp) = 0;
 
 	// initial instruction pointer
 	state.eip = reinterpret_cast<uint32_t>(start_addr);
@@ -200,6 +237,10 @@ void cloudos::process_fd::handle_syscall(vga_stream &stream) {
 
 void *cloudos::process_fd::get_kernel_stack_top() {
 	return reinterpret_cast<char*>(kernel_stack_bottom) + kernel_stack_size;
+}
+
+void *cloudos::process_fd::get_fsbase() {
+	return reinterpret_cast<void*>(reinterpret_cast<uint32_t>(userland_stack_address) - sizeof(void*));
 }
 
 uint32_t *process_fd::get_page_table(int i) {
@@ -299,4 +340,28 @@ void process_fd::map_at(void *kernel_virt, void *userland_virt, size_t length)
 		userland_virt = reinterpret_cast<void*>(reinterpret_cast<uint32_t>(userland_virt) + PAGE_SIZE);
 		length -= PAGE_SIZE;
 	}
+}
+
+void process_fd::copy_and_map_elf(uint8_t *buffer, size_t size)
+{
+	if(size < 0x30) {
+		kernel_panic("copy_and_map_elf has a buffer too small for the basic elf header");
+	}
+
+	uint8_t elf_data = buffer[0x5];
+	// 1 is little endian, 2 is big endian
+	if(elf_data != 1 && elf_data != 2) {
+		kernel_panic("Invalid ELF data class");
+	}
+
+	uint32_t elf_phoff = elf_endian(*reinterpret_cast<uint32_t*>(&buffer[0x1c]), elf_data);
+	uint16_t elf_phentsize = elf_endian(*reinterpret_cast<uint16_t*>(&buffer[0x2a]), elf_data);
+	elf_phnum = elf_endian(*reinterpret_cast<uint16_t*>(&buffer[0x2c]), elf_data);
+	elf_ph_size = elf_phentsize * elf_phnum;
+	if(elf_phoff + elf_ph_size > size) {
+		kernel_panic("copy_and_map_elf has a buffer too small for all phdrs");
+	}
+
+	elf_phdr = reinterpret_cast<uint8_t*>(get_allocator()->allocate_aligned(elf_ph_size, 4096));
+	memcpy(elf_phdr, &buffer[elf_phoff], elf_ph_size);
 }

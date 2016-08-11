@@ -9,25 +9,15 @@
 using namespace cloudos;
 
 elfrun_implementation::elfrun_implementation()
-: pos(0)
+: buffer_size(10 * 1024 * 1024)
+, buffer(get_allocator()->allocate<uint8_t>(buffer_size))
+, pos(0)
 , awaiting(false)
 {
 }
 
-template <typename T>
-T elf_endian(T value, uint8_t elf_data) {
-	// TODO: know whether we are big or little endian
-	if(elf_data == 1) return value;
-	T r;
-	uint8_t *net = reinterpret_cast<uint8_t*>(&value);
-	uint8_t *res = reinterpret_cast<uint8_t*>(&r);
-	for(size_t i = 0; i < sizeof(T); ++i) {
-		res[i] = net[sizeof(T)-i-1];
-	}
-	return r;
-}
-
 error_t elfrun_implementation::run_binary() {
+	/* e_ident is 12 bytes */
 	const char *elf_magic = "\x7F" "ELF";
 	if(memcmp(buffer, elf_magic, 4) != 0) {
 		get_vga_stream() << "  Not an ELF binary\n";
@@ -53,9 +43,14 @@ error_t elfrun_implementation::run_binary() {
 	uint8_t elf_osabi = buffer[0x7];
 	uint8_t elf_abiversion = buffer[0x8];
 	get_vga_stream() << "  ELF OS ABI " << uint16_t(elf_osabi) << ", version " << uint16_t(elf_abiversion) << "\n";
+	if(elf_osabi != 17 /* ELFOSABI_CLOUDABI */) {
+		get_vga_stream() << "  Invalid ELF OS ABI: " << uint16_t(elf_osabi) << "\n";
+	}
+
+	/* NIDENT padding */
 
 	uint16_t elf_type = elf_endian(*reinterpret_cast<uint16_t*>(&buffer[0x10]), elf_data);
-	if(elf_type != 2 /* executable */) {
+	if(elf_type != 2 /* executable */ && elf_type != 3 /* shared object */) {
 		get_vga_stream() << "  Invalid ELF type: " << elf_type << "\n";
 	}
 
@@ -74,16 +69,18 @@ error_t elfrun_implementation::run_binary() {
 	get_vga_stream() << "  ELF entry point: 0x" << hex << elf_entry << dec << "\n";
 
 	uint32_t elf_phoff = elf_endian(*reinterpret_cast<uint32_t*>(&buffer[0x1c]), elf_data);
-	uint32_t elf_shoff = elf_endian(*reinterpret_cast<uint32_t*>(&buffer[0x20]), elf_data);
-	uint32_t elf_flags = elf_endian(*reinterpret_cast<uint32_t*>(&buffer[0x24]), elf_data);
-	uint16_t elf_ehsize = elf_endian(*reinterpret_cast<uint16_t*>(&buffer[0x28]), elf_data);
+	//uint32_t elf_shoff = elf_endian(*reinterpret_cast<uint32_t*>(&buffer[0x20]), elf_data);
+	//uint32_t elf_flags = elf_endian(*reinterpret_cast<uint32_t*>(&buffer[0x24]), elf_data);
+	//uint16_t elf_ehsize = elf_endian(*reinterpret_cast<uint16_t*>(&buffer[0x28]), elf_data);
+
 	uint16_t elf_phentsize = elf_endian(*reinterpret_cast<uint16_t*>(&buffer[0x2a]), elf_data);
 	uint16_t elf_phnum = elf_endian(*reinterpret_cast<uint16_t*>(&buffer[0x2c]), elf_data);
-	uint16_t elf_shentsize = elf_endian(*reinterpret_cast<uint16_t*>(&buffer[0x2e]), elf_data);
-	uint16_t elf_shnum = elf_endian(*reinterpret_cast<uint16_t*>(&buffer[0x30]), elf_data);
-	uint16_t elf_shstrndx = elf_endian(*reinterpret_cast<uint16_t*>(&buffer[0x32]), elf_data);
 
-	uint32_t elf_shstr_off = elf_endian(*reinterpret_cast<uint32_t*>(&buffer[elf_shoff + elf_shentsize * elf_shstrndx + 0x10]), elf_data);
+	//uint16_t elf_shentsize = elf_endian(*reinterpret_cast<uint16_t*>(&buffer[0x2e]), elf_data);
+	//uint16_t elf_shnum = elf_endian(*reinterpret_cast<uint16_t*>(&buffer[0x30]), elf_data);
+	//uint16_t elf_shstrndx = elf_endian(*reinterpret_cast<uint16_t*>(&buffer[0x32]), elf_data);
+
+	//uint32_t elf_shstr_off = elf_endian(*reinterpret_cast<uint32_t*>(&buffer[elf_shoff + elf_shentsize * elf_shstrndx + 0x10]), elf_data);
 
 	process_fd *process = get_allocator()->allocate<process_fd>();
 	new(process) process_fd(get_page_allocator(), "elfrun process");
@@ -120,6 +117,7 @@ error_t elfrun_implementation::run_binary() {
 		}
 	}
 
+	process->copy_and_map_elf(buffer, pos);
 	process->initialize(reinterpret_cast<void*>(elf_entry), get_allocator());
 	get_scheduler()->process_fd_ready(process);
 
@@ -157,7 +155,7 @@ error_t elfrun_implementation::received_udp4(interface*, uint8_t *payload, size_
 		return error_t::no_error;
 	}
 
-	if(pos + length - 1 > sizeof(buffer)) {
+	if(pos + length - 1 > buffer_size) {
 		get_vga_stream() << "  elfrun: downloading this binary would cause buffer overflow, ignoring\n";
 		awaiting = false;
 		return error_t::no_error;

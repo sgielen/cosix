@@ -49,7 +49,7 @@ struct gdt_directory {
 #define SEGMENT_32BIT 64
 #define SEGMENT_AVAILABLE 16
 
-#define SEGMENT_MAX_ENTRIES 6
+#define SEGMENT_MAX_ENTRIES 7
 
 struct segment_table {
 	segment_table();
@@ -59,8 +59,10 @@ struct segment_table {
 	void clear();
 	size_t num_entries();
 
-	bool add_entry(uint32_t limit, uint32_t base, uint8_t access, uint8_t flags);
+	int add_entry(uint32_t limit, uint32_t base, uint8_t access, uint8_t flags);
 	bool add_tss_entry();
+	bool add_fs_entry();
+	void set_fsbase(void *virtual_address);
 	void set_kernel_stack(void *stackptr);
 
 	gdt_directory *directory_ptr();
@@ -68,6 +70,7 @@ struct segment_table {
 
 private:
 	size_t entry_i;
+	size_t fs_idx;
 	gdt_entry entries[SEGMENT_MAX_ENTRIES];
 	gdt_directory directory;
 	tss_entry tss;

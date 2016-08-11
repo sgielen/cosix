@@ -1,5 +1,6 @@
 #include "segments.hpp"
 #include "oslibc/string.h"
+#include "global.hpp"
 
 using namespace cloudos;
 
@@ -8,6 +9,7 @@ void gdt_load(gdt_directory*);
 
 segment_table::segment_table()
 : entry_i(0)
+, fs_idx(0)
 {
 	clear();
 	directory.size = sizeof(entries) - 1;
@@ -30,13 +32,13 @@ size_t segment_table::num_entries()
 	return entry_i;
 }
 
-bool segment_table::add_entry(uint32_t limit, uint32_t base, uint8_t access, uint8_t flags)
+int segment_table::add_entry(uint32_t limit, uint32_t base, uint8_t access, uint8_t flags)
 {
 	if(entry_i == SEGMENT_MAX_ENTRIES) {
-		return false;
+		return -1;
 	}
 
-	gdt_entry &entry = entries[entry_i++];
+	gdt_entry &entry = entries[entry_i];
 
 	entry.limit_lower = limit & 0xffff;
 	entry.flags = (limit >> 16) & 0x0f;
@@ -47,7 +49,7 @@ bool segment_table::add_entry(uint32_t limit, uint32_t base, uint8_t access, uin
 
 	entry.access = access;
 	entry.flags = entry.flags | (flags & 0xf0);
-	return true;
+	return entry_i++;
 }
 
 gdt_directory *segment_table::directory_ptr() {
@@ -73,6 +75,30 @@ bool segment_table::add_tss_entry()
 		| SEGMENT_PRIV_RING3
 		| SEGMENT_PRESENT,
 		0);
+}
+
+bool segment_table::add_fs_entry()
+{
+	if(fs_idx != 0) {
+		kernel_panic("fs_entry already exists");
+	}
+	// the base address of %fs is changed by set_fsbase() whenever we
+	// context switch to a process, but the length is always the size of a
+	// pointer. The userland is allowed to change this pointer.
+	fs_idx = add_entry(sizeof(void*), 0,
+		SEGMENT_RW | SEGMENT_ALWAYS | SEGMENT_PRIV_RING3 | SEGMENT_PRESENT,
+		SEGMENT_PAGE_GRANULARITY | SEGMENT_32BIT | SEGMENT_AVAILABLE);
+	return true;
+}
+
+void segment_table::set_fsbase(void *virtual_address)
+{
+	gdt_entry &entry = entries[fs_idx];
+
+	uint32_t base = reinterpret_cast<uint32_t>(virtual_address);
+	entry.base_lower = base & 0xffff;
+	entry.base_middle = (base >> 16) & 0xff;
+	entry.base_upper = (base >> 24) & 0xff;
 }
 
 void segment_table::set_kernel_stack(void *stackptr)

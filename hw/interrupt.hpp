@@ -7,7 +7,9 @@
 namespace cloudos {
 
 struct interrupt_state_t {
-	uint32_t ds;
+	// ds is the segment selector for the data, code, etc. registers; fs is
+	// the selector for the fs and gs registers
+	uint32_t ds, fs;
 	uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;
 	uint32_t int_no, err_code;
 	uint32_t eip, cs, eflags, useresp, ss;

@@ -9,6 +9,19 @@ namespace cloudos {
 
 struct interface;
 
+template <typename T>
+T elf_endian(T value, uint8_t elf_data) {
+	// TODO: know whether we are big or little endian
+	if(elf_data == 1) return value;
+	T r;
+	uint8_t *net = reinterpret_cast<uint8_t*>(&value);
+	uint8_t *res = reinterpret_cast<uint8_t*>(&r);
+	for(size_t i = 0; i < sizeof(T); ++i) {
+		res[i] = net[sizeof(T)-i-1];
+	}
+	return r;
+}
+
 struct elfrun_implementation : public udp_listener {
 	elfrun_implementation();
 
@@ -17,7 +30,8 @@ struct elfrun_implementation : public udp_listener {
 private:
 	error_t run_binary();
 
-	uint8_t buffer[32384];
+	size_t buffer_size;
+	uint8_t *buffer;
 	size_t pos;
 	bool awaiting;
 };
