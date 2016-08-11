@@ -30,7 +30,7 @@ cloudabi_sys_clock_res_get(
 	cloudabi_timestamp_t *resolution
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -40,7 +40,7 @@ cloudabi_sys_clock_time_get(
 	cloudabi_timestamp_t *time
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -50,7 +50,7 @@ cloudabi_sys_condvar_signal(
 	cloudabi_nthreads_t nwaiters
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -58,7 +58,7 @@ cloudabi_sys_fd_close(
 	cloudabi_fd_t fd
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -67,7 +67,7 @@ cloudabi_sys_fd_create1(
 	cloudabi_fd_t *fd
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -77,7 +77,7 @@ cloudabi_sys_fd_create2(
 	cloudabi_fd_t *fd2
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -85,7 +85,7 @@ cloudabi_sys_fd_datasync(
 	cloudabi_fd_t fd
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -94,7 +94,7 @@ cloudabi_sys_fd_dup(
 	cloudabi_fd_t *fd
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -106,7 +106,7 @@ cloudabi_sys_fd_pread(
 	size_t *nread
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -118,7 +118,7 @@ cloudabi_sys_fd_pwrite(
 	size_t *nwritten
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -129,7 +129,7 @@ cloudabi_sys_fd_read(
 	size_t *nread
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -138,7 +138,7 @@ cloudabi_sys_fd_replace(
 	cloudabi_fd_t to
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -149,7 +149,7 @@ cloudabi_sys_fd_seek(
 	cloudabi_filesize_t *newoffset
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -158,7 +158,7 @@ cloudabi_sys_fd_stat_get(
 	cloudabi_fdstat_t *buf
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -168,7 +168,7 @@ cloudabi_sys_fd_stat_put(
 	cloudabi_fdsflags_t flags
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -176,7 +176,7 @@ cloudabi_sys_fd_sync(
 	cloudabi_fd_t fd
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -210,7 +210,7 @@ cloudabi_sys_file_advise(
 	cloudabi_advice_t advice
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -220,7 +220,7 @@ cloudabi_sys_file_allocate(
 	cloudabi_filesize_t len
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -231,7 +231,7 @@ cloudabi_sys_file_create(
 	cloudabi_filetype_t type
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -244,7 +244,7 @@ cloudabi_sys_file_link(
 	size_t path2len
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -257,7 +257,7 @@ cloudabi_sys_file_open(
 	cloudabi_fd_t *fd
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -269,7 +269,7 @@ cloudabi_sys_file_readdir(
 	size_t *bufused
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -282,7 +282,7 @@ cloudabi_sys_file_readlink(
 	size_t *bufused
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -295,7 +295,7 @@ cloudabi_sys_file_rename(
 	size_t newlen
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -304,7 +304,7 @@ cloudabi_sys_file_stat_fget(
 	cloudabi_filestat_t *buf
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -314,7 +314,7 @@ cloudabi_sys_file_stat_fput(
 	cloudabi_fsflags_t flags
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -325,7 +325,7 @@ cloudabi_sys_file_stat_get(
 	cloudabi_filestat_t *buf
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -337,7 +337,7 @@ cloudabi_sys_file_stat_put(
 	cloudabi_fsflags_t flags
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -349,7 +349,7 @@ cloudabi_sys_file_symlink(
 	size_t path2len
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -360,7 +360,7 @@ cloudabi_sys_file_unlink(
 	cloudabi_ulflags_t flags
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -369,7 +369,7 @@ cloudabi_sys_lock_unlock(
 	cloudabi_scope_t scope
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -379,7 +379,7 @@ cloudabi_sys_mem_advise(
 	cloudabi_advice_t advice
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -388,7 +388,7 @@ cloudabi_sys_mem_lock(
 	size_t len
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -402,7 +402,7 @@ cloudabi_sys_mem_map(
 	void **mem
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -412,7 +412,7 @@ cloudabi_sys_mem_protect(
 	cloudabi_mprot_t prot
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -422,7 +422,7 @@ cloudabi_sys_mem_sync(
 	cloudabi_msflags_t flags
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -431,7 +431,7 @@ cloudabi_sys_mem_unlock(
 	size_t len
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -440,7 +440,7 @@ cloudabi_sys_mem_unmap(
 	size_t len
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -451,7 +451,7 @@ cloudabi_sys_poll(
 	size_t *nevents
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -465,7 +465,7 @@ cloudabi_sys_poll_fd(
 	size_t *nevents
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -477,7 +477,7 @@ cloudabi_sys_proc_exec(
 	size_t fdslen
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 _Noreturn void
@@ -493,7 +493,7 @@ cloudabi_sys_proc_raise(
 	cloudabi_signal_t sig
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -502,7 +502,7 @@ cloudabi_sys_random_get(
 	size_t nbyte
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -512,7 +512,7 @@ cloudabi_sys_sock_accept(
 	cloudabi_fd_t *conn
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -523,7 +523,7 @@ cloudabi_sys_sock_bind(
 	size_t pathlen
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -534,7 +534,7 @@ cloudabi_sys_sock_connect(
 	size_t pathlen
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -543,7 +543,7 @@ cloudabi_sys_sock_listen(
 	cloudabi_backlog_t backlog
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -553,7 +553,7 @@ cloudabi_sys_sock_recv(
 	cloudabi_recv_out_t *out
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -563,7 +563,7 @@ cloudabi_sys_sock_send(
 	cloudabi_send_out_t *out
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -572,7 +572,7 @@ cloudabi_sys_sock_shutdown(
 	cloudabi_sdflags_t how
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -582,7 +582,7 @@ cloudabi_sys_sock_stat_get(
 	cloudabi_ssflags_t flags
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 cloudabi_errno_t
@@ -591,7 +591,7 @@ cloudabi_sys_thread_create(
 	cloudabi_tid_t *tid
 ) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
 
 _Noreturn void
@@ -606,5 +606,5 @@ cloudabi_sys_thread_exit(
 cloudabi_errno_t
 cloudabi_sys_thread_yield(void) {
 	putstring_l(__PRETTY_FUNCTION__);
-	return -CLOUDABI_ENOSYS;
+	return CLOUDABI_ENOSYS;
 }
