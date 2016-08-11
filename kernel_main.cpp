@@ -113,7 +113,11 @@ struct interrupt_handler : public interrupt_functor {
 
 		int int_no = regs->int_no;
 		int err_code = regs->err_code;
-		if(int_no == 0x0d) {
+		if(int_no == 0x06) {
+			*stream << "Invalid opcode in process " << running_process << "\n";
+			*stream << "  Instruction ptr at point of fault: 0x" << hex << regs->eip << dec << "\n";
+			kernel_panic("Received #UD interrupt");
+		} else if(int_no == 0x0d) {
 			*stream << "General protection fault in process " << running_process << "\n";
 			kernel_panic("Received #GP interrupt");
 		} else if(int_no == 0x0e) {
