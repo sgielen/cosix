@@ -12,6 +12,7 @@ add_library(hw
 	segments.hpp segments.cpp
 	interrupt_table.hpp interrupt_table.cpp
 	interrupt.hpp interrupt.cpp
+	sse.hpp sse.cpp
 	pci_bus.hpp pci_bus.cpp
 	driver.hpp
 	driver_store.hpp driver_store.cpp

@@ -365,3 +365,11 @@ void process_fd::copy_and_map_elf(uint8_t *buffer, size_t size)
 	elf_phdr = reinterpret_cast<uint8_t*>(get_allocator()->allocate_aligned(elf_ph_size, 4096));
 	memcpy(elf_phdr, &buffer[elf_phoff], elf_ph_size);
 }
+
+void process_fd::save_sse_state() {
+	asm volatile("fxsave %0" : "=m" (*sse_state));
+}
+
+void process_fd::restore_sse_state() {
+	asm volatile("fxrstor %0" : "=m" (*sse_state));
+}

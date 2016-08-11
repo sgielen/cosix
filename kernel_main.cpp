@@ -8,6 +8,7 @@
 #include "hw/root_device.hpp"
 #include "hw/driver_store.hpp"
 #include "hw/pci_bus.hpp"
+#include "hw/sse.hpp"
 #include "hw/net/virtio.hpp"
 #include "net/loopback_interface.hpp"
 #include "net/interface_store.hpp"
@@ -234,6 +235,8 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 		}
 		stream << "\n";
 	});
+
+	sse_enable();
 
 	allocator alloc_;
 	global.alloc = &alloc_;

@@ -14,6 +14,8 @@ scheduler::scheduler()
 
 void scheduler::schedule_next()
 {
+	auto *old_process = running;
+
 	if(running) {
 		append(&ready, running);
 	}
@@ -22,6 +24,11 @@ void scheduler::schedule_next()
 		running = ready;
 		ready = running->next;
 		running->next = nullptr;
+	}
+
+	if(old_process != 0 && old_process != running) {
+		old_process->data->save_sse_state();
+		running->data->restore_sse_state();
 	}
 }
 

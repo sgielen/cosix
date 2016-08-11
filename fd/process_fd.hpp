@@ -53,6 +53,9 @@ struct process_fd : public fd_t {
 	int add_fd(fd_t*);
 	fd_t *get_fd(int num);
 
+	void save_sse_state();
+	void restore_sse_state();
+
 private:
 	static const int PAGE_SIZE = 4096 /* bytes */;
 	static const int PAGE_DIRECTORY_SIZE = 1024 /* entries */;
@@ -68,6 +71,7 @@ private:
 	uint32_t **page_tables = 0;
 
 	interrupt_state_t state;
+	uint8_t sse_state[512] __attribute__((aligned(16)));
 	void *userland_stack_bottom = 0;
 	size_t userland_stack_size = 0;
 	void *userland_stack_address = 0;
