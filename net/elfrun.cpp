@@ -82,7 +82,7 @@ error_t elfrun_implementation::run_binary() {
 
 	//uint32_t elf_shstr_off = elf_endian(*reinterpret_cast<uint32_t*>(&buffer[elf_shoff + elf_shentsize * elf_shstrndx + 0x10]), elf_data);
 
-	process_fd *process = get_allocator()->allocate<process_fd>();
+	process_fd *process = reinterpret_cast<process_fd*>(get_allocator()->allocate_aligned(sizeof(process_fd), 16));
 	new(process) process_fd(get_page_allocator(), "elfrun process");
 
 	// read the program headers

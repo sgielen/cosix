@@ -14,6 +14,8 @@ struct vga_stream;
 class allocator;
 struct page_allocator;
 
+typedef uint8_t sse_state_t [512] __attribute__ ((aligned (16)));
+
 /** Process file descriptor
  *
  * This file descriptor contains all information necessary for running a
@@ -71,7 +73,7 @@ private:
 	uint32_t **page_tables = 0;
 
 	interrupt_state_t state;
-	uint8_t sse_state[512] __attribute__((aligned(16)));
+	sse_state_t sse_state;
 	void *userland_stack_bottom = 0;
 	size_t userland_stack_size = 0;
 	void *userland_stack_address = 0;
