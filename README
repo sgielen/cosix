@@ -17,28 +17,30 @@ To run the tests, compile it with a native (non-cross) compiler:
   make test
 
 To compile the kernel, first build and install Binutils with '--target
-i686-elf', then build and install Clang SVN with '-DLLVM_TARGETS_TO_BUILD=X86'.
-Then, in the 'bin' directory where both are installed, run:
+i686-elf', so that you have the GNU linker in your $PATH as i686-elf-ld. Also,
+follow the instructions at https://nuxi.nl/ to install the CloudABI toolchain,
+which requires a trunk Clang+LLVM. After this, you should also have Clang in
+your $PATH as i686-unknown-cloudabi-cc.
 
-  ln -s i686-elf-ar i686-unknown-cloudabi-ar
-  ln -s i686-elf-ld i686-unknown-cloudabi-ld
-  ln -s clang i686-unknown-cloudabi-cc
-  ln -s clang++ i686-unknown-cloudabi-c++
+The kernel will use the CloudABI-clang compiler to build its source files, even
+though they are not true CloudABI source files, because it's easier. It
+requires the GNU linker because LLD doesn't support linker scripts yet.
 
-Then, use the CloudABI toolchain file to set up your build directory:
+Use the i686-elf toolchain file to set up your build directory for a native
+build:
 
   mkdir build
   cd build
   cmake -DCMAKE_BUILD_TYPE=Debug \
-    -DCMAKE_TOOLCHAIN_FILE=../cmake/Toolchain-i686-cloudabi.cmake ..
+    -DCMAKE_TOOLCHAIN_FILE=../cmake/Toolchain-i686-elf.cmake ..
   make
 
 There is a 'boot' target that will run the kernel inside qemu:
 
   make boot
 
-You can also boot the kernel by finding a Grub 0.96 stage1 + stage2 (Grub 0.97
-did not work for me), then running:
+You can also boot the kernel in Bochs by finding a Grub 0.96 stage1 + stage2
+(Grub 0.97 did not work for me), then running:
 
   dd if=/dev/zero of=pad bs=1 count=750
   cat stage1 stage2 pad build/cloudkernel >floppy.img
@@ -56,5 +58,3 @@ Inside bochs, run "c" to start booting, then in GRUB, run:
 Good luck and have fun!
 
 - Sjors Gielen <sjors@sjorsgielen.nl>
-
-[1] https://github.com/NuxiNL/cloudlibc/wiki/Building-the-toolchain

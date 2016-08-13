@@ -106,3 +106,7 @@ function(get_testing_baremetal_enabled TESTING_ENABLED_VAR BAREMETAL_ENABLED_VAR
 		set(${BAREMETAL_ENABLED_VAR} FALSE PARENT_SCOPE)
 	endif()
 endfunction()
+
+# Also, ignore a given CMAKE_TOOLCHAIN_FILE
+set(X ${CMAKE_TOOLCHAIN_FILE})
+unset(X)
