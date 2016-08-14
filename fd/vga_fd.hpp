@@ -8,7 +8,7 @@ namespace cloudos {
  * the VGA console as-is.
  */
 struct vga_fd : public fd_t {
-	inline vga_fd(const char *n) : fd_t(fd_type_t::pipe, n) {}
+	inline vga_fd(const char *n) : fd_t(CLOUDABI_FILETYPE_FIFO, n) {}
 
 	inline error_t putstring(const char *str, size_t count) override {
 		for(size_t i = 0; i < count; ++i) {

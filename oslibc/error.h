@@ -28,6 +28,8 @@ enum class error_t {
 	invalid_argument = 22,  //! Invalid argument
 	// TODO: errors 23 to 44
 	not_supported = 45,     //! Operation not supported
+	not_capable = 46,       //! Capabilities insufficient
+	resource_exhausted = 47,//! Resource exhausted
 };
 
 /**
@@ -57,6 +59,8 @@ inline const char *to_string(error_t e) {
 	case error_t::is_a_directory: return "Is a directory";
 	case error_t::invalid_argument: return "Invalid argument";
 	case error_t::not_supported: return "Operation not supported";
+	case error_t::not_capable: return "Capabilities insufficient";
+	case error_t::resource_exhausted: return "Resource exhausted";
 	}
 
 	return "(Invalid error_t)";

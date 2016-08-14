@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cloudabi_types_common.h>
 #include <stddef.h>
 #include <stdint.h>
 #include "../oslibc/error.h"
@@ -8,21 +9,23 @@
 
 namespace cloudos {
 
-enum class fd_type_t {
-	memory,
-	process,
-	file,
-	directory,
-	pipe
-};
-
-inline vga_stream &operator<<(vga_stream &s, fd_type_t type) {
+inline vga_stream &operator<<(vga_stream &s, cloudabi_filetype_t type) {
 	switch(type) {
-	case fd_type_t::memory: s << "memory"; break;
-	case fd_type_t::process: s << "process"; break;
-	case fd_type_t::file: s << "file"; break;
-	case fd_type_t::directory: s << "directory"; break;
-	case fd_type_t::pipe: s << "pipe"; break;
+#define FT(N) case CLOUDABI_FILETYPE_##N: s << #N; break
+	FT(UNKNOWN);
+	FT(BLOCK_DEVICE);
+	FT(CHARACTER_DEVICE);
+	FT(DIRECTORY);
+	FT(FIFO);
+	FT(POLL);
+	FT(PROCESS);
+	FT(REGULAR_FILE);
+	FT(SHARED_MEMORY);
+	FT(SOCKET_DGRAM);
+	FT(SOCKET_SEQPACKET);
+	FT(SOCKET_STREAM);
+	FT(SYMBOLIC_LINK);
+#undef FT
 	}
 	return s;
 }
@@ -36,7 +39,8 @@ inline vga_stream &operator<<(vga_stream &s, fd_type_t type) {
  */
 
 struct fd_t {
-	fd_type_t type;
+	cloudabi_filetype_t type;
+	cloudabi_fdflags_t flags;
 
 	size_t refcount;
 	bool invalid;
@@ -61,7 +65,7 @@ struct fd_t {
 	}
 
 protected:
-	inline fd_t(fd_type_t t, const char *n) : type(t), refcount(1), invalid(false), error(error_t::no_error) {
+	inline fd_t(cloudabi_filetype_t t, const char *n) : type(t), flags(0), refcount(1), invalid(false), error(error_t::no_error) {
 		strncpy(name, n, sizeof(name));
 		name[sizeof(name)-1] = 0;
 	}

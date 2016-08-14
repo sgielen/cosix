@@ -10,14 +10,13 @@
 #include <fd/procfs.hpp>
 #include <fd/bootfs.hpp>
 #include <userland/vdso_support.h>
-#include <cloudabi/headers/cloudabi_types.h>
 
 extern uint32_t _kernel_virtual_base;
 
 using namespace cloudos;
 
 process_fd::process_fd(page_allocator *a, const char *n)
-: fd_t(fd_type_t::process, n)
+: fd_t(CLOUDABI_FILETYPE_PROCESS, n)
 {
 	page_allocation p;
 	auto res = a->allocate(&p);
@@ -39,35 +38,55 @@ process_fd::process_fd(page_allocator *a, const char *n)
 
 	vga_fd *fd = get_allocator()->allocate<vga_fd>();
 	new (fd) vga_fd("vga_fd");
-
-	add_fd(fd);
+	add_fd(fd, CLOUDABI_RIGHT_FD_WRITE);
 
 	char *fd_buf = get_allocator()->allocate<char>(200);
 	strncpy(fd_buf, "These are the contents of my buffer!\n", 200);
 
 	memory_fd *fd2 = get_allocator()->allocate<memory_fd>();
 	new (fd2) memory_fd(fd_buf, strlen(fd_buf) + 1, "memory_fd");
-	add_fd(fd2);
+	add_fd(fd2, CLOUDABI_RIGHT_FD_READ);
 
-	add_fd(procfs::get_root_fd());
+	add_fd(procfs::get_root_fd(), CLOUDABI_RIGHT_FILE_OPEN, CLOUDABI_RIGHT_FD_READ | CLOUDABI_RIGHT_FILE_OPEN);
 
-	add_fd(bootfs::get_root_fd());
+	add_fd(bootfs::get_root_fd(), CLOUDABI_RIGHT_FILE_OPEN, CLOUDABI_RIGHT_FD_READ | CLOUDABI_RIGHT_FILE_OPEN);
 }
 
-int process_fd::add_fd(fd_t *fd) {
+int process_fd::add_fd(fd_t *fd, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting) {
 	if(last_fd >= MAX_FD - 1) {
+		// TODO: instead of keeping a last_fd counter, put mappings
+		// into a freelist when they are closed, and allow them to be
+		// reused. Then, return an error when there is no more free
+		// space for fd's.
 		kernel_panic("fd's expired for process");
 	}
+	fd_mapping_t *mapping = get_allocator()->allocate<fd_mapping_t>();
+	mapping->fd = fd;
+	mapping->rights_base = rights_base;
+	mapping->rights_inheriting = rights_inheriting;
+
 	int fdnum = ++last_fd;
-	fds[fdnum] = fd;
+	fds[fdnum] = mapping;
 	return fdnum;
 }
 
-fd_t *process_fd::get_fd(int num) {
-	if(num < 0 || num > last_fd || num >= MAX_FD) {
-		return nullptr;
+error_t process_fd::get_fd(fd_mapping_t **r_mapping, size_t num, cloudabi_rights_t has_rights) {
+	*r_mapping = 0;
+	if(num >= MAX_FD) {
+		get_vga_stream() << "fdnum " << num << " is too high for an fd\n";
+		return error_t::resource_exhausted;
 	}
-	return fds[num];
+	fd_mapping_t *mapping = fds[num];
+	if(mapping == 0 || mapping->fd == 0) {
+		get_vga_stream() << "fdnum " << num << " is not a valid fd\n";
+		return error_t::invalid_argument;
+	}
+	if((mapping->rights_base & has_rights) != has_rights) {
+		get_vga_stream() << "get_fd: fd " << num << " has insufficient rights 0x" << hex << has_rights << dec << "\n";
+		return error_t::not_capable;
+	}
+	*r_mapping = mapping;
+	return error_t::no_error;
 }
 
 template <typename T>
@@ -171,9 +190,9 @@ void cloudos::process_fd::handle_syscall(vga_stream &stream) {
 	} else if(syscall == 2) {
 		// putstring(ebx=fd, ecx=ptr, edx=size), returns eax=0 or eax=-1 on error
 		int fdnum = state.ebx;
-		fd_t *global_fd = get_fd(fdnum);
-		if(!global_fd) {
-			get_vga_stream() << "fdnum " << fdnum << " is not a valid fd\n";
+		fd_mapping_t *mapping;
+		auto res = get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FD_WRITE);
+		if(res != error_t::no_error) {
 			state.eax = -1;
 			return;
 		}
@@ -190,14 +209,14 @@ void cloudos::process_fd::handle_syscall(vga_stream &stream) {
 			return;
 		}
 
-		auto res = global_fd->putstring(str, size);
+		res = mapping->fd->putstring(str, size);
 		state.eax = res == error_t::no_error ? 0 : -1;
 	} else if(syscall == 3) {
 		// getchar(ebx=fd, ecx=offset), returns eax=resultchar or eax=-1 on error
 		int fdnum = state.ebx;
-		fd_t *global_fd = get_fd(fdnum);
-		if(!global_fd) {
-			get_vga_stream() << "fdnum " << fdnum << " is not a valid fd\n";
+		fd_mapping_t *mapping;
+		auto res = get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FD_READ);
+		if(res != error_t::no_error) {
 			state.eax = -1;
 			return;
 		}
@@ -205,34 +224,60 @@ void cloudos::process_fd::handle_syscall(vga_stream &stream) {
 		size_t offset = state.ecx;
 		char buf[1];
 
-		size_t r = global_fd->read(offset, &buf[0], 1);
-		if(r != 1 || global_fd->error != error_t::no_error) {
+		size_t r = mapping->fd->read(offset, &buf[0], 1);
+		if(r != 1 || mapping->fd->error != error_t::no_error) {
 			state.eax = -1;
 			return;
 		}
 		state.eax = buf[0];
 	} else if(syscall == 4) {
 		// openat(ebx=fd, ecx=pathname, edx=as_directory) returns eax=fd or eax=-1 on error
-		int fdnum = state.edx;
-		fd_t *global_fd = get_fd(fdnum);
-		if(!global_fd) {
-			get_vga_stream() << "fdnum " << fdnum << " is not a valid fd\n";
+		int fdnum = state.ebx;
+		fd_mapping_t *mapping;
+		auto res = get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FILE_OPEN);
+		if(res != error_t::no_error) {
 			state.eax = -1;
 			return;
 		}
 
 		const char *pathname = reinterpret_cast<const char*>(state.ecx);
-		int directory = state.ebx;
+		int directory = state.edx;
 
-		fd_t *new_fd = global_fd->openat(pathname, directory == 1);
-		if(!new_fd || global_fd->error != error_t::no_error) {
+		fd_t *new_fd = mapping->fd->openat(pathname, directory == 1);
+		if(!new_fd || mapping->fd->error != error_t::no_error) {
 			get_vga_stream() << "failed to openat()\n";
 			state.eax = -1;
 			return;
 		}
 
-		int new_fdnum = add_fd(new_fd);
+		int new_fdnum = add_fd(new_fd, mapping->rights_inheriting, mapping->rights_inheriting);
 		state.eax = new_fdnum;
+	} else if(syscall == 5) {
+		// sys_fd_stat_get(ebx=fd, ecx=fdstat_t) returns eax=fd or eax=-1 on error
+		int fdnum = state.ebx;
+		fd_mapping_t *mapping;
+		auto res = get_fd(&mapping, fdnum, 0);
+		if(res != error_t::no_error) {
+			state.eax = -1;
+			return;
+		}
+
+		cloudabi_fdstat_t *stat = reinterpret_cast<cloudabi_fdstat_t*>(state.ecx);
+
+		// TODO: check if ecx until ecx+sizeof(fdstat_t) is valid *writable* process memory
+		if(reinterpret_cast<uint32_t>(stat) >= _kernel_virtual_base
+		|| reinterpret_cast<uint32_t>(stat) + sizeof(cloudabi_fdstat_t) >= _kernel_virtual_base
+		|| get_page_allocator()->to_physical_address(this, reinterpret_cast<const void*>(stat)) == nullptr) {
+			get_vga_stream() << "sys_fd_stat_get() of a non-userland-accessible string\n";
+			state.eax = -1;
+			return;
+		}
+
+		stat->fs_filetype = mapping->fd->type;
+		stat->fs_flags = mapping->fd->flags;
+		stat->fs_rights_base = mapping->rights_base;
+		stat->fs_rights_inheriting = mapping->rights_inheriting;
+		state.eax = 0;
 	} else {
 		stream << "Syscall " << state.eax << " unknown\n";
 	}

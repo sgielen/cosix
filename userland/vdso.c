@@ -157,8 +157,14 @@ cloudabi_sys_fd_stat_get(
 	cloudabi_fd_t fd,
 	cloudabi_fdstat_t *buf
 ) {
-	putstring_l(__PRETTY_FUNCTION__);
-	return CLOUDABI_ENOSYS;
+	// sys_fd_stat_get(ebx=fd, ecx=fdstat_t) returns eax=fd or eax=-1 on error
+	register uint32_t reg_eax asm("eax") = 5;
+	register uint32_t reg_ebx asm("ebx") = fd;
+	register void *reg_ecx asm("ecx") = buf;
+	asm volatile("int $0x80"
+		: : "r"(reg_eax), "r"(reg_ebx), "r"(reg_ecx)
+		: "memory", "eax", "ebx", "ecx");
+	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error codes */
 }
 
 cloudabi_errno_t

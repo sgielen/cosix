@@ -3,6 +3,7 @@
 #include "fd.hpp"
 #include "hw/interrupt.hpp"
 #include <oslibc/list.hpp>
+#include <cloudabi/headers/cloudabi_types.h>
 
 namespace cloudos {
 
@@ -15,6 +16,12 @@ class allocator;
 struct page_allocator;
 
 typedef uint8_t sse_state_t [512] __attribute__ ((aligned (16)));
+
+struct fd_mapping_t {
+	fd_t *fd; /* can be 0, in this case, the mapping is unused and can be reused for another fd */
+	cloudabi_rights_t rights_base;
+	cloudabi_rights_t rights_inheriting;
+};
 
 /** Process file descriptor
  *
@@ -52,8 +59,9 @@ struct process_fd : public fd_t {
 
 	void copy_and_map_elf(uint8_t *elf_buffer, size_t size);
 	void map_at(void *kernel_ptr, void *userland_ptr, size_t size);
-	int add_fd(fd_t*);
-	fd_t *get_fd(int num);
+
+	int add_fd(fd_t*, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting = 0);
+	error_t get_fd(fd_mapping_t **mapping, size_t num, cloudabi_rights_t has_rights);
 
 	void save_sse_state();
 	void restore_sse_state();
@@ -63,7 +71,7 @@ private:
 	static const int PAGE_DIRECTORY_SIZE = 1024 /* entries */;
 
 	static const int MAX_FD = 256 /* file descriptors */;
-	fd_t *fds[MAX_FD];
+	fd_mapping_t *fds[MAX_FD];
 	int last_fd = -1;
 
 	// Page directory, filled with physical addresses to page tables

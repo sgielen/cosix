@@ -23,7 +23,7 @@ private:
 };
 
 struct procfs_uptime_fd : fd_t {
-	procfs_uptime_fd(const char *n) : fd_t(fd_type_t::file, n) {}
+	procfs_uptime_fd(const char *n) : fd_t(CLOUDABI_FILETYPE_REGULAR_FILE, n) {}
 
 	size_t read(size_t offset, void *dest, size_t count) override;
 };
@@ -31,7 +31,7 @@ struct procfs_uptime_fd : fd_t {
 }
 
 procfs_directory_fd::procfs_directory_fd(const char (*p)[PROCFS_FILE_MAX], const char *n)
-: fd_t(fd_type_t::directory, n)
+: fd_t(CLOUDABI_FILETYPE_DIRECTORY, n)
 {
 	for(depth = 0; depth < PROCFS_DEPTH_MAX; ++depth) {
 		if(p[depth] && p[depth][0]) {

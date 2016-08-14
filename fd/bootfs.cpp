@@ -10,14 +10,14 @@ namespace cloudos {
 
 struct bootfs_directory_fd : fd_t {
 	bootfs_directory_fd(const char *n)
-	: fd_t(fd_type_t::directory, n) {}
+	: fd_t(CLOUDABI_FILETYPE_DIRECTORY, n) {}
 
 	fd_t *openat(const char *pathname, bool directory) override;
 };
 
 struct bootfs_file_fd : fd_t {
 	bootfs_file_fd(external_binary_t const &file)
-	: fd_t(fd_type_t::file, file.name)
+	: fd_t(CLOUDABI_FILETYPE_REGULAR_FILE, file.name)
 	, addr(file.start)
 	, length(file.end - file.start)
 	{}
