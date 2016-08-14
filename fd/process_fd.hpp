@@ -48,7 +48,6 @@ struct process_fd : public fd_t {
 	// TODO remove
 	int pid;
 
-	void initialize(void *start_addr, allocator *alloc);
 	void set_return_state(interrupt_state_t*);
 	void get_return_state(interrupt_state_t*);
 	void handle_syscall(vga_stream &stream);
@@ -57,7 +56,13 @@ struct process_fd : public fd_t {
 	void install_page_directory();
 	uint32_t *get_page_table(int i);
 
-	void copy_and_map_elf(uint8_t *elf_buffer, size_t size);
+	// Read an ELF from this fd, map it, and prepare it for execution. This
+	// function will not remove previous process contents, use unexec() for
+	// that.
+	error_t exec(fd_t *);
+	// TODO: make this private
+	error_t exec(uint8_t *elf_buffer, size_t size);
+
 	void map_at(void *kernel_ptr, void *userland_ptr, size_t size);
 
 	int add_fd(fd_t*, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting = 0);
@@ -67,6 +72,8 @@ struct process_fd : public fd_t {
 	void restore_sse_state();
 
 private:
+	void initialize(void *start_addr);
+
 	static const int PAGE_SIZE = 4096 /* bytes */;
 	static const int PAGE_DIRECTORY_SIZE = 1024 /* entries */;
 

@@ -18,6 +18,7 @@
 #include "cloudos_version.h"
 #include "fd/process_fd.hpp"
 #include "fd/scheduler.hpp"
+#include "fd/bootfs.hpp"
 #include "memory/allocator.hpp"
 #include "memory/page_allocator.hpp"
 #include "global.hpp"
@@ -285,6 +286,17 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 
 	init_fd.install_page_directory();
 	stream << "Paging directory loaded, paging is in effect\n";
+
+	fd_t *bootfs_fd = bootfs::get_root_fd();
+	fd_t *init_exec_fd = bootfs_fd->openat("init", 4, 0, 0);
+	if(init_exec_fd == nullptr) {
+		kernel_panic("Failed to open init");
+	}
+	auto res = init_fd.exec(init_exec_fd);
+	if(res != error_t::no_error) {
+		kernel_panic("Failed to start init");
+	}
+	get_scheduler()->process_fd_ready(&init_fd);
 
 	interrupt_table interrupts;
 	interrupt_global interrupts_global(&handler);

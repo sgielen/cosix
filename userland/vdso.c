@@ -495,8 +495,20 @@ cloudabi_sys_proc_exec(
 	const cloudabi_fd_t *fds,
 	size_t fdslen
 ) {
-	putstring_l(__PRETTY_FUNCTION__);
-	return CLOUDABI_ENOSYS;
+	struct args_t {
+		cloudabi_fd_t fd;
+		const void *data;
+		size_t datalen;
+		const cloudabi_fd_t *fds;
+		size_t fdslen;
+	};
+	struct args_t args = {fd, data, datalen, fds, fdslen};
+	register int32_t reg_eax asm("eax") = 6;
+	register struct args_t *reg_ecx asm("ecx") = &args;
+	asm volatile("int $0x80"
+		: : "r"(reg_eax), "r"(reg_ecx)
+		: "memory", "eax", "ecx");
+	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error handling */
 }
 
 _Noreturn void

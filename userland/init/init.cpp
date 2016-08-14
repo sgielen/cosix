@@ -14,9 +14,11 @@ void program_main(const argdata_t *) {
 		dprintf(0, "Failed to open exec_test: %s\n", strerror(errno));
 		exit(1);
 	}
-	
-	program_exec(exec_test_fd, &argdata_null);
-	dprintf(0, "Failed to program_exec: %s\n", strerror(errno));
+
+	dprintf(0, "Going to program_exec() exec_test...\n");
+
+	int error = program_exec(exec_test_fd, &argdata_null);
+	dprintf(0, "Failed to program_exec: %s\n", strerror(error));
 	exit(2);
 
 	// 1. Open the init-binaries directory fd from argdata

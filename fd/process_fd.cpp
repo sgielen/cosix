@@ -10,6 +10,7 @@
 #include <fd/procfs.hpp>
 #include <fd/bootfs.hpp>
 #include <userland/vdso_support.h>
+#include <elf.h>
 
 extern uint32_t _kernel_virtual_base;
 
@@ -49,7 +50,7 @@ process_fd::process_fd(page_allocator *a, const char *n)
 
 	add_fd(procfs::get_root_fd(), CLOUDABI_RIGHT_FILE_OPEN, CLOUDABI_RIGHT_FD_READ | CLOUDABI_RIGHT_FILE_OPEN);
 
-	add_fd(bootfs::get_root_fd(), CLOUDABI_RIGHT_FILE_OPEN, CLOUDABI_RIGHT_FD_READ | CLOUDABI_RIGHT_FILE_OPEN);
+	add_fd(bootfs::get_root_fd(), CLOUDABI_RIGHT_FILE_OPEN, CLOUDABI_RIGHT_FD_READ | CLOUDABI_RIGHT_FILE_OPEN | CLOUDABI_RIGHT_PROC_EXEC);
 }
 
 int process_fd::add_fd(fd_t *fd, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting) {
@@ -96,10 +97,10 @@ static inline T *allocate_on_stack(uint32_t *&stack_addr, uint32_t &useresp) {
 	return reinterpret_cast<T*>(stack_addr);
 }
 
-void cloudos::process_fd::initialize(void *start_addr, cloudos::allocator *alloc) {
+void cloudos::process_fd::initialize(void *start_addr) {
 	userland_stack_size = kernel_stack_size = 0x10000 /* 64 kb */;
-	userland_stack_bottom = reinterpret_cast<uint8_t*>(alloc->allocate_aligned(userland_stack_size, 4096));
-	kernel_stack_bottom   = reinterpret_cast<uint8_t*>(alloc->allocate_aligned(kernel_stack_size, 4096));
+	userland_stack_bottom = reinterpret_cast<uint8_t*>(get_allocator()->allocate_aligned(userland_stack_size, PAGE_SIZE));
+	kernel_stack_bottom   = reinterpret_cast<uint8_t*>(get_allocator()->allocate_aligned(kernel_stack_size, PAGE_SIZE));
 
 	// initialize all registers and return state to zero
 	memset(&state, 0, sizeof(state));
@@ -118,7 +119,7 @@ void cloudos::process_fd::initialize(void *start_addr, cloudos::allocator *alloc
 
 	// initialize vdso address
 	vdso_size = vdso_blob_size;
-	vdso_image = alloc->allocate_aligned(vdso_size, 4096);
+	vdso_image = get_allocator()->allocate_aligned(vdso_size, PAGE_SIZE);
 	memcpy(vdso_image, vdso_blob, vdso_size);
 	uint32_t vdso_address = 0x80040000;
 	map_at(vdso_image, reinterpret_cast<void*>(vdso_address), vdso_size);
@@ -133,7 +134,7 @@ void cloudos::process_fd::initialize(void *start_addr, cloudos::allocator *alloc
 	}
 	size_t auxv_entries = 6; // including CLOUDABI_AT_NULL
 	auxv_size = auxv_entries * sizeof(cloudabi_auxv_t);
-	auxv_buf = alloc->allocate_aligned(auxv_size, 4096);
+	auxv_buf = get_allocator()->allocate_aligned(auxv_size, PAGE_SIZE);
 	cloudabi_auxv_t *auxv = reinterpret_cast<cloudabi_auxv_t*>(auxv_buf);
 	auxv->a_type = CLOUDABI_AT_BASE;
 	auxv->a_ptr = nullptr; /* because we don't do address randomization */
@@ -235,8 +236,7 @@ void cloudos::process_fd::handle_syscall(vga_stream &stream) {
 		}
 		state.eax = buf[0];
 	} else if(syscall == 4) {
-		// openat(ecx=parameters) returns eax=fd or eax=-1 on error
-		// it reads system call parameters from the userland stack
+		// sys_proc_file_open(ecx=parameters) returns eax=fd or eax=-1 on error
 		struct args_t {
 			cloudabi_lookup_t dirfd;
 			const char *path;
@@ -300,6 +300,94 @@ void cloudos::process_fd::handle_syscall(vga_stream &stream) {
 		stat->fs_rights_base = mapping->rights_base;
 		stat->fs_rights_inheriting = mapping->rights_inheriting;
 		state.eax = 0;
+	} else if(syscall == 6) {
+		// sys_fd_proc_exec(ecx=parameters) returns eax=-1 on error
+		struct args_t {
+			cloudabi_fd_t fd;
+			const void *data;
+			size_t datalen;
+			const cloudabi_fd_t *fds;
+			size_t fdslen;
+		};
+
+		args_t *args = reinterpret_cast<args_t*>(state.ecx);
+
+		fd_mapping_t *mapping;
+		auto res = get_fd(&mapping, args->fd, CLOUDABI_RIGHT_PROC_EXEC);
+		if(res != error_t::no_error) {
+			state.eax = -1;
+			return;
+		}
+
+		fd_mapping_t *new_fds[args->fdslen];
+		for(size_t i = 0; i < args->fdslen; ++i) {
+			fd_mapping_t *old_mapping;
+			res = get_fd(&old_mapping, args->fds[i], 0);
+			if(res != error_t::no_error) {
+				// request to map an invalid fd
+				state.eax = -1;
+				return;
+			}
+			// copy the mapping to the new process
+			new_fds[i] = old_mapping;
+		}
+
+		uint32_t *old_page_directory = page_directory;
+		uint32_t **old_page_tables = page_tables;
+
+		page_allocation p;
+		res = get_page_allocator()->allocate(&p);
+		if(res != error_t::no_error) {
+			kernel_panic("Failed to allocate process paging directory");
+		}
+		page_directory = reinterpret_cast<uint32_t*>(p.address);
+		memset(page_directory, 0, PAGE_DIRECTORY_SIZE * sizeof(uint32_t));
+
+		get_page_allocator()->fill_kernel_pages(page_directory);
+		res = get_page_allocator()->allocate(&p);
+		if(res != error_t::no_error) {
+			kernel_panic("Failed to allocate page table list");
+		}
+		page_tables = reinterpret_cast<uint32_t**>(p.address);
+		for(size_t i = 0; i < 0x300; ++i) {
+			page_tables[i] = nullptr;
+		}
+
+		res = exec(mapping->fd);
+		if(res != error_t::no_error) {
+			get_vga_stream() << "exec() failed because of " << res << "\n";
+			page_directory = old_page_directory;
+			page_tables = old_page_tables;
+			state.eax = -1;
+			return;
+		}
+
+		// Close all unused FDs
+		for(int i = 0; i <= last_fd; ++i) {
+			bool fd_is_used = false;
+			for(size_t j = 0; j < args->fdslen; ++j) {
+				// TODO: cloudabi does not allow an fd to be mapped twice in exec()
+				if(new_fds[j]->fd == fds[i]->fd) {
+					fd_is_used = true;
+				}
+			}
+			if(!fd_is_used) {
+				// TODO: actually close
+				fds[i]->fd = nullptr;
+			}
+		}
+
+		for(size_t i = 0; i < args->fdslen; ++i) {
+			fds[i] = new_fds[i];
+		}
+		last_fd = args->fdslen - 1;
+
+		// TODO this is a hack, remove this -- always add the VGA stream as an fd
+		vga_fd *fd = get_allocator()->allocate<vga_fd>();
+		new (fd) vga_fd("vga_fd");
+		add_fd(fd, CLOUDABI_RIGHT_FD_WRITE);
+
+		// now, when process is scheduled again, we will return to the entrypoint of the new binary
 	} else {
 		stream << "Syscall " << state.eax << " unknown\n";
 	}
@@ -412,28 +500,119 @@ void process_fd::map_at(void *kernel_virt, void *userland_virt, size_t length)
 	}
 }
 
-void process_fd::copy_and_map_elf(uint8_t *buffer, size_t size)
-{
-	if(size < 0x30) {
-		kernel_panic("copy_and_map_elf has a buffer too small for the basic elf header");
+error_t process_fd::exec(fd_t *fd) {
+	// read from this fd until it gives EOF, then exec(buf, buf_size)
+	// TODO: once all fds implement seek(), we can read() only the header,
+	// then seek to the phdr offset, then read() phdrs, then for every LOAD
+	// phdr, seek() to the binary data and read() only that into the
+	// process address space
+	uint8_t *elf_buffer = get_allocator()->allocate<uint8_t>(10 * 1024 * 1024);
+	size_t buffer_size = 0;
+	do {
+		size_t read = fd->read(buffer_size, &elf_buffer[buffer_size], 1024);
+		buffer_size += read;
+		if(read == 0) {
+			break;
+		}
+	} while(fd->error == error_t::no_error);
+
+	if(fd->error != error_t::no_error) {
+		return fd->error;
 	}
 
-	uint8_t elf_data = buffer[0x5];
-	// 1 is little endian, 2 is big endian
-	if(elf_data != 1 && elf_data != 2) {
-		kernel_panic("Invalid ELF data class");
+	return exec(elf_buffer, buffer_size);
+}
+
+error_t process_fd::exec(uint8_t *buffer, size_t buffer_size) {
+	if(buffer_size < sizeof(Elf32_Ehdr)) {
+		// Binary too small
+		return error_t::exec_format;
 	}
 
-	uint32_t elf_phoff = elf_endian(*reinterpret_cast<uint32_t*>(&buffer[0x1c]), elf_data);
-	uint16_t elf_phentsize = elf_endian(*reinterpret_cast<uint16_t*>(&buffer[0x2a]), elf_data);
-	elf_phnum = elf_endian(*reinterpret_cast<uint16_t*>(&buffer[0x2c]), elf_data);
-	elf_ph_size = elf_phentsize * elf_phnum;
-	if(elf_phoff + elf_ph_size > size) {
-		kernel_panic("copy_and_map_elf has a buffer too small for all phdrs");
+	Elf32_Ehdr *header = reinterpret_cast<Elf32_Ehdr*>(buffer);
+	if(memcmp(header->e_ident, "\x7F" "ELF", 4) != 0) {
+		// Not an ELF binary
+		return error_t::exec_format;
+	}
+
+	if(header->e_ident[EI_CLASS] != ELFCLASS32) {
+		// Not a 32-bit ELF binary
+		return error_t::exec_format;
+	}
+
+	if(header->e_ident[EI_DATA] != ELFDATA2LSB) {
+		// Not least-significant byte first, unsupported at the moment
+		return error_t::exec_format;
+	}
+
+	if(header->e_ident[EI_VERSION] != 1) {
+		// Not ELF version 1
+		return error_t::exec_format;
+	}
+
+	if(header->e_ident[EI_OSABI] != ELFOSABI_CLOUDABI
+	|| header->e_ident[EI_ABIVERSION] != 0) {
+		// Not CloudABI v0
+		return error_t::exec_format;
+	}
+
+	if(header->e_type != ET_EXEC && header->e_type != ET_DYN) {
+		// Not an executable or shared object file
+		// (CloudABI binaries can be shipped as shared object files,
+		// which are actually executables, so that the kernel knows it
+		// can map them anywhere in address space for ASLR)
+		return error_t::exec_format;
+	}
+
+	if(header->e_machine != EM_386) {
+		// TODO: when we support different machine types, check that
+		// header->e_machine is supported.
+		return error_t::exec_format;
+	}
+
+	if(header->e_version != EV_CURRENT) {
+		// Not a current version ELF
+		return error_t::exec_format;
+	}
+
+	// Save the phdrs
+	elf_phnum = header->e_phnum;
+	elf_ph_size = header->e_phentsize * elf_phnum;
+
+	if(header->e_phoff >= buffer_size || (header->e_phoff + elf_ph_size) >= buffer_size) {
+		// Phdrs weren't shipped in this ELF
+		return error_t::exec_format;
 	}
 
 	elf_phdr = reinterpret_cast<uint8_t*>(get_allocator()->allocate_aligned(elf_ph_size, 4096));
-	memcpy(elf_phdr, &buffer[elf_phoff], elf_ph_size);
+	memcpy(elf_phdr, buffer + header->e_phoff, elf_ph_size);
+
+	// Map the LOAD sections
+	for(size_t phi = 0; phi < elf_phnum; ++phi) {
+		size_t offset = header->e_phoff + phi * header->e_phentsize;
+		if(offset >= buffer_size || (offset + sizeof(Elf32_Phdr)) >= buffer_size) {
+			// Phdr wasn't shipped in this ELF
+			return error_t::exec_format;
+		}
+
+		Elf32_Phdr *phdr = reinterpret_cast<Elf32_Phdr*>(buffer + offset);
+
+		if(phdr->p_type == PT_LOAD) {
+			if(phdr->p_offset >= buffer_size || (phdr->p_offset + phdr->p_filesz) >= buffer_size) {
+				// Phdr data wasn't shipped in this ELF
+				return error_t::exec_format;
+			}
+			uint8_t *code_offset = buffer + phdr->p_offset;
+			uint8_t *codebuf = reinterpret_cast<uint8_t*>(get_allocator()->allocate_aligned(phdr->p_memsz, PAGE_SIZE));
+			memcpy(codebuf, code_offset, phdr->p_filesz);
+			memset(codebuf + phdr->p_filesz, 0, phdr->p_memsz - phdr->p_filesz);
+			map_at(codebuf, reinterpret_cast<void*>(phdr->p_vaddr), phdr->p_memsz);
+		}
+	}
+
+	// Initialize the process
+	initialize(reinterpret_cast<void*>(header->e_entry));
+	return error_t::no_error;
 }
 
 void process_fd::save_sse_state() {
