@@ -19,3 +19,53 @@ if(BAREMETAL_ENABLED)
 	set_source_files_properties(vdso_support.s PROPERTIES COMPILE_FLAGS "-x assembler-with-cpp")
 	set_target_properties(vdso_support PROPERTIES LINKER_LANGUAGE CXX)
 endif()
+
+include(ExternalProject)
+set(EXTERNAL_BINARY_LIST "")
+macro(add_external_binary BINARY_NAME)
+	list(APPEND EXTERNAL_BINARY_LIST ${BINARY_NAME})
+	ExternalProject_Add(${BINARY_NAME}
+		SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/${BINARY_NAME}"
+		PREFIX "${BINARY_NAME}"
+		CMAKE_ARGS "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_SOURCE_DIR}/cmake/Toolchain-i686-cloudabi.cmake" "-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}" "-DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>"
+		STEP_TARGETS install
+	)
+	# By default, changes in ExternalProjects do not force a rebuild, so we
+	# add a 'forcebuild' step that always executes and does a rebuild.
+	ExternalProject_Add_Step(${BINARY_NAME} forcebuild
+		COMMAND true
+		DEPENDERS build install
+		ALWAYS 1)
+
+	if(BAREMETAL_ENABLED)
+		add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/external_binary_${BINARY_NAME}.o"
+			COMMAND ${OBJCOPY_COMMAND} --input-target binary
+				--output-target elf32-i386
+				--binary-architecture i386
+				"${BINARY_NAME}" "${CMAKE_CURRENT_BINARY_DIR}/external_binary_${BINARY_NAME}.o"
+			DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/${BINARY_NAME}/bin/${BINARY_NAME}" "${BINARY_NAME}-install"
+			WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${BINARY_NAME}/bin"
+		)
+	endif(BAREMETAL_ENABLED)
+endmacro()
+
+add_external_binary(init)
+add_external_binary(exec_test)
+
+if(BAREMETAL_ENABLED)
+	# Create a header with definitions for all external binaries
+	set(EXTERNAL_BINARY_DEFINITIONS)
+	foreach(BINARY_NAME ${EXTERNAL_BINARY_LIST})
+		set(EXTERNAL_BINARY_DEFINITIONS "${EXTERNAL_BINARY_DEFINITIONS}DEFINE_BINARY(${BINARY_NAME})\n")
+	endforeach()
+	configure_file(${CMAKE_CURRENT_SOURCE_DIR}/external_binaries.h.in
+		${CMAKE_CURRENT_BINARY_DIR}/external_binaries.h @ONLY)
+
+	# Add a support library with all external binaries
+	set(EXTERNAL_BINARY_OBJECTS)
+	foreach(BINARY_NAME ${EXTERNAL_BINARY_LIST})
+		list(APPEND EXTERNAL_BINARY_OBJECTS "${CMAKE_CURRENT_BINARY_DIR}/external_binary_${BINARY_NAME}.o")
+	endforeach()
+	add_library(external_binaries_support external_binaries.h ${EXTERNAL_BINARY_OBJECTS})
+	set_target_properties(external_binaries_support PROPERTIES LINKER_LANGUAGE CXX)
+endif()

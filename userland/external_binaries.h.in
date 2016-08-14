@@ -1,0 +1,32 @@
+#pragma once
+
+#include <stdint.h>
+#include <stddef.h>
+
+#define DEFINE_BINARY(x) \
+extern uint8_t _binary_##x##_start; \
+extern uint8_t _binary_##x##_end;
+
+@EXTERNAL_BINARY_DEFINITIONS@
+
+#undef DEFINE_BINARY
+
+namespace cloudos {
+
+struct external_binary_t {
+	const char *name;
+	uint8_t *start;
+	uint8_t *end;
+};
+
+}
+
+#define DEFINE_BINARY(x) \
+	{#x, &_binary_##x##_start, &_binary_##x##_end},
+
+constexpr cloudos::external_binary_t external_binaries_table[] = {
+@EXTERNAL_BINARY_DEFINITIONS@
+	{nullptr, nullptr, 0}
+};
+
+#undef DEFINE_BINARY

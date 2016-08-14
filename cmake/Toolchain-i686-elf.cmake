@@ -9,6 +9,15 @@ else()
 	set(CMAKE_CXX_COMPILER i686-unknown-cloudabi-c++)
 endif()
 
+set(OBJCOPY_NAME "i686-elf-objcopy" CACHE STRING "Name of the objcopy command")
+mark_as_advanced(OBJCOPY_NAME)
+find_program(OBJCOPY_COMMAND ${OBJCOPY_NAME})
+mark_as_advanced(${OBJCOPY_COMMAND})
+
+if(NOT OBJCOPY_COMMAND)
+	message(FATAL_ERROR "Could not find objcopy command: ${OBJCOPY_NAME}")
+endif()
+
 set(CMAKE_GLD_LINKER_NAME i686-elf-ld CACHE STRING "Name of the Binutils linker")
 mark_as_advanced(CMAKE_GLD_LINKER_NAME)
 

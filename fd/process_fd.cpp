@@ -8,6 +8,7 @@
 #include <fd/vga_fd.hpp>
 #include <fd/memory_fd.hpp>
 #include <fd/procfs.hpp>
+#include <fd/bootfs.hpp>
 #include <userland/vdso_support.h>
 #include <cloudabi/headers/cloudabi_types.h>
 
@@ -49,6 +50,8 @@ process_fd::process_fd(page_allocator *a, const char *n)
 	add_fd(fd2);
 
 	add_fd(procfs::get_root_fd());
+
+	add_fd(bootfs::get_root_fd());
 }
 
 int process_fd::add_fd(fd_t *fd) {
