@@ -183,6 +183,10 @@ void cloudos::process_fd::get_return_state(interrupt_state_t *return_state) {
 
 void cloudos::process_fd::handle_syscall(vga_stream &stream) {
 	// software interrupt
+
+	// TODO: for all system calls: check if all pointers refer to valid
+	// memory areas and if userspace has access to all of them
+
 	int syscall = state.eax;
 	if(syscall == 1) {
 		// getpid(), returns eax=pid
@@ -231,8 +235,19 @@ void cloudos::process_fd::handle_syscall(vga_stream &stream) {
 		}
 		state.eax = buf[0];
 	} else if(syscall == 4) {
-		// openat(ebx=fd, ecx=pathname, edx=as_directory) returns eax=fd or eax=-1 on error
-		int fdnum = state.ebx;
+		// openat(ecx=parameters) returns eax=fd or eax=-1 on error
+		// it reads system call parameters from the userland stack
+		struct args_t {
+			cloudabi_lookup_t dirfd;
+			const char *path;
+			size_t pathlen;
+			cloudabi_oflags_t oflags;
+			const cloudabi_fdstat_t *fds;
+			cloudabi_fd_t *fd;
+		};
+		args_t *args = reinterpret_cast<args_t*>(state.ecx);
+
+		int fdnum = args->dirfd.fd;
 		fd_mapping_t *mapping;
 		auto res = get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FILE_OPEN);
 		if(res != error_t::no_error) {
@@ -240,18 +255,25 @@ void cloudos::process_fd::handle_syscall(vga_stream &stream) {
 			return;
 		}
 
-		const char *pathname = reinterpret_cast<const char*>(state.ecx);
-		int directory = state.edx;
+		// TODO: take lookup flags into account, args->dirfd.flags
 
-		fd_t *new_fd = mapping->fd->openat(pathname, directory == 1);
+		// check if fd can be created with such rights
+		if((mapping->rights_inheriting & args->fds->fs_rights_base) != args->fds->fs_rights_base
+		|| (mapping->rights_inheriting & args->fds->fs_rights_inheriting) != args->fds->fs_rights_inheriting) {
+			get_vga_stream() << "userspace wants too many permissions\n";
+			state.eax = -1;
+		}
+
+		fd_t *new_fd = mapping->fd->openat(args->path, args->pathlen, args->oflags, args->fds);
 		if(!new_fd || mapping->fd->error != error_t::no_error) {
 			get_vga_stream() << "failed to openat()\n";
 			state.eax = -1;
 			return;
 		}
 
-		int new_fdnum = add_fd(new_fd, mapping->rights_inheriting, mapping->rights_inheriting);
-		state.eax = new_fdnum;
+		int new_fdnum = add_fd(new_fd, args->fds->fs_rights_base, args->fds->fs_rights_inheriting);
+		*(args->fd) = new_fdnum;
+		state.eax = 0;
 	} else if(syscall == 5) {
 		// sys_fd_stat_get(ebx=fd, ecx=fdstat_t) returns eax=fd or eax=-1 on error
 		int fdnum = state.ebx;

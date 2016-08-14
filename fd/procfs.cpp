@@ -15,7 +15,7 @@ struct procfs_directory_fd : fd_t {
 
 	error_t to_string(char *buf, size_t length);
 
-	fd_t *openat(const char *pathname, bool directory) override;
+	fd_t *openat(const char * /*path */, size_t /*pathlen*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) override;
 
 private:
 	char path[PROCFS_DEPTH_MAX][PROCFS_FILE_MAX];
@@ -79,13 +79,11 @@ error_t procfs_directory_fd::to_string(char *buf, size_t length) {
 	return error_t::no_error;
 }
 
-fd_t *procfs_directory_fd::openat(const char *pathname, bool directory) {
-	if(pathname == 0 || pathname[0] == 0 || pathname[0] == '/') {
+fd_t *procfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi_oflags_t oflags, const cloudabi_fdstat_t *) {
+	if(pathname == 0 || pathlen == 0 || pathname[0] == 0 || pathname[0] == '/') {
 		error = error_t::invalid_argument;
 		return nullptr;
 	}
-
-	size_t path_length = strlen(pathname);
 
 	char pathbuf[PROCFS_DEPTH_MAX * (PROCFS_FILE_MAX + 1)];
 	if(to_string(pathbuf, sizeof(pathbuf)) != error_t::no_error) {
@@ -93,16 +91,19 @@ fd_t *procfs_directory_fd::openat(const char *pathname, bool directory) {
 	}
 	size_t pathbuf_length = strlen(pathbuf);
 
-	if(path_length + 1 + pathbuf_length >= sizeof(pathbuf)) {
+	if(pathlen + 1 + pathbuf_length >= sizeof(pathbuf)) {
 		error = error_t::no_memory;
 		return nullptr;
 	}
 
+	bool must_be_directory = (oflags & CLOUDABI_O_DIRECTORY) == CLOUDABI_O_DIRECTORY;
+
+	// TODO: look at oflags and fdstat
 	// TODO: actual path resolving with './', '../', symlinks and hardlinks
-	strncpy(&pathbuf[pathbuf_length], pathname, path_length + 1);
+	strncpy(&pathbuf[pathbuf_length], pathname, pathlen + 1);
 
 	if(strcmp(pathbuf, "kernel/uptime") == 0) {
-		if(directory) {
+		if(must_be_directory) {
 			error = error_t::not_a_directory;
 			return nullptr;
 		} else {
@@ -112,7 +113,6 @@ fd_t *procfs_directory_fd::openat(const char *pathname, bool directory) {
 			return fd;
 		}
 	} else if(strcmp(pathbuf, "kernel") == 0 || strcmp(pathbuf, "kernel/") == 0) {
-		// directories can be opened without O_DIRECTORY as well
 		error = error_t::no_error;
 		char pb[2][PROCFS_FILE_MAX];
 		strncpy(pb[0], "kernel", PROCFS_FILE_MAX);

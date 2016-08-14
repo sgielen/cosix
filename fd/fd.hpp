@@ -59,7 +59,7 @@ struct fd_t {
 	}
 
 	/* For directories */
-	virtual fd_t *openat(const char * /*pathname*/, bool /*directory*/) {
+	virtual fd_t *openat(const char * /*path */, size_t /*pathlen*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) {
 		error = error_t::invalid_argument;
 		return nullptr;
 	}

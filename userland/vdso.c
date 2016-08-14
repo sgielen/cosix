@@ -158,7 +158,7 @@ cloudabi_sys_fd_stat_get(
 	cloudabi_fdstat_t *buf
 ) {
 	// sys_fd_stat_get(ebx=fd, ecx=fdstat_t) returns eax=fd or eax=-1 on error
-	register uint32_t reg_eax asm("eax") = 5;
+	register int32_t reg_eax asm("eax") = 5;
 	register uint32_t reg_ebx asm("ebx") = fd;
 	register void *reg_ecx asm("ecx") = buf;
 	asm volatile("int $0x80"
@@ -192,7 +192,7 @@ cloudabi_sys_fd_write(
 	size_t iovcnt,
 	size_t *nwritten
 ) {
-	register uint32_t reg_eax asm("eax") = 2;
+	register int32_t reg_eax asm("eax") = 2;
 	register uint32_t reg_ebx asm("ebx") = fd;
 	register const char *reg_ecx asm("ecx");
 	register uint32_t reg_edx asm("edx");
@@ -262,8 +262,21 @@ cloudabi_sys_file_open(
 	const cloudabi_fdstat_t *fds,
 	cloudabi_fd_t *fd
 ) {
-	putstring_l(__PRETTY_FUNCTION__);
-	return CLOUDABI_ENOSYS;
+	struct args_t {
+		cloudabi_lookup_t dirfd;
+		const char *path;
+		size_t pathlen;
+		cloudabi_oflags_t oflags;
+		const cloudabi_fdstat_t *fds;
+		cloudabi_fd_t *fd;
+	};
+	struct args_t args = {dirfd, path, pathlen, oflags, fds, fd};
+	register int32_t reg_eax asm("eax") = 4;
+	register struct args_t *reg_ecx asm("ecx") = &args;
+	asm volatile("int $0x80"
+		: : "r"(reg_eax), "r"(reg_ecx)
+		: "memory", "eax", "ecx");
+	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error handling */
 }
 
 cloudabi_errno_t
