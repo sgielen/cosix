@@ -281,7 +281,7 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 
 	interrupt_handler handler;
 
-	process_fd init_fd(&paging, "init");
+	process_fd init_fd("init");
 	stream << "Init process created\n";
 
 	init_fd.install_page_directory();

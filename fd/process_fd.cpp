@@ -16,19 +16,19 @@ extern uint32_t _kernel_virtual_base;
 
 using namespace cloudos;
 
-process_fd::process_fd(page_allocator *a, const char *n)
+process_fd::process_fd(const char *n)
 : fd_t(CLOUDABI_FILETYPE_PROCESS, n)
 {
 	page_allocation p;
-	auto res = a->allocate(&p);
+	auto res = get_page_allocator()->allocate(&p);
 	if(res != error_t::no_error) {
 		kernel_panic("Failed to allocate process paging directory");
 	}
 	page_directory = reinterpret_cast<uint32_t*>(p.address);
 	memset(page_directory, 0, PAGE_DIRECTORY_SIZE * sizeof(uint32_t));
-	a->fill_kernel_pages(page_directory);
+	get_page_allocator()->fill_kernel_pages(page_directory);
 
-	res = a->allocate(&p);
+	res = get_page_allocator()->allocate(&p);
 	if(res != error_t::no_error) {
 		kernel_panic("Failed to allocate page table list");
 	}

@@ -12,9 +12,6 @@ typedef linked_list<process_fd*> process_list;
 
 struct vga_stream;
 
-class allocator;
-struct page_allocator;
-
 typedef uint8_t sse_state_t [512] __attribute__ ((aligned (16)));
 
 struct fd_mapping_t {
@@ -43,7 +40,7 @@ struct fd_mapping_t {
  * ready/blocked list again.
  */
 struct process_fd : public fd_t {
-	process_fd(page_allocator *alloc, const char *n);
+	process_fd(const char *n);
 
 	// TODO remove
 	int pid;
