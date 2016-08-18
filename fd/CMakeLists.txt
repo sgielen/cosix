@@ -3,6 +3,7 @@ if(BAREMETAL_ENABLED)
 	add_library(fd
 		fd.hpp
 		memory_fd.hpp
+		mem_mapping.cpp mem_mapping.hpp
 		process_fd.cpp process_fd.hpp
 		scheduler.cpp scheduler.hpp
 		procfs.cpp procfs.hpp

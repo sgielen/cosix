@@ -16,6 +16,15 @@ extern uint32_t _kernel_virtual_base;
 
 using namespace cloudos;
 
+static size_t len_to_pages(size_t len) {
+	size_t num_pages = len / process_fd::PAGE_SIZE;
+	if((len % process_fd::PAGE_SIZE) != 0) {
+		return num_pages + 1;
+	} else {
+		return num_pages;
+	}
+}
+
 process_fd::process_fd(const char *n)
 : fd_t(CLOUDABI_FILETYPE_PROCESS, n)
 {
@@ -99,7 +108,6 @@ static inline T *allocate_on_stack(uint32_t *&stack_addr, uint32_t &useresp) {
 
 void cloudos::process_fd::initialize(void *start_addr) {
 	userland_stack_size = kernel_stack_size = 0x10000 /* 64 kb */;
-	userland_stack_bottom = reinterpret_cast<uint8_t*>(get_allocator()->allocate_aligned(userland_stack_size, PAGE_SIZE));
 	kernel_stack_bottom   = reinterpret_cast<uint8_t*>(get_allocator()->allocate_aligned(kernel_stack_size, PAGE_SIZE));
 
 	// initialize all registers and return state to zero
@@ -112,30 +120,37 @@ void cloudos::process_fd::initialize(void *start_addr) {
 	state.fs = 0x33;
 
 	// stack location for new process
-	uint32_t *stack_addr = reinterpret_cast<uint32_t*>(reinterpret_cast<uint32_t>(userland_stack_bottom) + userland_stack_size);
-	userland_stack_address = reinterpret_cast<void*>(0x80000000);
-	map_at(userland_stack_bottom, reinterpret_cast<void*>(reinterpret_cast<uint32_t>(userland_stack_address) - userland_stack_size), userland_stack_size);
+	uint32_t *stack_addr = reinterpret_cast<uint32_t*>(0x80000000);
+	userland_stack_address = stack_addr;
+	uint8_t *userland_stack_bottom = reinterpret_cast<uint8_t*>(stack_addr) - userland_stack_size;
+	mem_mapping_t *stack_mapping = get_allocator()->allocate<mem_mapping_t>();
+	new (stack_mapping) mem_mapping_t(this, userland_stack_bottom, len_to_pages(userland_stack_size), NULL, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE);
+	add_mem_mapping(stack_mapping);
+	stack_mapping->ensure_completely_backed();
 	state.useresp = reinterpret_cast<uint32_t>(userland_stack_address);
 
 	// initialize vdso address
-	vdso_size = vdso_blob_size;
-	vdso_image = get_allocator()->allocate_aligned(vdso_size, PAGE_SIZE);
-	memcpy(vdso_image, vdso_blob, vdso_size);
-	uint32_t vdso_address = 0x80040000;
-	map_at(vdso_image, reinterpret_cast<void*>(vdso_address), vdso_size);
-
-	// initialize elf phdr address
-	uint32_t elf_phdr_address = 0x80060000;
-	map_at(elf_phdr, reinterpret_cast<void*>(elf_phdr_address), elf_ph_size);
+	size_t vdso_size = vdso_blob_size;
+	uint8_t *vdso_address = reinterpret_cast<uint8_t*>(0x80040000);
+	mem_mapping_t *vdso_mapping = get_allocator()->allocate<mem_mapping_t>();
+	new (vdso_mapping) mem_mapping_t(this, vdso_address, len_to_pages(vdso_size), NULL, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE);
+	add_mem_mapping(vdso_mapping);
+	vdso_mapping->ensure_completely_backed();
+	memcpy(vdso_address, vdso_blob, vdso_size);
 
 	// initialize auxv
-	if(elf_ph_size == 0 || elf_phdr == 0) {
+	if(elf_phdr == 0) {
 		kernel_panic("About to start process but no elf_phdr present");
 	}
 	size_t auxv_entries = 6; // including CLOUDABI_AT_NULL
-	auxv_size = auxv_entries * sizeof(cloudabi_auxv_t);
-	auxv_buf = get_allocator()->allocate_aligned(auxv_size, PAGE_SIZE);
-	cloudabi_auxv_t *auxv = reinterpret_cast<cloudabi_auxv_t*>(auxv_buf);
+	size_t auxv_size = auxv_entries * sizeof(cloudabi_auxv_t);
+	uint8_t *auxv_address = reinterpret_cast<uint8_t*>(0x80010000);
+	mem_mapping_t *auxv_mapping = get_allocator()->allocate<mem_mapping_t>();
+	new (auxv_mapping) mem_mapping_t(this, auxv_address, len_to_pages(auxv_size), NULL, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE);
+	add_mem_mapping(auxv_mapping);
+	auxv_mapping->ensure_completely_backed();
+	
+	cloudabi_auxv_t *auxv = reinterpret_cast<cloudabi_auxv_t*>(auxv_address);
 	auxv->a_type = CLOUDABI_AT_BASE;
 	auxv->a_ptr = nullptr; /* because we don't do address randomization */
 	auxv++;
@@ -143,17 +158,15 @@ void cloudos::process_fd::initialize(void *start_addr) {
 	auxv->a_val = PAGE_SIZE;
 	auxv++;
 	auxv->a_type = CLOUDABI_AT_SYSINFO_EHDR;
-	auxv->a_val = vdso_address;
+	auxv->a_ptr = vdso_address;
 	auxv++;
 	auxv->a_type = CLOUDABI_AT_PHDR;
-	auxv->a_val = elf_phdr_address;
+	auxv->a_ptr = elf_phdr;
 	auxv++;
 	auxv->a_type = CLOUDABI_AT_PHNUM;
 	auxv->a_val = elf_phnum;
 	auxv++;
 	auxv->a_type = CLOUDABI_AT_NULL;
-	uint32_t auxv_address = 0x80010000;
-	map_at(auxv_buf, reinterpret_cast<void*>(auxv_address), auxv_size);
 
 	// memory for the TCB pointer and area
 	void **tcb_address = allocate_on_stack<void*>(stack_addr, state.useresp);
@@ -334,6 +347,7 @@ void cloudos::process_fd::handle_syscall(vga_stream &stream) {
 
 		uint32_t *old_page_directory = page_directory;
 		uint32_t **old_page_tables = page_tables;
+		mem_mapping_list *old_mappings = mappings;
 
 		page_allocation p;
 		res = get_page_allocator()->allocate(&p);
@@ -352,15 +366,21 @@ void cloudos::process_fd::handle_syscall(vga_stream &stream) {
 		for(size_t i = 0; i < 0x300; ++i) {
 			page_tables[i] = nullptr;
 		}
+		mappings = nullptr;
+		install_page_directory();
 
 		res = exec(mapping->fd);
 		if(res != error_t::no_error) {
 			get_vga_stream() << "exec() failed because of " << res << "\n";
 			page_directory = old_page_directory;
 			page_tables = old_page_tables;
+			mappings = old_mappings;
+			install_page_directory();
 			state.eax = -1;
 			return;
 		}
+
+		// TODO: Clean up all unused mappings
 
 		// Close all unused FDs
 		for(int i = 0; i <= last_fd; ++i) {
@@ -412,6 +432,31 @@ uint32_t *process_fd::get_page_table(int i) {
 	}
 }
 
+uint32_t *process_fd::ensure_get_page_table(int i) {
+	if(i >= 0x300) {
+		kernel_panic("process_fd::ensure_page_table() cannot answer for kernel pages");
+	}
+	if(page_directory[i] & 0x1 /* present */) {
+		return page_tables[i];
+	}
+
+	// allocate page table
+	page_allocation p;
+	auto res = get_page_allocator()->allocate(&p);
+	if(res != error_t::no_error) {
+		kernel_panic("Failed to allocate paging table");
+	}
+
+	auto address = get_page_allocator()->to_physical_address(p.address);
+	if((reinterpret_cast<uint32_t>(address) & 0xfff) != 0) {
+		kernel_panic("physically allocated memory is not page-aligned");
+	}
+
+	page_directory[i] = reinterpret_cast<uint64_t>(address) | 0x07;
+	page_tables[i] = reinterpret_cast<uint32_t*>(p.address);
+	return page_tables[i];
+}
+
 void process_fd::install_page_directory() {
 	/* some sanity checks to warn early if the page directory looks incorrect */
 	if(get_page_allocator()->to_physical_address(this, reinterpret_cast<void*>(0xc00b8000)) != reinterpret_cast<void*>(0xb8000)) {
@@ -437,67 +482,37 @@ void process_fd::install_page_directory() {
 #endif
 }
 
-void process_fd::map_at(void *kernel_virt, void *userland_virt, size_t length)
+error_t process_fd::add_mem_mapping(mem_mapping_t *mapping, bool overwrite)
 {
-	while(true) {
-		if(reinterpret_cast<uint32_t>(kernel_virt) < _kernel_virtual_base) {
-			kernel_panic("Got non-kernel address in map_at()");
+	mem_mapping_list *covering_mappings = nullptr;
+	remove_all(&mappings, [&](mem_mapping_list *item) {
+		bool covers = item->data->covers(mapping->virtual_address);
+		if(covers && !overwrite) {
+			get_vga_stream() << "Trying to create a " << mapping->number_of_pages << "-page mapping at address " << mapping->virtual_address << "\n";
+			get_vga_stream() << "Found a " << item->data->number_of_pages << "-page mapping at address " << item->data->virtual_address << "\n";
+			kernel_panic("add_mem_mapping(mapping, false) called for a mapping that overlaps with an existing one");
 		}
-		if(reinterpret_cast<uint32_t>(userland_virt) + length > _kernel_virtual_base) {
-			kernel_panic("Got kernel address in map_at()");
-		}
-		if(reinterpret_cast<uint32_t>(kernel_virt) % PAGE_SIZE != 0) {
-			kernel_panic("kernel_virt is not page aligned in map_at");
-		}
-		if(reinterpret_cast<uint32_t>(userland_virt) % PAGE_SIZE != 0) {
-			kernel_panic("userland_virt is not page aligned in map_at");
-		}
+		return covers;
+	}, [&](mem_mapping_list *item) {
+		append(&covering_mappings, item);
+	});
 
-		void *phys_addr = get_page_allocator()->to_physical_address(kernel_virt);
-		if(reinterpret_cast<uint32_t>(phys_addr) % PAGE_SIZE != 0) {
-			kernel_panic("phys_addr is not page aligned in map_at");
-		}
-
-		uint16_t page_table_num = reinterpret_cast<uint64_t>(userland_virt) >> 22;
-		if((page_directory[page_table_num] & 0x1) == 0) {
-			// allocate page table
-			page_allocation p;
-			auto res = get_page_allocator()->allocate(&p);
-			if(res != error_t::no_error) {
-				kernel_panic("Failed to allocate kernel paging table in map_to");
-			}
-
-			auto address = get_page_allocator()->to_physical_address(p.address);
-			if((reinterpret_cast<uint32_t>(address) & 0xfff) != 0) {
-				kernel_panic("physically allocated memory is not page-aligned");
-			}
-
-			page_directory[page_table_num] = reinterpret_cast<uint64_t>(address) | 0x07 /* read-write userspace-accessible present table */;
-			page_tables[page_table_num] = reinterpret_cast<uint32_t*>(p.address);
-		}
-		uint32_t *page_table = get_page_table(page_table_num);
-		if(page_table == 0) {
-			kernel_panic("Failed to map page table in map_to");
-		}
-
-		uint16_t page_entry_num = reinterpret_cast<uint64_t>(userland_virt) >> 12 & 0x03ff;
-		uint32_t &page_entry = page_table[page_entry_num];
-		if(page_entry & 0x1) {
-			get_vga_stream() << "Page table " << page_table_num << ", page entry " << page_entry_num << " already mapped\n";
-			get_vga_stream() << "Value: 0x" << hex << page_entry << dec << "\n";
-			kernel_panic("Page in map_to already present");
-		} else {
-			page_entry = reinterpret_cast<uint32_t>(phys_addr) | 0x07; // read-write userspace-accessible present entry
-		}
-
-		if(length <= PAGE_SIZE) {
-			break;
-		}
-
-		kernel_virt = reinterpret_cast<void*>(reinterpret_cast<uint32_t>(kernel_virt) + PAGE_SIZE);
-		userland_virt = reinterpret_cast<void*>(reinterpret_cast<uint32_t>(userland_virt) + PAGE_SIZE);
-		length -= PAGE_SIZE;
+	if(covering_mappings != nullptr) {
+		// - split the old mappings in covered and uncovered parts
+		// - unmap the covered parts
+		// - add the covered parts back into the mappings list
+		kernel_panic("TODO: implement solving covered mappings in add_mem_mapping");
 	}
+
+	mem_mapping_list *entry = get_allocator()->allocate<mem_mapping_list>();
+	entry->data = mapping;
+	entry->next = nullptr;
+	append(&mappings, entry);
+	return error_t::no_error;
+
+	// the page tables already contain all zeroes for this mapping. when we page
+	// fault for the first time, or ensure_backed() is called on the mapping,
+	// we will allocate physical pages and alter the page table.
 }
 
 error_t process_fd::exec(fd_t *fd) {
@@ -577,14 +592,19 @@ error_t process_fd::exec(uint8_t *buffer, size_t buffer_size) {
 
 	// Save the phdrs
 	elf_phnum = header->e_phnum;
-	elf_ph_size = header->e_phentsize * elf_phnum;
+	size_t elf_ph_size = header->e_phentsize * elf_phnum;
 
 	if(header->e_phoff >= buffer_size || (header->e_phoff + elf_ph_size) >= buffer_size) {
 		// Phdrs weren't shipped in this ELF
 		return error_t::exec_format;
 	}
 
-	elf_phdr = reinterpret_cast<uint8_t*>(get_allocator()->allocate_aligned(elf_ph_size, 4096));
+	elf_phdr = reinterpret_cast<uint8_t*>(0x80060000);
+	mem_mapping_t *phdr_mapping = get_allocator()->allocate<mem_mapping_t>();
+	new (phdr_mapping) mem_mapping_t(this, elf_phdr, len_to_pages(elf_ph_size), NULL, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE);
+	add_mem_mapping(phdr_mapping);
+	phdr_mapping->ensure_completely_backed();
+
 	memcpy(elf_phdr, buffer + header->e_phoff, elf_ph_size);
 
 	// Map the LOAD sections
@@ -602,11 +622,18 @@ error_t process_fd::exec(uint8_t *buffer, size_t buffer_size) {
 				// Phdr data wasn't shipped in this ELF
 				return error_t::exec_format;
 			}
+			if((phdr->p_vaddr % PAGE_SIZE) != 0) {
+				// Phdr load section wasn't aligned
+				return error_t::exec_format;
+			}
+			uint8_t *vaddr = reinterpret_cast<uint8_t*>(phdr->p_vaddr);
 			uint8_t *code_offset = buffer + phdr->p_offset;
-			uint8_t *codebuf = reinterpret_cast<uint8_t*>(get_allocator()->allocate_aligned(phdr->p_memsz, PAGE_SIZE));
-			memcpy(codebuf, code_offset, phdr->p_filesz);
-			memset(codebuf + phdr->p_filesz, 0, phdr->p_memsz - phdr->p_filesz);
-			map_at(codebuf, reinterpret_cast<void*>(phdr->p_vaddr), phdr->p_memsz);
+			mem_mapping_t *t = get_allocator()->allocate<mem_mapping_t>();
+			new (t) mem_mapping_t(this, vaddr, len_to_pages(phdr->p_memsz), NULL, 0, CLOUDABI_PROT_EXEC | CLOUDABI_PROT_READ);
+			add_mem_mapping(t);
+			t->ensure_completely_backed();
+			memcpy(vaddr, code_offset, phdr->p_filesz);
+			memset(vaddr + phdr->p_filesz, 0, phdr->p_memsz - phdr->p_filesz);
 		}
 	}
 

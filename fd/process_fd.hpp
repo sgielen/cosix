@@ -1,6 +1,7 @@
 #pragma once
 
 #include "fd.hpp"
+#include "mem_mapping.hpp"
 #include "hw/interrupt.hpp"
 #include <oslibc/list.hpp>
 #include <cloudabi/headers/cloudabi_types.h>
@@ -52,6 +53,7 @@ struct process_fd : public fd_t {
 	void *get_fsbase();
 	void install_page_directory();
 	uint32_t *get_page_table(int i);
+	uint32_t *ensure_get_page_table(int i);
 
 	// Read an ELF from this fd, map it, and prepare it for execution. This
 	// function will not remove previous process contents, use unexec() for
@@ -60,18 +62,17 @@ struct process_fd : public fd_t {
 	// TODO: make this private
 	error_t exec(uint8_t *elf_buffer, size_t size);
 
-	void map_at(void *kernel_ptr, void *userland_ptr, size_t size);
-
 	int add_fd(fd_t*, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting = 0);
 	error_t get_fd(fd_mapping_t **mapping, size_t num, cloudabi_rights_t has_rights);
 
 	void save_sse_state();
 	void restore_sse_state();
 
+	static const int PAGE_SIZE = 4096 /* bytes */;
+
 private:
 	void initialize(void *start_addr);
 
-	static const int PAGE_SIZE = 4096 /* bytes */;
 	static const int PAGE_DIRECTORY_SIZE = 1024 /* entries */;
 
 	static const int MAX_FD = 256 /* file descriptors */;
@@ -84,21 +85,22 @@ private:
 	// entries are valid, the others are in page_allocator.kernel_page_tables
 	uint32_t **page_tables = 0;
 
+	// The memory mappings used by this process.
+	mem_mapping_list *mappings = 0;
+	// Add the given mem_mapping_t to the page directory and tables, and add
+	// it to the list of mappings. If overwrite is false, will kernel_panic()
+	// on existing mappings.
+	error_t add_mem_mapping(mem_mapping_t *mapping, bool overwrite = false);
+
 	interrupt_state_t state;
 	sse_state_t sse_state;
-	void *userland_stack_bottom = 0;
 	size_t userland_stack_size = 0;
 	void *userland_stack_address = 0;
 	void *kernel_stack_bottom = 0;
 	size_t kernel_stack_size = 0;
-	void *vdso_image = 0;
-	size_t vdso_size = 0;
-	void *auxv_buf = 0;
-	size_t auxv_size = 0;
 
 	void *elf_phdr = 0;
 	size_t elf_phnum = 0;
-	size_t elf_ph_size = 0;
 };
 
 }
