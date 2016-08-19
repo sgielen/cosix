@@ -17,7 +17,7 @@ void program_main(const argdata_t *) {
 
 	dprintf(0, "Going to program_exec() exec_test...\n");
 
-	int error = program_exec(exec_test_fd, &argdata_null);
+	int error = program_exec(exec_test_fd, argdata_create_fd(0));
 	dprintf(0, "Failed to program_exec: %s\n", strerror(error));
 	exit(2);
 

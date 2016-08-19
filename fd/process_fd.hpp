@@ -91,6 +91,8 @@ private:
 	// it to the list of mappings. If overwrite is false, will kernel_panic()
 	// on existing mappings.
 	error_t add_mem_mapping(mem_mapping_t *mapping, bool overwrite = false);
+	// Find a piece of the address space that's free to be mapped.
+	void *find_free_virtual_range(size_t num_pages);
 
 	interrupt_state_t state;
 	sse_state_t sse_state;

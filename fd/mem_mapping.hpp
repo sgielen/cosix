@@ -49,6 +49,9 @@ struct mem_mapping_t {
 	void ensure_backed(size_t page);
 	void ensure_completely_backed();
 
+	void unmap(size_t page);
+	void unmap_completely();
+
 	void *virtual_address; /* always page-aligned */
 	size_t number_of_pages;
 

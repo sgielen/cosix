@@ -385,7 +385,7 @@ void cloudos::process_fd::handle_syscall(vga_stream &stream) {
 		// Close all unused FDs
 		for(int i = 0; i <= last_fd; ++i) {
 			bool fd_is_used = false;
-			for(size_t j = 0; j < args->fdslen; ++j) {
+			for(size_t j = 0; j <= args->fdslen; ++j) {
 				// TODO: cloudabi does not allow an fd to be mapped twice in exec()
 				if(new_fds[j]->fd == fds[i]->fd) {
 					fd_is_used = true;
@@ -402,12 +402,78 @@ void cloudos::process_fd::handle_syscall(vga_stream &stream) {
 		}
 		last_fd = args->fdslen - 1;
 
-		// TODO this is a hack, remove this -- always add the VGA stream as an fd
-		vga_fd *fd = get_allocator()->allocate<vga_fd>();
-		new (fd) vga_fd("vga_fd");
-		add_fd(fd, CLOUDABI_RIGHT_FD_WRITE);
-
 		// now, when process is scheduled again, we will return to the entrypoint of the new binary
+	} else if(syscall == 7) {
+		// sys_mem_map
+		struct args_t {
+			void *addr;
+			size_t len;
+			cloudabi_mprot_t prot;
+			cloudabi_mflags_t flags;
+			cloudabi_fd_t fd;
+			cloudabi_filesize_t off;
+			void **mem;
+		};
+
+		args_t *args = reinterpret_cast<args_t*>(state.ecx);
+		if(!(args->flags & CLOUDABI_MAP_ANON) || args->fd != CLOUDABI_MAP_ANON_FD) {
+			get_vga_stream() << "Only anonymous mappings are supported at the moment\n";
+			state.eax = -1;
+			return;
+		}
+		if(!(args->flags & CLOUDABI_MAP_PRIVATE)) {
+			get_vga_stream() << "Only private mappings are supported at the moment\n";
+			state.eax = -1;
+			return;
+		}
+		void *address_requested = args->addr;
+		bool fixed = args->flags & CLOUDABI_MAP_FIXED;
+		// NOTE: cloudabi sys_mem_map() defines that address_requested
+		// is only used when MAP_FIXED is given, but in other mmap()
+		// implementations address_requested is considered a hint when
+		// MAP_FIXED isn't given. We try that as well.
+		// TODO: if !given and address_requested isn't free, also find
+		// another free virtual range.
+		if(!fixed && address_requested == nullptr) {
+			address_requested = find_free_virtual_range(len_to_pages(args->len));
+			if(address_requested == nullptr) {
+				get_vga_stream() << "Failed to find virtual memory for mapping.\n";
+				state.eax = -1;
+				return;
+			}
+		}
+		if((reinterpret_cast<uint32_t>(address_requested) % PAGE_SIZE) != 0) {
+			get_vga_stream() << "Address requested isn't page aligned\n";
+			state.eax = -1;
+			return;
+		}
+		mem_mapping_t *mapping = get_allocator()->allocate<mem_mapping_t>();
+		new (mapping) mem_mapping_t(this, address_requested, len_to_pages(args->len), NULL, 0, args->prot);
+		add_mem_mapping(mapping, fixed);
+		// TODO: instead of completely backing, await the page fault and do it then
+		mapping->ensure_completely_backed();
+		memset(address_requested, 0, args->len);
+		*(args->mem) = address_requested;
+		state.eax = 0;
+	} else if(syscall == 8) {
+		// sys_mem_unmap(ecx=addr, edx=len)
+		// find mapping, remove it from list, remove it from page tables
+		uint8_t *addr = reinterpret_cast<uint8_t*>(state.ecx);
+		//size_t len = state.edx;
+
+		// TODO: find all mappings within this range
+		// - if they are fully covered, unmap them
+		// - if they are partially covered, split them and unmap the covered part
+		// - for now, assume that we only unmap full mappings
+		mem_mapping_list *remove_mappings = nullptr;
+		remove_all(&mappings, [&](mem_mapping_list *item) {
+			return item->data->virtual_address == addr;
+		}, [&](mem_mapping_list *item) {
+			append(&remove_mappings, item);
+		});
+		iterate(remove_mappings, [&](mem_mapping_list *item) {
+			item->data->unmap_completely();
+		});
 	} else {
 		stream << "Syscall " << state.eax << " unknown\n";
 	}
@@ -513,6 +579,36 @@ error_t process_fd::add_mem_mapping(mem_mapping_t *mapping, bool overwrite)
 	// the page tables already contain all zeroes for this mapping. when we page
 	// fault for the first time, or ensure_backed() is called on the mapping,
 	// we will allocate physical pages and alter the page table.
+}
+
+void *process_fd::find_free_virtual_range(size_t num_pages)
+{
+	uint32_t address = 0x90000000;
+	while(address + num_pages * PAGE_SIZE < 0xc0000000) {
+		// - find the first lowest map after address
+		mem_mapping_t *lowest = nullptr;
+		iterate(mappings, [&](mem_mapping_list *item) {
+			uint32_t virtual_address = reinterpret_cast<uint32_t>(item->data->virtual_address);
+			if(virtual_address + item->data->number_of_pages * PAGE_SIZE > address) {
+				if(!lowest || lowest->virtual_address > item->data->virtual_address) {
+					lowest = item->data;
+				}
+			}
+		});
+
+		if(lowest == nullptr) {
+			// No mappings yet
+			return reinterpret_cast<void*>(address);
+		}
+
+		uint32_t virtual_address = reinterpret_cast<uint32_t>(lowest->virtual_address);
+		if(address + num_pages * PAGE_SIZE <= virtual_address) {
+			return reinterpret_cast<void*>(address);
+		}
+
+		address = virtual_address + lowest->number_of_pages * PAGE_SIZE;
+	}
+	return nullptr;
 }
 
 error_t process_fd::exec(fd_t *fd) {

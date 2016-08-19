@@ -91,3 +91,27 @@ void mem_mapping_t::ensure_completely_backed()
 		ensure_backed(i);
 	}
 }
+
+void mem_mapping_t::unmap(size_t page)
+{
+	if(page > number_of_pages) {
+		kernel_panic("page out of range");
+	}
+	uint8_t *address = reinterpret_cast<uint8_t*>(virtual_address) + PAGE_SIZE * page;
+	uint16_t page_table_num = reinterpret_cast<uint64_t>(address) >> 22;
+	uint32_t *page_table = owner->get_page_table(page_table_num);
+	if(page_table == nullptr) {
+		return;
+	}
+	uint16_t page_entry_num = reinterpret_cast<uint64_t>(address) >> 12 & 0x03ff;
+	uint32_t &page_entry = page_table[page_entry_num];
+	page_entry = 0;
+}
+
+void mem_mapping_t::unmap_completely()
+{
+	for(size_t i = 0; i < number_of_pages; ++i) {
+		unmap(i);
+	}
+}
+

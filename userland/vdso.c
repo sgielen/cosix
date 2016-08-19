@@ -420,8 +420,22 @@ cloudabi_sys_mem_map(
 	cloudabi_filesize_t off,
 	void **mem
 ) {
-	putstring_l(__PRETTY_FUNCTION__);
-	return CLOUDABI_ENOSYS;
+	struct args_t {
+		void *addr;
+		size_t len;
+		cloudabi_mprot_t prot;
+		cloudabi_mflags_t flags;
+		cloudabi_fd_t fd;
+		cloudabi_filesize_t off;
+		void **mem;
+	};
+	struct args_t args = {addr, len, prot, flags, fd, off, mem};
+	register int32_t reg_eax asm("eax") = 7;
+	register struct args_t *reg_ecx asm("ecx") = &args;
+	asm volatile("int $0x80"
+		: : "r"(reg_eax), "r"(reg_ecx)
+		: "memory", "eax", "ecx");
+	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error handling */
 }
 
 cloudabi_errno_t
@@ -458,8 +472,13 @@ cloudabi_sys_mem_unmap(
 	void *addr,
 	size_t len
 ) {
-	putstring_l(__PRETTY_FUNCTION__);
-	return CLOUDABI_ENOSYS;
+	register int32_t reg_eax asm("eax") = 8;
+	register const char *reg_ecx asm("ecx") = addr;
+	register uint32_t reg_edx asm("edx") = len;
+	asm volatile("int $0x80"
+		: : "r"(reg_eax), "r"(reg_ecx), "r"(reg_edx)
+		: "memory", "eax", "ecx", "edx");
+	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error handling */
 }
 
 cloudabi_errno_t
