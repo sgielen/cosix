@@ -539,6 +539,24 @@ cloudabi_sys_proc_exit(
 }
 
 cloudabi_errno_t
+cloudabi_sys_proc_fork(
+	cloudabi_fd_t *fd,
+	cloudabi_tid_t *tid
+) {
+	register int32_t reg_eax asm("eax") = 9;
+	register int32_t reg_ecx asm("ecx") = 0;
+	asm volatile("int $0x80"
+		: "+r"(reg_eax), "+r"(reg_ecx) : "r"(reg_eax), "r"(reg_ecx)
+		: "memory", "eax", "ecx");
+
+	// TODO: handle error codes
+	// (reg_eax == -1 for CLOUDABI_PROC_CHILD, so that's not an error)
+	*fd = reg_eax;
+	*tid = reg_ecx;
+	return 0;
+}
+
+cloudabi_errno_t
 cloudabi_sys_proc_raise(
 	cloudabi_signal_t sig
 ) {

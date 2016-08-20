@@ -9,6 +9,7 @@
 #include <fd/memory_fd.hpp>
 #include <fd/procfs.hpp>
 #include <fd/bootfs.hpp>
+#include <fd/scheduler.hpp>
 #include <userland/vdso_support.h>
 #include <elf.h>
 
@@ -474,6 +475,60 @@ void cloudos::process_fd::handle_syscall(vga_stream &stream) {
 		iterate(remove_mappings, [&](mem_mapping_list *item) {
 			item->data->unmap_completely();
 		});
+	} else if(syscall == 9) {
+		// cloudabi_sys_proc_fork() takes no arguments, creates a new process, and:
+		// * in the parent, returns eax=child_fd, ecx=1
+		// * in the child, returns eax=CLOUDABI_PROCESS_CHILD, ecx=1 (initial thread id of new process)
+		process_fd *process = reinterpret_cast<process_fd*>(get_allocator()->allocate_aligned(sizeof(process_fd), 16));
+		new(process) process_fd("forked process");
+
+		process->userland_stack_size = userland_stack_size;
+		process->userland_stack_address = userland_stack_address;
+		process->kernel_stack_bottom = reinterpret_cast<uint8_t*>(get_allocator()->allocate_aligned(kernel_stack_size, PAGE_SIZE));
+		process->kernel_stack_size = kernel_stack_size;
+		process->elf_phdr = elf_phdr;
+		process->elf_phnum = elf_phnum;
+
+		// dup all fd's
+		process->last_fd = last_fd;
+		for(int i = 0; i <= last_fd; ++i) {
+			fd_mapping_t *old_mapping = fds[i];
+
+			fd_mapping_t *mapping = get_allocator()->allocate<fd_mapping_t>();
+			mapping->fd = old_mapping->fd;
+			mapping->rights_base = old_mapping->rights_base;
+			mapping->rights_inheriting = old_mapping->rights_inheriting;
+			process->fds[i] = mapping;
+		}
+
+		// copy execution state
+		process->state = state;
+		memcpy(process->sse_state, sse_state, sizeof(sse_state));
+
+		// set return values
+		int fdnum = add_fd(process, CLOUDABI_RIGHT_POLL_PROC_TERMINATE, 0);
+		state.eax = fdnum;
+		state.ecx = 1;
+
+		process->state.eax = CLOUDABI_PROCESS_CHILD;
+		process->state.ecx = 1;
+
+		iterate(mappings, [&](mem_mapping_list *item) {
+			mem_mapping_t *mapping = get_allocator()->allocate<mem_mapping_t>();
+			new (mapping) mem_mapping_t(process, item->data);
+			process->add_mem_mapping(mapping);
+
+			mem_mapping_list *ml = get_allocator()->allocate<mem_mapping_list>();
+			ml->data = mapping;
+			ml->next = nullptr;
+
+			append(&process->mappings, ml);
+
+			// TODO: implement copy-on-write
+			mapping->copy_from(item->data);
+		});
+
+		get_scheduler()->process_fd_ready(process);
 	} else {
 		stream << "Syscall " << state.eax << " unknown\n";
 	}

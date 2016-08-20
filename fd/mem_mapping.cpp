@@ -26,6 +26,39 @@ mem_mapping_t::mem_mapping_t(process_fd *o, void *a,
 	}
 }
 
+mem_mapping_t::mem_mapping_t(process_fd *o, mem_mapping_t *other)
+: protection(other->protection)
+, virtual_address(other->virtual_address)
+, number_of_pages(other->number_of_pages)
+, owner(o)
+, backing_fd(other->backing_fd)
+, backing_offset(other->backing_offset)
+, advice(other->advice)
+, lock_count(0)
+{
+}
+
+void mem_mapping_t::copy_from(mem_mapping_t *other)
+{
+	if(other->number_of_pages != number_of_pages) {
+		kernel_panic("copy_from length mismatch");
+	}
+	// TODO: remove this method and use copy-on-write
+	char buf[PAGE_SIZE];
+	for(size_t i = 0; i < other->number_of_pages; ++i) {
+		if(other->is_backed(i)) {
+			uint8_t *copy_from = reinterpret_cast<uint8_t*>(other->virtual_address) + PAGE_SIZE * i;
+			uint8_t *copy_to = reinterpret_cast<uint8_t*>(virtual_address) + PAGE_SIZE * i;
+			ensure_backed(i);
+			// assume that other->owner is the active process
+			memcpy(buf, copy_from, PAGE_SIZE);
+			owner->install_page_directory();
+			memcpy(copy_to, buf, PAGE_SIZE);
+			other->owner->install_page_directory();
+		}
+	}
+}
+
 bool mem_mapping_t::covers(void *addr, size_t len)
 {
 	addr_t my_start = reinterpret_cast<addr_t>(virtual_address);

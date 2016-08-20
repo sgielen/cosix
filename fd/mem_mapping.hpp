@@ -34,6 +34,12 @@ struct mem_mapping_t {
 	  size_t number_of_pages, fd_mapping_t *backing_fd /* or NULL */,
 	  cloudabi_filesize_t offset, cloudabi_mprot_t protection);
 
+	// Make a new mapping from the old one
+	mem_mapping_t(process_fd *owner, mem_mapping_t *other);
+	// Copy the contents of the old mapping. This assumes other->owner
+	// is currently active, and also returns as such.
+	void copy_from(mem_mapping_t *other);
+
 	bool covers(void *addr, size_t len = 0);
 
 	cloudabi_mprot_t protection;

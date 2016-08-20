@@ -15,10 +15,15 @@ void program_main(const argdata_t *) {
 		exit(1);
 	}
 
-	dprintf(0, "Going to program_exec() exec_test...\n");
+	dprintf(0, "Init going to program_spawn() exec_test...\n");
 
-	int error = program_exec(exec_test_fd, argdata_create_fd(0));
-	dprintf(0, "Failed to program_exec: %s\n", strerror(error));
+	int fd = program_spawn(exec_test_fd, argdata_create_fd(0));
+	if(fd < 0) {
+		dprintf(0, "exec_test failed to spawn: %s\n", strerror(errno));
+	} else {
+		dprintf(0, "exec_test spawned, fd: %d\n", fd);
+	}
+
 	exit(2);
 
 	// 1. Open the init-binaries directory fd from argdata
