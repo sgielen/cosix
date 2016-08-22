@@ -534,7 +534,10 @@ _Noreturn void
 cloudabi_sys_proc_exit(
 	cloudabi_exitcode_t rval
 ) {
-	putstring_l(__PRETTY_FUNCTION__);
+	register int32_t reg_eax asm("eax") = 10;
+	register int32_t reg_ecx asm("ecx") = rval;
+	asm volatile("int $0x80" : : "r"(reg_eax), "r"(reg_ecx));
+	asm volatile("1: hlt; jmp 1;");
 	while(1) {}
 }
 
@@ -560,8 +563,11 @@ cloudabi_errno_t
 cloudabi_sys_proc_raise(
 	cloudabi_signal_t sig
 ) {
-	putstring_l(__PRETTY_FUNCTION__);
-	return CLOUDABI_ENOSYS;
+	register int32_t reg_eax asm("eax") = 11;
+	register int32_t reg_ecx asm("ecx") = sig;
+	asm volatile("int $0x80" : : "r"(reg_eax), "r"(reg_ecx));
+	/* this syscall never fails */
+	return 0;
 }
 
 cloudabi_errno_t

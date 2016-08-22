@@ -281,10 +281,11 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 
 	interrupt_handler handler;
 
-	process_fd init_fd("init");
+	global.init = reinterpret_cast<process_fd*>(get_allocator()->allocate_aligned(sizeof(process_fd), 16));
+	new (global.init) process_fd("init");
 	stream << "Init process created\n";
 
-	init_fd.install_page_directory();
+	global.init->install_page_directory();
 	stream << "Paging directory loaded, paging is in effect\n";
 
 	fd_t *bootfs_fd = bootfs::get_root_fd();
@@ -292,11 +293,11 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	if(init_exec_fd == nullptr) {
 		kernel_panic("Failed to open init");
 	}
-	auto res = init_fd.exec(init_exec_fd);
+	auto res = global.init->exec(init_exec_fd);
 	if(res != error_t::no_error) {
 		kernel_panic("Failed to start init");
 	}
-	get_scheduler()->process_fd_ready(&init_fd);
+	get_scheduler()->process_fd_ready(global.init);
 
 	interrupt_table interrupts;
 	interrupt_global interrupts_global(&handler);

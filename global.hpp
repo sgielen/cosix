@@ -13,6 +13,7 @@ struct protocol_store;
 struct interface_store;
 struct device;
 struct scheduler;
+struct process_fd;
 
 extern global_state *global_state_;
 
@@ -28,6 +29,7 @@ struct global_state {
 	cloudos::interface_store *interface_store;
 	cloudos::device *root_device;
 	cloudos::scheduler *scheduler;
+	cloudos::process_fd *init;
 };
 
 __attribute__((noreturn)) inline void kernel_panic(const char *message) {

@@ -186,6 +186,11 @@ void cloudos::process_fd::initialize(void *start_addr) {
 	// allow interrupts
 	const int INTERRUPT_ENABLE = 1 << 9;
 	state.eflags = INTERRUPT_ENABLE;
+
+	// set running state
+	running = true;
+	exitcode = 0;
+	exitsignal = 0;
 }
 
 void cloudos::process_fd::set_return_state(interrupt_state_t *new_state) {
@@ -488,6 +493,7 @@ void cloudos::process_fd::handle_syscall(vga_stream &stream) {
 		process->kernel_stack_size = kernel_stack_size;
 		process->elf_phdr = elf_phdr;
 		process->elf_phnum = elf_phnum;
+		process->running = true;
 
 		// dup all fd's
 		process->last_fd = last_fd;
@@ -529,8 +535,18 @@ void cloudos::process_fd::handle_syscall(vga_stream &stream) {
 		});
 
 		get_scheduler()->process_fd_ready(process);
+	} else if(syscall == 10) {
+		// sys_proc_exit(ecx=rval). Doesn't return.
+		exit(state.ecx);
+		// running will be false after this, so we won't be rescheduled.
+		// we'll be cleaned up when the last file descriptor to this process closes.
+	} else if(syscall == 11) {
+		// sys_proc_raise(ecx=signal). Returns only if signal is not fatal.
+		signal(state.ecx);
+		// like with exit, running will be false, we'll be cleaned up later
 	} else {
-		stream << "Syscall " << state.eax << " unknown\n";
+		stream << "Syscall " << state.eax << " unknown, signalling process\n";
+		signal(CLOUDABI_SIGSYS);
 	}
 }
 
@@ -799,4 +815,55 @@ void process_fd::save_sse_state() {
 
 void process_fd::restore_sse_state() {
 	asm volatile("fxrstor %0" : "=m" (sse_state));
+}
+
+void process_fd::exit(cloudabi_exitcode_t c, cloudabi_signal_t s)
+{
+	if(this == global_state_->init) {
+		get_vga_stream() << "init exited with signal " << s << ", exit code " << c << "\n";
+		kernel_panic("init exited");
+	}
+	running = false;
+	exitsignal = s;
+	if(exitsignal == 0) {
+		exitcode = c;
+	} else {
+		exitcode = 0;
+	}
+
+	get_vga_stream() << "Process \"" << name << "\" exited with signal " << exitsignal << ", code " << exitcode << ".\n";
+
+	// TODO: close all file descriptors (this also kills sub-processes)
+	// TODO: clean up all memory maps
+	// TODO: free all allocations
+}
+
+void process_fd::signal(cloudabi_signal_t s)
+{
+	switch(s) {
+	case CLOUDABI_SIGABRT:
+	case CLOUDABI_SIGALRM:
+	case CLOUDABI_SIGBUS:
+	case CLOUDABI_SIGFPE:
+	case CLOUDABI_SIGHUP:
+	case CLOUDABI_SIGILL:
+	case CLOUDABI_SIGINT:
+	case CLOUDABI_SIGKILL:
+	case CLOUDABI_SIGQUIT:
+	case CLOUDABI_SIGSEGV:
+	case CLOUDABI_SIGSYS:
+	case CLOUDABI_SIGTERM:
+	case CLOUDABI_SIGTRAP:
+	case CLOUDABI_SIGUSR1:
+	case CLOUDABI_SIGUSR2:
+	case CLOUDABI_SIGVTALRM:
+	case CLOUDABI_SIGXCPU:
+	case CLOUDABI_SIGXFSZ:
+		exit(0, s);
+		return;
+	default:
+		// Signals cannot be handled in CloudABI, so signals either
+		// kill the process, or are ignored.
+		;
+	}
 }

@@ -68,6 +68,10 @@ struct process_fd : public fd_t {
 	void save_sse_state();
 	void restore_sse_state();
 
+	inline bool is_running() { return running; }
+	void exit(cloudabi_exitcode_t exitcode, cloudabi_signal_t exitsignal = 0);
+	void signal(cloudabi_signal_t exitsignal);
+
 	static const int PAGE_SIZE = 4096 /* bytes */;
 
 private:
@@ -103,6 +107,10 @@ private:
 
 	void *elf_phdr = 0;
 	size_t elf_phnum = 0;
+
+	bool running = false;
+	cloudabi_exitcode_t exitcode = 0;
+	cloudabi_signal_t exitsignal = 0;
 };
 
 }

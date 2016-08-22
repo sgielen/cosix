@@ -24,7 +24,9 @@ void program_main(const argdata_t *) {
 		dprintf(0, "exec_test spawned, fd: %d\n", fd);
 	}
 
-	exit(2);
+	// init must never exit, but we don't have sys_poll() / sys_poll_fd()
+	// yet, so we need to busy-wait
+	while(1) {}
 
 	// 1. Open the init-binaries directory fd from argdata
 	// 2. Read some configuration from the kernel cmdline
