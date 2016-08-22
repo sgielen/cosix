@@ -105,79 +105,150 @@ static void request_process_binary() {
 	}
 }
 
+const char *int_num_to_name(int int_no, bool *err_code) {
+	bool errcode = false;
+	const char *str = nullptr;
+	switch(int_no) {
+	case 0:  str = "Divide-by-zero (#DE)"; break;
+	case 1:  str = "Debug (#DB)"; break;
+	case 2:  str = "Non-maskable interrupt"; break;
+	case 3:  str = "Breakpoint (#BP)"; break;
+	case 4:  str = "Overflow (#OF)"; break;
+	case 5:  str = "Bound Range Exceeded (#BR)"; break;
+	case 6:  str = "Invalid Opcode (#UD)"; break;
+	case 7:  str = "Device Not Available (#NM)"; break;
+	case 8:  str = "Double Fault (#DF)"; break;
+	case 9:  str = "Coprocessor Segment Overrun"; break;
+	case 10: str = "Invalid TSS (#TS)"; errcode = true; break;
+	case 11: str = "Segment Not Present (#NP)"; errcode = true; break;
+	case 12: str = "Stack-Segment Fault (#SS)"; errcode = true; break;
+	case 13: str = "General Protection Fault (#GP)"; errcode = true; break;
+	case 14: str = "Page Fault (#PF)"; errcode = true; break;
+
+	case 16: str = "x87 Floating-Point Exception (#MF)"; break;
+	case 17: str = "Alignment Check (#AC)"; errcode = true; break;
+	case 18: str = "Machine Check (#MC)"; break;
+	case 19: str = "SIMD Floating-Point Exception (#XM/#XF)"; break;
+	case 20: str = "Virtualization Exception (#VE)"; break;
+
+	case 30: str = "Security Exception (#SX)"; errcode = true; break;
+
+	default: str = "Unknown exception"; break;
+	}
+	if(err_code) *err_code = errcode;
+	return str;
+}
+
+__attribute__((noreturn)) static void fatal_exception(int int_no, int err_code, interrupt_state_t *regs) {
+	auto &stream = get_vga_stream();
+	stream << "\n\n=============================================\n";
+	stream << "Fatal exception during processing in kernel\n";
+	bool errcode;
+	stream << "Interrupt number: " << int_no << " - " << int_num_to_name(int_no, &errcode) << "\n";
+	if(errcode) {
+		stream << "Error Code: 0x" << hex << err_code << dec << "\n";
+	}
+
+	process_fd *proc = get_scheduler()->get_running_process();
+	if(proc) {
+		stream << "Active process: " << proc << " (\"" << proc->name << "\")\n";
+	}
+
+	stream << "Instruction pointer at point of fault: 0x" << hex << regs->eip << dec << "\n";
+
+	if(int_no == 0x0e /* Page fault */) {
+		if(err_code & 0x01) {
+			stream << "Caused by a page-protection violation during page ";
+		} else {
+			stream << "Caused by a non-present page during page ";
+		}
+		stream << ((err_code & 0x02) ? "write" : "read");
+		stream << ((err_code & 0x04) ? " in unprivileged mode" : " in kernel mode");
+		if(err_code & 0x08) {
+			stream << " as a result of reading a reserved field";
+		}
+		if(err_code & 0x10) {
+			stream << " as a result of an instruction fetch";
+		}
+		stream << "\n";
+		uint32_t address;
+		asm volatile("mov %%cr2, %0" : "=a"(address));
+		stream << "Virtual address accessed: 0x" << hex << address << dec << "\n";
+	}
+
+	stream << "\n";
+	kernel_panic("A fatal exception occurred.");
+}
+
 struct interrupt_handler : public interrupt_functor {
 	void operator()(interrupt_state_t *regs) {
-		vga_stream *stream = &get_vga_stream();
+		int int_no = regs->int_no;
+		int err_code = regs->err_code;
+
+		if(regs->cs != 27 && regs->cs != 8) {
+			get_vga_stream() << "!!!! Interrupt occurred, but unexpected code segment value !!!!\n";
+			fatal_exception(int_no, err_code, regs);
+		}
+
+		bool in_kernel = regs->cs == 8;
 		auto running_process = get_scheduler()->get_running_process();
 		if(running_process) {
 			running_process->set_return_state(regs);
 		}
 
-		int int_no = regs->int_no;
-		int err_code = regs->err_code;
-		if(int_no == 0x06) {
-			*stream << "Invalid opcode in process " << running_process << "\n";
-			*stream << "  Instruction ptr at point of fault: 0x" << hex << regs->eip << dec << "\n";
-			kernel_panic("Received #UD interrupt");
-		} else if(int_no == 0x0d) {
-			*stream << "General protection fault in process " << running_process << "\n";
-			kernel_panic("Received #GP interrupt");
-		} else if(int_no == 0x0e) {
-			*stream << "Page fault in process " << running_process << "\n";
-			if(err_code & 0x01) {
-				*stream << "  Caused by a page-protection violation during page ";
-			} else {
-				*stream << "  Caused by a non-present page during page ";
-			}
-			*stream << ((err_code & 0x02) ? "write" : "read");
-			*stream << ((err_code & 0x04) ? " in unprivileged mode" : " in kernel mode");
-			if(err_code & 0x08) {
-				*stream << " as a result of reading a reserved field";
-			}
-			if(err_code & 0x10) {
-				*stream << " as a result of an instruction fetch";
-			}
-			*stream << "\n";
-			uint32_t address;
-			asm volatile("mov %%cr2, %0" : "=a"(address));
-			*stream << "  Virtual address accessed: 0x" << hex << address << dec << "\n";
-			*stream << "  Instruction ptr at point of fault: 0x" << hex << regs->eip << dec << "\n";
-			kernel_panic("Received #PF interrupt");
-		} else if(int_no == 0x20) {
-			get_root_device()->timer_event_recursive();
-			get_scheduler()->schedule_next();
-		} else if(int_no == 0x21) {
-			// keyboard input!
-			// wait for the ready bit to turn on
-			uint32_t waits = 0;
-			while((inb(0x64) & 0x1) == 0 && waits < 0xfffff) {
-				waits++;
-			}
-
-			if((inb(0x64) & 0x1) == 0x1) {
-				uint16_t scancode = inb(0x60);
-				char buf[2];
-				buf[0] = scancode_to_key[scancode];
-				if(buf[0] == 'u') {
-					send_udp_test_packet();
-				} else if(buf[0] == 'p') {
-					request_process_binary();
-				}
-				buf[1] = 0;
-				if(buf[0] == '\n') {
-					*stream << hex << "Stack ptr: " << &scancode << "; returning to stack: " << regs->useresp << dec << "\n";
-				} else if(scancode <= 0x53) {
-					*stream << buf;
-				}
-			} else {
-				*stream << "Waited for scancode for too long\n";
-			}
-		} else if(int_no == 0x80) {
-			running_process->handle_syscall(*stream);
-		} else {
-			*stream << "Got interrupt " << int_no << " (0x" << hex << int_no << dec << ", err code " << err_code << ")\n";
-			kernel_panic("Unknown interrupt received");
+		if(!in_kernel && !running_process) {
+			get_vga_stream() << "!!!! Interrupt occurred in userland, but without an active process !!!!\n";
+			fatal_exception(int_no, err_code, regs);
 		}
+
+		// TODO: handle page fault as a special case, because it can be
+		// solved by the running_process
+
+		// Any exceptions in the userland are handled by the process_fd
+		if(!in_kernel && (int_no < 0x20 || int_no >= 0x30)) {
+			running_process->interrupt(int_no, err_code);
+		}
+		// Any exceptions in the kernel lead to immediate kernel_panic
+		else if(int_no < 0x20 || int_no >= 0x30) {
+			fatal_exception(int_no, err_code, regs);
+		}
+		// Hardware interrupts are handled normally
+		else {
+			int irq = int_no - 0x20;
+			if(irq == 0 /* system timer */) {
+				get_root_device()->timer_event_recursive();
+				get_scheduler()->schedule_next();
+			} else if(irq == 1 /* keyboard */) {
+				// keyboard input!
+				// wait for the ready bit to turn on
+				uint32_t waits = 0;
+				while((inb(0x64) & 0x1) == 0 && waits < 0xfffff) {
+					waits++;
+				}
+
+				if((inb(0x64) & 0x1) == 0x1) {
+					uint16_t scancode = inb(0x60);
+					char buf[2];
+					buf[0] = scancode_to_key[scancode];
+					if(buf[0] == 'u') {
+						send_udp_test_packet();
+					} else if(buf[0] == 'p') {
+						request_process_binary();
+					}
+					buf[1] = 0;
+					if(buf[0] == '\n') {
+						get_vga_stream() << hex << "Stack ptr: " << &scancode << "; returning to stack: " << regs->useresp << dec << "\n";
+					} else if(scancode <= 0x53) {
+						get_vga_stream() << buf;
+					}
+				} else {
+					get_vga_stream() << "Waited for scancode for too long\n";
+				}
+			} else {
+				get_vga_stream() << "Got unknown hardware interrupt " << irq << "\n";
+			}
+		}
+
 		get_scheduler()->resume_running(regs);
 	}
 };

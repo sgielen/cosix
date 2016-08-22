@@ -201,7 +201,31 @@ void cloudos::process_fd::get_return_state(interrupt_state_t *return_state) {
 	*return_state = state;
 }
 
-void cloudos::process_fd::handle_syscall(vga_stream &stream) {
+const char *int_num_to_name(int int_no, bool *err_code);
+
+void process_fd::interrupt(int int_no, int)
+{
+	if(int_no == 0x80) {
+		handle_syscall();
+		return;
+	}
+
+	get_vga_stream() << "Process " << this << " (\"" << name << "\") encountered fatal interrupt:\n";
+	get_vga_stream() << "  " << int_num_to_name(int_no, nullptr) << " at eip=0x" << hex << state.eip << dec << "\n";
+	cloudabi_signal_t sig;
+	if(int_no == 0 || int_no == 4 || int_no == 16 || int_no == 19) {
+		sig = CLOUDABI_SIGFPE;
+	} else if(int_no == 6) {
+		sig = CLOUDABI_SIGILL;
+	} else if(int_no == 11 || int_no == 12 || int_no == 13 || int_no == 14) {
+		sig = CLOUDABI_SIGSEGV;
+	} else {
+		sig = CLOUDABI_SIGKILL;
+	}
+	signal(sig);
+}
+
+void cloudos::process_fd::handle_syscall() {
 	// software interrupt
 
 	// TODO: for all system calls: check if all pointers refer to valid
@@ -545,7 +569,7 @@ void cloudos::process_fd::handle_syscall(vga_stream &stream) {
 		signal(state.ecx);
 		// like with exit, running will be false, we'll be cleaned up later
 	} else {
-		stream << "Syscall " << state.eax << " unknown, signalling process\n";
+		get_vga_stream() << "Syscall " << state.eax << " unknown, signalling process\n";
 		signal(CLOUDABI_SIGSYS);
 	}
 }

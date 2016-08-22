@@ -48,7 +48,10 @@ struct process_fd : public fd_t {
 
 	void set_return_state(interrupt_state_t*);
 	void get_return_state(interrupt_state_t*);
-	void handle_syscall(vga_stream &stream);
+
+	void interrupt(int int_no, int err_code);
+	void handle_syscall();
+
 	void *get_kernel_stack_top();
 	void *get_fsbase();
 	void install_page_directory();
