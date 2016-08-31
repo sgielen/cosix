@@ -48,7 +48,9 @@ process_fd::process_fd(const char *n)
 	for(size_t i = 0; i < 0x300; ++i) {
 		page_tables[i] = nullptr;
 	}
+}
 
+void process_fd::add_initial_fds() {
 	vga_fd *fd = get_allocator()->allocate<vga_fd>();
 	new (fd) vga_fd("vga_fd");
 	add_fd(fd, CLOUDABI_RIGHT_FD_WRITE);

@@ -358,6 +358,7 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	new (global.init) process_fd("init");
 	stream << "Init process created\n";
 
+	global.init->add_initial_fds();
 	global.init->install_page_directory();
 	stream << "Paging directory loaded, paging is in effect\n";
 
