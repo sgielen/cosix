@@ -218,7 +218,7 @@ void cloudos::process_fd::get_return_state(interrupt_state_t *return_state) {
 
 const char *int_num_to_name(int int_no, bool *err_code);
 
-void process_fd::interrupt(int int_no, int)
+void process_fd::interrupt(int int_no, int err_code)
 {
 	if(int_no == 0x80) {
 		handle_syscall();
@@ -227,6 +227,28 @@ void process_fd::interrupt(int int_no, int)
 
 	get_vga_stream() << "Process " << this << " (\"" << name << "\") encountered fatal interrupt:\n";
 	get_vga_stream() << "  " << int_num_to_name(int_no, nullptr) << " at eip=0x" << hex << state.eip << dec << "\n";
+
+	if(int_no == 0x0e /* Page fault */) {
+		auto &stream = get_vga_stream();
+		if(err_code & 0x01) {
+			stream << "Caused by a page-protection violation during page ";
+		} else {
+			stream << "Caused by a non-present page during page ";
+		}
+		stream << ((err_code & 0x02) ? "write" : "read");
+		stream << ((err_code & 0x04) ? " in unprivileged mode" : " in kernel mode");
+		if(err_code & 0x08) {
+			stream << " as a result of reading a reserved field";
+		}
+		if(err_code & 0x10) {
+			stream << " as a result of an instruction fetch";
+		}
+		stream << "\n";
+		uint32_t address;
+		asm volatile("mov %%cr2, %0" : "=a"(address));
+		stream << "Virtual address accessed: 0x" << hex << address << dec << "\n";
+	}
+
 	cloudabi_signal_t sig;
 	if(int_no == 0 || int_no == 4 || int_no == 16 || int_no == 19) {
 		sig = CLOUDABI_SIGFPE;
