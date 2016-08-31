@@ -14,6 +14,8 @@
 #include <elf.h>
 
 extern uint32_t _kernel_virtual_base;
+extern uint32_t initial_kernel_stack;
+extern uint32_t initial_kernel_stack_size;
 
 using namespace cloudos;
 
@@ -186,6 +188,17 @@ void cloudos::process_fd::initialize(void *start_addr) {
 	// allow interrupts
 	const int INTERRUPT_ENABLE = 1 << 9;
 	state.eflags = INTERRUPT_ENABLE;
+
+	uint8_t *kernel_stack = reinterpret_cast<uint8_t*>(get_kernel_stack_top());
+	/* iret frame */
+	kernel_stack -= sizeof(interrupt_state_t);
+	memcpy(kernel_stack, &state, sizeof(interrupt_state_t));
+
+	/* initial kernel stack frame */
+	kernel_stack -= initial_kernel_stack_size;
+	memcpy(kernel_stack, &initial_kernel_stack, initial_kernel_stack_size);
+
+	esp = kernel_stack;
 
 	// set running state
 	running = true;
@@ -558,6 +571,20 @@ void cloudos::process_fd::handle_syscall() {
 			mapping->copy_from(item->data);
 		});
 
+		process->install_page_directory();
+		uint8_t *kernel_stack = reinterpret_cast<uint8_t*>(process->get_kernel_stack_top());
+		/* iret frame */
+		kernel_stack -= sizeof(interrupt_state_t);
+		// allow interrupts
+		memcpy(kernel_stack, &process->state, sizeof(interrupt_state_t));
+
+		/* initial kernel stack frame */
+		kernel_stack -= initial_kernel_stack_size;
+		memcpy(kernel_stack, &initial_kernel_stack, initial_kernel_stack_size);
+
+		process->esp = kernel_stack;
+
+		install_page_directory();
 		get_scheduler()->process_fd_ready(process);
 	} else if(syscall == 10) {
 		// sys_proc_exit(ecx=rval). Doesn't return.
@@ -860,6 +887,9 @@ void process_fd::exit(cloudabi_exitcode_t c, cloudabi_signal_t s)
 	// TODO: close all file descriptors (this also kills sub-processes)
 	// TODO: clean up all memory maps
 	// TODO: free all allocations
+
+	// now yield, so we aren't scheduled anymore
+	get_scheduler()->thread_yield();
 }
 
 void process_fd::signal(cloudabi_signal_t s)

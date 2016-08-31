@@ -5,7 +5,7 @@ if(BAREMETAL_ENABLED)
 		memory_fd.hpp
 		mem_mapping.cpp mem_mapping.hpp
 		process_fd.cpp process_fd.hpp
-		scheduler.cpp scheduler.hpp
+		scheduler.cpp scheduler.hpp scheduler.s
 		procfs.cpp procfs.hpp
 		bootfs.cpp bootfs.hpp
 	)

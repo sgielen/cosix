@@ -92,6 +92,9 @@ private:
 	// entries are valid, the others are in page_allocator.kernel_page_tables
 	uint32_t **page_tables = 0;
 
+	friend struct cloudos::scheduler;
+	void *esp = 0;
+
 	// The memory mappings used by this process.
 	mem_mapping_list *mappings = 0;
 	// Add the given mem_mapping_t to the page directory and tables, and add

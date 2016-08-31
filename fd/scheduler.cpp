@@ -4,6 +4,8 @@
 #include <hw/segments.hpp>
 #include <memory/allocator.hpp>
 
+extern "C" void switch_thread(void **old_sp, void *sp);
+
 using namespace cloudos;
 
 scheduler::scheduler()
@@ -11,6 +13,26 @@ scheduler::scheduler()
 , ready(0)
 , pid_counter(1)
 {}
+
+void scheduler::initial_yield()
+{
+	// yield from the initial kernel thread to init's kernel thread
+	schedule_next();
+	void *esp;
+	switch_thread(&esp, running->data->esp);
+}
+
+void scheduler::thread_yield()
+{
+	auto *old_process = running;
+
+	schedule_next();
+
+	if(old_process != 0 && old_process != running) {
+		switch_thread(&old_process->data->esp, running->data->esp);
+		// scheduler yielded back to this thread
+	}
+}
 
 void scheduler::schedule_next()
 {
@@ -38,32 +60,15 @@ void scheduler::schedule_next()
 		kernel_panic("A process in the ready list had actually exited");
 	}
 
-	if(old_process != 0 && old_process != running) {
-		old_process->data->save_sse_state();
+	if(old_process != running) {
+		if(old_process != 0) {
+			old_process->data->save_sse_state();
+		}
+		running->data->install_page_directory();
+		get_gdt()->set_fsbase(running->data->get_fsbase());
+		get_gdt()->set_kernel_stack(running->data->get_kernel_stack_top());
 		running->data->restore_sse_state();
 	}
-}
-
-void scheduler::resume_running(interrupt_state_t *regs)
-{
-	if(!running) {
-		kernel_panic("Cannot resume_running with nothing scheduled to run");
-	}
-
-	while(running && !running->data->is_running()) {
-		schedule_next();
-	}
-
-	if(!running) {
-		// This can't happen, because init is always running
-		kernel_panic("Cannot resume_running, all processes exited");
-	}
-
-	process_fd *fh = running->data;
-	fh->get_return_state(regs);
-	fh->install_page_directory();
-	get_gdt()->set_fsbase(fh->get_fsbase());
-	get_gdt()->set_kernel_stack(fh->get_kernel_stack_top());
 }
 
 void scheduler::process_fd_ready(process_fd *fd)

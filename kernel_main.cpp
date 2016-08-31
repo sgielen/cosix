@@ -217,7 +217,7 @@ struct interrupt_handler : public interrupt_functor {
 			int irq = int_no - 0x20;
 			if(irq == 0 /* system timer */) {
 				get_root_device()->timer_event_recursive();
-				get_scheduler()->schedule_next();
+				get_scheduler()->thread_yield();
 			} else if(irq == 1 /* keyboard */) {
 				// keyboard input!
 				// wait for the ready bit to turn on
@@ -249,7 +249,9 @@ struct interrupt_handler : public interrupt_functor {
 			}
 		}
 
-		get_scheduler()->resume_running(regs);
+		if(running_process) {
+			running_process->get_return_state(regs);
+		}
 	}
 };
 
@@ -412,7 +414,9 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	stream << "Waiting for interrupts...\n";
 	interrupts_global.enable_interrupts();
 
-	while(1) {}
+	// yield to init kernel thread
+	get_scheduler()->initial_yield();
+	kernel_panic("yield returned");
 }
 
 global_state::global_state() {

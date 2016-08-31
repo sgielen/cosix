@@ -22,6 +22,10 @@ isr_common:
 	cld
 	/* call into C */
 	call isr_handler
+	jmp do_iret
+
+.global do_iret
+do_iret:
 	/* switch back to original segments */
 	pop %eax
 	mov %ax, %ds

@@ -64,7 +64,6 @@ void interrupt_global::setup(interrupt_table &table) {
 void interrupt_global::call(interrupt_state_t *regs) {
 	interrupt_functor &f = *functor;
 	int int_no = regs->int_no;
-	f(regs);
 
 	if(int_no >= 0x20 && int_no < 0x30) {
 		// IRQ caused this interrupt, so ACK it with the PICs
@@ -73,6 +72,8 @@ void interrupt_global::call(interrupt_state_t *regs) {
 			outb(slave_pic_cmd, 0x20);
 		}
 	}
+
+	f(regs);
 }
 
 void interrupt_global::enable_interrupts() {
