@@ -23,7 +23,6 @@ private:
 
 	process_list *running;
 	process_list *ready;
-	int pid_counter;
 };
 
 }

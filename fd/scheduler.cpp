@@ -11,7 +11,6 @@ using namespace cloudos;
 scheduler::scheduler()
 : running(0)
 , ready(0)
-, pid_counter(1)
 {}
 
 void scheduler::initial_yield()
@@ -73,8 +72,6 @@ void scheduler::schedule_next()
 
 void scheduler::process_fd_ready(process_fd *fd)
 {
-	fd->pid = pid_counter++;
-
 	// add to ready
 	process_list *e = get_allocator()->allocate<process_list>();
 	e->data = fd;

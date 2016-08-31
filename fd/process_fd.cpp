@@ -246,8 +246,8 @@ void cloudos::process_fd::handle_syscall() {
 
 	int syscall = state.eax;
 	if(syscall == 1) {
-		// getpid(), returns eax=pid
-		state.eax = pid;
+		// retired
+		signal(CLOUDABI_SIGSYS);
 	} else if(syscall == 2) {
 		// putstring(ebx=fd, ecx=ptr, edx=size), returns eax=0 or eax=-1 on error
 		int fdnum = state.ebx;

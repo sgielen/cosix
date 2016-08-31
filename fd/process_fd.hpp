@@ -43,9 +43,6 @@ struct fd_mapping_t {
 struct process_fd : public fd_t {
 	process_fd(const char *n);
 
-	// TODO remove
-	int pid;
-
 	void set_return_state(interrupt_state_t*);
 	void get_return_state(interrupt_state_t*);
 
