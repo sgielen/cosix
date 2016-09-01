@@ -17,13 +17,12 @@ elfrun_implementation::elfrun_implementation()
 }
 
 error_t elfrun_implementation::run_binary() {
-	process_fd *process = reinterpret_cast<process_fd*>(get_allocator()->allocate_aligned(sizeof(process_fd), 16));
+	process_fd *process = get_allocator()->allocate<process_fd>();
 	new(process) process_fd("elfrun process");
 	auto res = process->exec(buffer, pos);
 	if(res != error_t::no_error) {
 		return res;
 	}
-	get_scheduler()->process_fd_ready(process);
 	return error_t::no_error;
 }
 

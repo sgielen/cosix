@@ -13,23 +13,11 @@
 #include <userland/vdso_support.h>
 #include <elf.h>
 
-extern uint32_t _kernel_virtual_base;
-extern uint32_t initial_kernel_stack;
-extern uint32_t initial_kernel_stack_size;
-
 using namespace cloudos;
-
-static size_t len_to_pages(size_t len) {
-	size_t num_pages = len / process_fd::PAGE_SIZE;
-	if((len % process_fd::PAGE_SIZE) != 0) {
-		return num_pages + 1;
-	} else {
-		return num_pages;
-	}
-}
 
 process_fd::process_fd(const char *n)
 : fd_t(CLOUDABI_FILETYPE_PROCESS, n)
+, threads(nullptr)
 {
 	page_allocation p;
 	auto res = get_page_allocator()->allocate(&p);
@@ -102,535 +90,6 @@ error_t process_fd::get_fd(fd_mapping_t **r_mapping, size_t num, cloudabi_rights
 	}
 	*r_mapping = mapping;
 	return error_t::no_error;
-}
-
-template <typename T>
-static inline T *allocate_on_stack(uint32_t *&stack_addr, uint32_t &useresp) {
-	stack_addr = reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(stack_addr) - sizeof(T));
-	useresp -= sizeof(T);
-	return reinterpret_cast<T*>(stack_addr);
-}
-
-void cloudos::process_fd::initialize(void *start_addr) {
-	userland_stack_size = kernel_stack_size = 0x10000 /* 64 kb */;
-	kernel_stack_bottom   = reinterpret_cast<uint8_t*>(get_allocator()->allocate_aligned(kernel_stack_size, PAGE_SIZE));
-
-	// initialize all registers and return state to zero
-	memset(&state, 0, sizeof(state));
-
-	// set ring 3 data, stack & code segments
-	state.ds = state.ss = 0x23;
-	state.cs = 0x1b;
-	// set fsbase
-	state.fs = 0x33;
-
-	// stack location for new process
-	uint32_t *stack_addr = reinterpret_cast<uint32_t*>(0x80000000);
-	userland_stack_address = stack_addr;
-	uint8_t *userland_stack_bottom = reinterpret_cast<uint8_t*>(stack_addr) - userland_stack_size;
-	mem_mapping_t *stack_mapping = get_allocator()->allocate<mem_mapping_t>();
-	new (stack_mapping) mem_mapping_t(this, userland_stack_bottom, len_to_pages(userland_stack_size), NULL, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE);
-	add_mem_mapping(stack_mapping);
-	stack_mapping->ensure_completely_backed();
-	state.useresp = reinterpret_cast<uint32_t>(userland_stack_address);
-
-	// initialize vdso address
-	size_t vdso_size = vdso_blob_size;
-	uint8_t *vdso_address = reinterpret_cast<uint8_t*>(0x80040000);
-	mem_mapping_t *vdso_mapping = get_allocator()->allocate<mem_mapping_t>();
-	new (vdso_mapping) mem_mapping_t(this, vdso_address, len_to_pages(vdso_size), NULL, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE);
-	add_mem_mapping(vdso_mapping);
-	vdso_mapping->ensure_completely_backed();
-	memcpy(vdso_address, vdso_blob, vdso_size);
-
-	// initialize auxv
-	if(elf_phdr == 0) {
-		kernel_panic("About to start process but no elf_phdr present");
-	}
-	size_t auxv_entries = 6; // including CLOUDABI_AT_NULL
-	size_t auxv_size = auxv_entries * sizeof(cloudabi_auxv_t);
-	uint8_t *auxv_address = reinterpret_cast<uint8_t*>(0x80010000);
-	mem_mapping_t *auxv_mapping = get_allocator()->allocate<mem_mapping_t>();
-	new (auxv_mapping) mem_mapping_t(this, auxv_address, len_to_pages(auxv_size), NULL, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE);
-	add_mem_mapping(auxv_mapping);
-	auxv_mapping->ensure_completely_backed();
-	
-	cloudabi_auxv_t *auxv = reinterpret_cast<cloudabi_auxv_t*>(auxv_address);
-	auxv->a_type = CLOUDABI_AT_BASE;
-	auxv->a_ptr = nullptr; /* because we don't do address randomization */
-	auxv++;
-	auxv->a_type = CLOUDABI_AT_PAGESZ;
-	auxv->a_val = PAGE_SIZE;
-	auxv++;
-	auxv->a_type = CLOUDABI_AT_SYSINFO_EHDR;
-	auxv->a_ptr = vdso_address;
-	auxv++;
-	auxv->a_type = CLOUDABI_AT_PHDR;
-	auxv->a_ptr = elf_phdr;
-	auxv++;
-	auxv->a_type = CLOUDABI_AT_PHNUM;
-	auxv->a_val = elf_phnum;
-	auxv++;
-	auxv->a_type = CLOUDABI_AT_NULL;
-
-	// memory for the TCB pointer and area
-	void **tcb_address = allocate_on_stack<void*>(stack_addr, state.useresp);
-	cloudabi_tcb_t *tcb = allocate_on_stack<cloudabi_tcb_t>(stack_addr, state.useresp);
-	*tcb_address = reinterpret_cast<void*>(state.useresp);
-	// we don't currently use the TCB pointer, so set it to zero
-	memset(tcb, 0, sizeof(*tcb));
-
-	// initialize stack so that it looks like _start(auxv_address) is called
-	*allocate_on_stack<void*>(stack_addr, state.useresp) = reinterpret_cast<void*>(auxv_address);
-	*allocate_on_stack<void*>(stack_addr, state.useresp) = 0;
-
-	// initial instruction pointer
-	state.eip = reinterpret_cast<uint32_t>(start_addr);
-
-	// allow interrupts
-	const int INTERRUPT_ENABLE = 1 << 9;
-	state.eflags = INTERRUPT_ENABLE;
-
-	uint8_t *kernel_stack = reinterpret_cast<uint8_t*>(get_kernel_stack_top());
-	/* iret frame */
-	kernel_stack -= sizeof(interrupt_state_t);
-	memcpy(kernel_stack, &state, sizeof(interrupt_state_t));
-
-	/* initial kernel stack frame */
-	kernel_stack -= initial_kernel_stack_size;
-	memcpy(kernel_stack, &initial_kernel_stack, initial_kernel_stack_size);
-
-	esp = kernel_stack;
-
-	// set running state
-	running = true;
-	exitcode = 0;
-	exitsignal = 0;
-}
-
-void cloudos::process_fd::set_return_state(interrupt_state_t *new_state) {
-	state = *new_state;
-}
-
-void cloudos::process_fd::get_return_state(interrupt_state_t *return_state) {
-	*return_state = state;
-}
-
-const char *int_num_to_name(int int_no, bool *err_code);
-
-void process_fd::interrupt(int int_no, int err_code)
-{
-	if(int_no == 0x80) {
-		handle_syscall();
-		return;
-	}
-
-	get_vga_stream() << "Process " << this << " (\"" << name << "\") encountered fatal interrupt:\n";
-	get_vga_stream() << "  " << int_num_to_name(int_no, nullptr) << " at eip=0x" << hex << state.eip << dec << "\n";
-
-	if(int_no == 0x0e /* Page fault */) {
-		auto &stream = get_vga_stream();
-		if(err_code & 0x01) {
-			stream << "Caused by a page-protection violation during page ";
-		} else {
-			stream << "Caused by a non-present page during page ";
-		}
-		stream << ((err_code & 0x02) ? "write" : "read");
-		stream << ((err_code & 0x04) ? " in unprivileged mode" : " in kernel mode");
-		if(err_code & 0x08) {
-			stream << " as a result of reading a reserved field";
-		}
-		if(err_code & 0x10) {
-			stream << " as a result of an instruction fetch";
-		}
-		stream << "\n";
-		uint32_t address;
-		asm volatile("mov %%cr2, %0" : "=a"(address));
-		stream << "Virtual address accessed: 0x" << hex << address << dec << "\n";
-	}
-
-	cloudabi_signal_t sig;
-	if(int_no == 0 || int_no == 4 || int_no == 16 || int_no == 19) {
-		sig = CLOUDABI_SIGFPE;
-	} else if(int_no == 6) {
-		sig = CLOUDABI_SIGILL;
-	} else if(int_no == 11 || int_no == 12 || int_no == 13 || int_no == 14) {
-		sig = CLOUDABI_SIGSEGV;
-	} else {
-		sig = CLOUDABI_SIGKILL;
-	}
-	signal(sig);
-}
-
-void cloudos::process_fd::handle_syscall() {
-	// software interrupt
-
-	// TODO: for all system calls: check if all pointers refer to valid
-	// memory areas and if userspace has access to all of them
-
-	int syscall = state.eax;
-	if(syscall == 1) {
-		// retired
-		signal(CLOUDABI_SIGSYS);
-	} else if(syscall == 2) {
-		// putstring(ebx=fd, ecx=ptr, edx=size), returns eax=0 or eax=-1 on error
-		int fdnum = state.ebx;
-		fd_mapping_t *mapping;
-		auto res = get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FD_WRITE);
-		if(res != error_t::no_error) {
-			state.eax = -1;
-			return;
-		}
-
-		const char *str = reinterpret_cast<const char*>(state.ecx);
-		const size_t size = state.edx;
-
-		if(reinterpret_cast<uint32_t>(str) >= _kernel_virtual_base
-		|| reinterpret_cast<uint32_t>(str) + size >= _kernel_virtual_base
-		|| size >= 0x40000000
-		|| get_page_allocator()->to_physical_address(this, reinterpret_cast<const void*>(str)) == nullptr) {
-			get_vga_stream() << "putstring() of a non-userland-accessible string\n";
-			state.eax = -1;
-			return;
-		}
-
-		res = mapping->fd->putstring(str, size);
-		state.eax = res == error_t::no_error ? 0 : -1;
-	} else if(syscall == 3) {
-		// getchar(ebx=fd, ecx=offset), returns eax=resultchar or eax=-1 on error
-		int fdnum = state.ebx;
-		fd_mapping_t *mapping;
-		auto res = get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FD_READ);
-		if(res != error_t::no_error) {
-			state.eax = -1;
-			return;
-		}
-
-		size_t offset = state.ecx;
-		char buf[1];
-
-		size_t r = mapping->fd->read(offset, &buf[0], 1);
-		if(r != 1 || mapping->fd->error != error_t::no_error) {
-			state.eax = -1;
-			return;
-		}
-		state.eax = buf[0];
-	} else if(syscall == 4) {
-		// sys_proc_file_open(ecx=parameters) returns eax=fd or eax=-1 on error
-		struct args_t {
-			cloudabi_lookup_t dirfd;
-			const char *path;
-			size_t pathlen;
-			cloudabi_oflags_t oflags;
-			const cloudabi_fdstat_t *fds;
-			cloudabi_fd_t *fd;
-		};
-		args_t *args = reinterpret_cast<args_t*>(state.ecx);
-
-		int fdnum = args->dirfd.fd;
-		fd_mapping_t *mapping;
-		auto res = get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FILE_OPEN);
-		if(res != error_t::no_error) {
-			state.eax = -1;
-			return;
-		}
-
-		// TODO: take lookup flags into account, args->dirfd.flags
-
-		// check if fd can be created with such rights
-		if((mapping->rights_inheriting & args->fds->fs_rights_base) != args->fds->fs_rights_base
-		|| (mapping->rights_inheriting & args->fds->fs_rights_inheriting) != args->fds->fs_rights_inheriting) {
-			get_vga_stream() << "userspace wants too many permissions\n";
-			state.eax = -1;
-		}
-
-		fd_t *new_fd = mapping->fd->openat(args->path, args->pathlen, args->oflags, args->fds);
-		if(!new_fd || mapping->fd->error != error_t::no_error) {
-			get_vga_stream() << "failed to openat()\n";
-			state.eax = -1;
-			return;
-		}
-
-		int new_fdnum = add_fd(new_fd, args->fds->fs_rights_base, args->fds->fs_rights_inheriting);
-		*(args->fd) = new_fdnum;
-		state.eax = 0;
-	} else if(syscall == 5) {
-		// sys_fd_stat_get(ebx=fd, ecx=fdstat_t) returns eax=fd or eax=-1 on error
-		int fdnum = state.ebx;
-		fd_mapping_t *mapping;
-		auto res = get_fd(&mapping, fdnum, 0);
-		if(res != error_t::no_error) {
-			state.eax = -1;
-			return;
-		}
-
-		cloudabi_fdstat_t *stat = reinterpret_cast<cloudabi_fdstat_t*>(state.ecx);
-
-		// TODO: check if ecx until ecx+sizeof(fdstat_t) is valid *writable* process memory
-		if(reinterpret_cast<uint32_t>(stat) >= _kernel_virtual_base
-		|| reinterpret_cast<uint32_t>(stat) + sizeof(cloudabi_fdstat_t) >= _kernel_virtual_base
-		|| get_page_allocator()->to_physical_address(this, reinterpret_cast<const void*>(stat)) == nullptr) {
-			get_vga_stream() << "sys_fd_stat_get() of a non-userland-accessible string\n";
-			state.eax = -1;
-			return;
-		}
-
-		stat->fs_filetype = mapping->fd->type;
-		stat->fs_flags = mapping->fd->flags;
-		stat->fs_rights_base = mapping->rights_base;
-		stat->fs_rights_inheriting = mapping->rights_inheriting;
-		state.eax = 0;
-	} else if(syscall == 6) {
-		// sys_fd_proc_exec(ecx=parameters) returns eax=-1 on error
-		struct args_t {
-			cloudabi_fd_t fd;
-			const void *data;
-			size_t datalen;
-			const cloudabi_fd_t *fds;
-			size_t fdslen;
-		};
-
-		args_t *args = reinterpret_cast<args_t*>(state.ecx);
-
-		fd_mapping_t *mapping;
-		auto res = get_fd(&mapping, args->fd, CLOUDABI_RIGHT_PROC_EXEC);
-		if(res != error_t::no_error) {
-			state.eax = -1;
-			return;
-		}
-
-		fd_mapping_t *new_fds[args->fdslen];
-		for(size_t i = 0; i < args->fdslen; ++i) {
-			fd_mapping_t *old_mapping;
-			res = get_fd(&old_mapping, args->fds[i], 0);
-			if(res != error_t::no_error) {
-				// request to map an invalid fd
-				state.eax = -1;
-				return;
-			}
-			// copy the mapping to the new process
-			new_fds[i] = old_mapping;
-		}
-
-		uint32_t *old_page_directory = page_directory;
-		uint32_t **old_page_tables = page_tables;
-		mem_mapping_list *old_mappings = mappings;
-
-		page_allocation p;
-		res = get_page_allocator()->allocate(&p);
-		if(res != error_t::no_error) {
-			kernel_panic("Failed to allocate process paging directory");
-		}
-		page_directory = reinterpret_cast<uint32_t*>(p.address);
-		memset(page_directory, 0, PAGE_DIRECTORY_SIZE * sizeof(uint32_t));
-
-		get_page_allocator()->fill_kernel_pages(page_directory);
-		res = get_page_allocator()->allocate(&p);
-		if(res != error_t::no_error) {
-			kernel_panic("Failed to allocate page table list");
-		}
-		page_tables = reinterpret_cast<uint32_t**>(p.address);
-		for(size_t i = 0; i < 0x300; ++i) {
-			page_tables[i] = nullptr;
-		}
-		mappings = nullptr;
-		install_page_directory();
-
-		res = exec(mapping->fd);
-		if(res != error_t::no_error) {
-			get_vga_stream() << "exec() failed because of " << res << "\n";
-			page_directory = old_page_directory;
-			page_tables = old_page_tables;
-			mappings = old_mappings;
-			install_page_directory();
-			state.eax = -1;
-			return;
-		}
-
-		// TODO: Clean up all unused mappings
-
-		// Close all unused FDs
-		for(int i = 0; i <= last_fd; ++i) {
-			bool fd_is_used = false;
-			for(size_t j = 0; j <= args->fdslen; ++j) {
-				// TODO: cloudabi does not allow an fd to be mapped twice in exec()
-				if(new_fds[j]->fd == fds[i]->fd) {
-					fd_is_used = true;
-				}
-			}
-			if(!fd_is_used) {
-				// TODO: actually close
-				fds[i]->fd = nullptr;
-			}
-		}
-
-		for(size_t i = 0; i < args->fdslen; ++i) {
-			fds[i] = new_fds[i];
-		}
-		last_fd = args->fdslen - 1;
-
-		// now, when process is scheduled again, we will return to the entrypoint of the new binary
-	} else if(syscall == 7) {
-		// sys_mem_map
-		struct args_t {
-			void *addr;
-			size_t len;
-			cloudabi_mprot_t prot;
-			cloudabi_mflags_t flags;
-			cloudabi_fd_t fd;
-			cloudabi_filesize_t off;
-			void **mem;
-		};
-
-		args_t *args = reinterpret_cast<args_t*>(state.ecx);
-		if(!(args->flags & CLOUDABI_MAP_ANON) || args->fd != CLOUDABI_MAP_ANON_FD) {
-			get_vga_stream() << "Only anonymous mappings are supported at the moment\n";
-			state.eax = -1;
-			return;
-		}
-		if(!(args->flags & CLOUDABI_MAP_PRIVATE)) {
-			get_vga_stream() << "Only private mappings are supported at the moment\n";
-			state.eax = -1;
-			return;
-		}
-		void *address_requested = args->addr;
-		bool fixed = args->flags & CLOUDABI_MAP_FIXED;
-		// NOTE: cloudabi sys_mem_map() defines that address_requested
-		// is only used when MAP_FIXED is given, but in other mmap()
-		// implementations address_requested is considered a hint when
-		// MAP_FIXED isn't given. We try that as well.
-		// TODO: if !given and address_requested isn't free, also find
-		// another free virtual range.
-		if(!fixed && address_requested == nullptr) {
-			address_requested = find_free_virtual_range(len_to_pages(args->len));
-			if(address_requested == nullptr) {
-				get_vga_stream() << "Failed to find virtual memory for mapping.\n";
-				state.eax = -1;
-				return;
-			}
-		}
-		if((reinterpret_cast<uint32_t>(address_requested) % PAGE_SIZE) != 0) {
-			get_vga_stream() << "Address requested isn't page aligned\n";
-			state.eax = -1;
-			return;
-		}
-		mem_mapping_t *mapping = get_allocator()->allocate<mem_mapping_t>();
-		new (mapping) mem_mapping_t(this, address_requested, len_to_pages(args->len), NULL, 0, args->prot);
-		add_mem_mapping(mapping, fixed);
-		// TODO: instead of completely backing, await the page fault and do it then
-		mapping->ensure_completely_backed();
-		memset(address_requested, 0, args->len);
-		*(args->mem) = address_requested;
-		state.eax = 0;
-	} else if(syscall == 8) {
-		// sys_mem_unmap(ecx=addr, edx=len)
-		// find mapping, remove it from list, remove it from page tables
-		uint8_t *addr = reinterpret_cast<uint8_t*>(state.ecx);
-		//size_t len = state.edx;
-
-		// TODO: find all mappings within this range
-		// - if they are fully covered, unmap them
-		// - if they are partially covered, split them and unmap the covered part
-		// - for now, assume that we only unmap full mappings
-		mem_mapping_list *remove_mappings = nullptr;
-		remove_all(&mappings, [&](mem_mapping_list *item) {
-			return item->data->virtual_address == addr;
-		}, [&](mem_mapping_list *item) {
-			append(&remove_mappings, item);
-		});
-		iterate(remove_mappings, [&](mem_mapping_list *item) {
-			item->data->unmap_completely();
-		});
-	} else if(syscall == 9) {
-		// cloudabi_sys_proc_fork() takes no arguments, creates a new process, and:
-		// * in the parent, returns eax=child_fd, ecx=1
-		// * in the child, returns eax=CLOUDABI_PROCESS_CHILD, ecx=1 (initial thread id of new process)
-		process_fd *process = reinterpret_cast<process_fd*>(get_allocator()->allocate_aligned(sizeof(process_fd), 16));
-		new(process) process_fd("forked process");
-
-		process->userland_stack_size = userland_stack_size;
-		process->userland_stack_address = userland_stack_address;
-		process->kernel_stack_bottom = reinterpret_cast<uint8_t*>(get_allocator()->allocate_aligned(kernel_stack_size, PAGE_SIZE));
-		process->kernel_stack_size = kernel_stack_size;
-		process->elf_phdr = elf_phdr;
-		process->elf_phnum = elf_phnum;
-		process->running = true;
-
-		// dup all fd's
-		process->last_fd = last_fd;
-		for(int i = 0; i <= last_fd; ++i) {
-			fd_mapping_t *old_mapping = fds[i];
-
-			fd_mapping_t *mapping = get_allocator()->allocate<fd_mapping_t>();
-			mapping->fd = old_mapping->fd;
-			mapping->rights_base = old_mapping->rights_base;
-			mapping->rights_inheriting = old_mapping->rights_inheriting;
-			process->fds[i] = mapping;
-		}
-
-		// copy execution state
-		process->state = state;
-		memcpy(process->sse_state, sse_state, sizeof(sse_state));
-
-		// set return values
-		int fdnum = add_fd(process, CLOUDABI_RIGHT_POLL_PROC_TERMINATE, 0);
-		state.eax = fdnum;
-		state.ecx = 1;
-
-		process->state.eax = CLOUDABI_PROCESS_CHILD;
-		process->state.ecx = 1;
-
-		iterate(mappings, [&](mem_mapping_list *item) {
-			mem_mapping_t *mapping = get_allocator()->allocate<mem_mapping_t>();
-			new (mapping) mem_mapping_t(process, item->data);
-			process->add_mem_mapping(mapping);
-
-			mem_mapping_list *ml = get_allocator()->allocate<mem_mapping_list>();
-			ml->data = mapping;
-			ml->next = nullptr;
-
-			append(&process->mappings, ml);
-
-			// TODO: implement copy-on-write
-			mapping->copy_from(item->data);
-		});
-
-		process->install_page_directory();
-		uint8_t *kernel_stack = reinterpret_cast<uint8_t*>(process->get_kernel_stack_top());
-		/* iret frame */
-		kernel_stack -= sizeof(interrupt_state_t);
-		// allow interrupts
-		memcpy(kernel_stack, &process->state, sizeof(interrupt_state_t));
-
-		/* initial kernel stack frame */
-		kernel_stack -= initial_kernel_stack_size;
-		memcpy(kernel_stack, &initial_kernel_stack, initial_kernel_stack_size);
-
-		process->esp = kernel_stack;
-
-		install_page_directory();
-		get_scheduler()->process_fd_ready(process);
-	} else if(syscall == 10) {
-		// sys_proc_exit(ecx=rval). Doesn't return.
-		exit(state.ecx);
-		// running will be false after this, so we won't be rescheduled.
-		// we'll be cleaned up when the last file descriptor to this process closes.
-	} else if(syscall == 11) {
-		// sys_proc_raise(ecx=signal). Returns only if signal is not fatal.
-		signal(state.ecx);
-		// like with exit, running will be false, we'll be cleaned up later
-	} else {
-		get_vga_stream() << "Syscall " << state.eax << " unknown, signalling process\n";
-		signal(CLOUDABI_SIGSYS);
-	}
-}
-
-void *cloudos::process_fd::get_kernel_stack_top() {
-	return reinterpret_cast<char*>(kernel_stack_bottom) + kernel_stack_size;
-}
-
-void *cloudos::process_fd::get_fsbase() {
-	return reinterpret_cast<void*>(reinterpret_cast<uint32_t>(userland_stack_address) - sizeof(void*));
 }
 
 uint32_t *process_fd::get_page_table(int i) {
@@ -727,6 +186,23 @@ error_t process_fd::add_mem_mapping(mem_mapping_t *mapping, bool overwrite)
 	// we will allocate physical pages and alter the page table.
 }
 
+void process_fd::mem_unmap(void *addr, size_t )
+{
+	// TODO: find all mappings within this range
+	// - if they are fully covered, unmap them
+	// - if they are partially covered, split them and unmap the covered part
+	// - for now, assume that we only unmap full mappings
+	mem_mapping_list *remove_mappings = nullptr;
+	remove_all(&mappings, [&](mem_mapping_list *item) {
+		return item->data->virtual_address == addr;
+	}, [&](mem_mapping_list *item) {
+		append(&remove_mappings, item);
+	});
+	iterate(remove_mappings, [&](mem_mapping_list *item) {
+		item->data->unmap_completely();
+	});
+}
+
 void *process_fd::find_free_virtual_range(size_t num_pages)
 {
 	uint32_t address = 0x90000000;
@@ -757,7 +233,7 @@ void *process_fd::find_free_virtual_range(size_t num_pages)
 	return nullptr;
 }
 
-error_t process_fd::exec(fd_t *fd) {
+error_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fds) {
 	// read from this fd until it gives EOF, then exec(buf, buf_size)
 	// TODO: once all fds implement seek(), we can read() only the header,
 	// then seek to the phdr offset, then read() phdrs, then for every LOAD
@@ -777,7 +253,61 @@ error_t process_fd::exec(fd_t *fd) {
 		return fd->error;
 	}
 
-	return exec(elf_buffer, buffer_size);
+	uint32_t *old_page_directory = page_directory;
+	uint32_t **old_page_tables = page_tables;
+	mem_mapping_list *old_mappings = mappings;
+
+	page_allocation p;
+	auto res = get_page_allocator()->allocate(&p);
+	if(res != error_t::no_error) {
+		kernel_panic("Failed to allocate process paging directory");
+	}
+	page_directory = reinterpret_cast<uint32_t*>(p.address);
+	memset(page_directory, 0, PAGE_DIRECTORY_SIZE * sizeof(uint32_t));
+
+	get_page_allocator()->fill_kernel_pages(page_directory);
+	res = get_page_allocator()->allocate(&p);
+	if(res != error_t::no_error) {
+		kernel_panic("Failed to allocate page table list");
+	}
+	page_tables = reinterpret_cast<uint32_t**>(p.address);
+	for(size_t i = 0; i < 0x300; ++i) {
+		page_tables[i] = nullptr;
+	}
+	mappings = nullptr;
+	install_page_directory();
+
+	res = exec(elf_buffer, buffer_size);
+	if(res != error_t::no_error) {
+		page_directory = old_page_directory;
+		page_tables = old_page_tables;
+		mappings = old_mappings;
+		install_page_directory();
+		return res;
+	}
+
+	// Close all unused FDs
+	for(int i = 0; i <= last_fd; ++i) {
+		bool fd_is_used = false;
+		for(size_t j = 0; j < fdslen; ++j) {
+			// TODO: cloudabi does not allow an fd to be mapped twice in exec()
+			if(new_fds[j]->fd == fds[i]->fd) {
+				fd_is_used = true;
+			}
+		}
+		if(!fd_is_used) {
+			// TODO: actually close
+			fds[i]->fd = nullptr;
+		}
+	}
+
+	for(size_t i = 0; i < fdslen; ++i) {
+		fds[i] = new_fds[i];
+	}
+	last_fd = fdslen - 1;
+
+	// now, when process is scheduled again, we will return to the entrypoint of the new binary
+	return error_t::no_error;
 }
 
 error_t process_fd::exec(uint8_t *buffer, size_t buffer_size) {
@@ -879,17 +409,139 @@ error_t process_fd::exec(uint8_t *buffer, size_t buffer_size) {
 		}
 	}
 
-	// Initialize the process
-	initialize(reinterpret_cast<void*>(header->e_entry));
+	// initialize vdso address
+	size_t vdso_size = vdso_blob_size;
+	uint8_t *vdso_address = reinterpret_cast<uint8_t*>(0x80040000);
+	mem_mapping_t *vdso_mapping = get_allocator()->allocate<mem_mapping_t>();
+	new (vdso_mapping) mem_mapping_t(this, vdso_address, len_to_pages(vdso_size), NULL, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE);
+	add_mem_mapping(vdso_mapping);
+	vdso_mapping->ensure_completely_backed();
+	memcpy(vdso_address, vdso_blob, vdso_size);
+
+	// initialize auxv
+	if(elf_phdr == 0) {
+		kernel_panic("About to start process but no elf_phdr present");
+	}
+	size_t auxv_entries = 6; // including CLOUDABI_AT_NULL
+	size_t auxv_size = auxv_entries * sizeof(cloudabi_auxv_t);
+	uint8_t *auxv_address = reinterpret_cast<uint8_t*>(0x80010000);
+	mem_mapping_t *auxv_mapping = get_allocator()->allocate<mem_mapping_t>();
+	new (auxv_mapping) mem_mapping_t(this, auxv_address, len_to_pages(auxv_size), NULL, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE);
+	add_mem_mapping(auxv_mapping);
+	auxv_mapping->ensure_completely_backed();
+	
+	cloudabi_auxv_t *auxv = reinterpret_cast<cloudabi_auxv_t*>(auxv_address);
+	auxv->a_type = CLOUDABI_AT_BASE;
+	auxv->a_ptr = nullptr; /* because we don't do address randomization */
+	auxv++;
+	auxv->a_type = CLOUDABI_AT_PAGESZ;
+	auxv->a_val = PAGE_SIZE;
+	auxv++;
+	auxv->a_type = CLOUDABI_AT_SYSINFO_EHDR;
+	auxv->a_ptr = vdso_address;
+	auxv++;
+	auxv->a_type = CLOUDABI_AT_PHDR;
+	auxv->a_ptr = elf_phdr;
+	auxv++;
+	auxv->a_type = CLOUDABI_AT_PHNUM;
+	auxv->a_val = elf_phnum;
+	auxv++;
+	auxv->a_type = CLOUDABI_AT_NULL;
+
+	// remove all existing threads
+	auto scheduler = get_scheduler();
+	iterate(threads, [&](thread_list *item) {
+		scheduler->thread_exiting(item->data);
+		item->data->thread_exit();
+	});
+	threads = nullptr;
+	last_thread = MAIN_THREAD - 1;
+
+	// set running state
+	running = true;
+	exitcode = 0;
+	exitsignal = 0;
+
+	// create the initial stack
+	size_t userland_stack_size = 0x10000 /* 64 kb */;
+	uint8_t *userland_stack_top = reinterpret_cast<uint8_t*>(0x80000000);
+	uint8_t *userland_stack_bottom = userland_stack_top - userland_stack_size;
+	mem_mapping_t *stack_mapping = get_allocator()->allocate<mem_mapping_t>();
+	new (stack_mapping) mem_mapping_t(this, userland_stack_bottom, len_to_pages(userland_stack_size), NULL, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE);
+	add_mem_mapping(stack_mapping);
+	stack_mapping->ensure_completely_backed();
+
+	// create the main thread
+	add_thread(userland_stack_top, auxv_address, reinterpret_cast<void*>(header->e_entry));
+
 	return error_t::no_error;
 }
 
-void process_fd::save_sse_state() {
-	asm volatile("fxsave %0" : "=m" (sse_state));
+void process_fd::fork(thread *otherthread) {
+	process_fd *otherprocess = otherthread->get_process();
+
+	if(threads != nullptr) {
+		kernel_panic("Cannot call fork() on a process_fd that already has threads");
+	}
+
+	thread *mainthread = reinterpret_cast<thread*>(get_allocator()->allocate_aligned(sizeof(thread), 16));
+	new (mainthread) thread(this, otherthread);
+
+	elf_phdr = otherprocess->elf_phdr;
+	elf_phnum = otherprocess->elf_phnum;
+	running = true;
+	if(!otherprocess->running) {
+		kernel_panic("Forked from a process that wasn't running");
+	}
+
+	// dup all fd's
+	last_fd = otherprocess->last_fd;
+	for(int i = 0; i <= last_fd; ++i) {
+		fd_mapping_t *old_mapping = otherprocess->fds[i];
+
+		fd_mapping_t *mapping = get_allocator()->allocate<fd_mapping_t>();
+		mapping->fd = old_mapping->fd;
+		mapping->rights_base = old_mapping->rights_base;
+		mapping->rights_inheriting = old_mapping->rights_inheriting;
+		fds[i] = mapping;
+	}
+
+	iterate(otherprocess->mappings, [&](mem_mapping_list *item) {
+		mem_mapping_t *mapping = get_allocator()->allocate<mem_mapping_t>();
+		new (mapping) mem_mapping_t(this, item->data);
+		add_mem_mapping(mapping);
+
+		mem_mapping_list *ml = get_allocator()->allocate<mem_mapping_list>();
+		ml->data = mapping;
+		ml->next = nullptr;
+
+		append(&mappings, ml);
+
+		// TODO: implement copy-on-write
+		mapping->copy_from(item->data);
+	});
+
+	add_thread(mainthread);
 }
 
-void process_fd::restore_sse_state() {
-	asm volatile("fxrstor %0" : "=m" (sse_state));
+void process_fd::add_thread(thread *thr)
+{
+	auto item = get_allocator()->allocate<thread_list>();
+	item->data = thr;
+	item->next = nullptr;
+	append(&threads, item);
+	get_scheduler()->thread_ready(thr);
+}
+
+thread *process_fd::add_thread(void *stack_address, void *auxv_address, void *entrypoint)
+{
+	if(!running) {
+		kernel_panic("add_thread on a process that is dead");
+	}
+	thread *thr = reinterpret_cast<thread*>(get_allocator()->allocate_aligned(sizeof(thread), 16));
+	new (thr) thread(this, stack_address, auxv_address, entrypoint, ++last_thread);
+	add_thread(thr);
+	return thr;
 }
 
 void process_fd::exit(cloudabi_exitcode_t c, cloudabi_signal_t s)
@@ -912,8 +564,16 @@ void process_fd::exit(cloudabi_exitcode_t c, cloudabi_signal_t s)
 	// TODO: clean up all memory maps
 	// TODO: free all allocations
 
-	// now yield, so we aren't scheduled anymore
-	get_scheduler()->thread_yield();
+	// unschedule all threads
+	auto scheduler = get_scheduler();
+	iterate(threads, [&](thread_list *item) {
+		scheduler->thread_exiting(item->data);
+		item->data->thread_exit();
+	});
+	threads = nullptr;
+
+	// now yield, so we can schedule a ready thread
+	scheduler->thread_yield();
 }
 
 void process_fd::signal(cloudabi_signal_t s)

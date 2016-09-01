@@ -537,7 +537,6 @@ cloudabi_sys_proc_exit(
 	register int32_t reg_eax asm("eax") = 10;
 	register int32_t reg_ecx asm("ecx") = rval;
 	asm volatile("int $0x80" : : "r"(reg_eax), "r"(reg_ecx));
-	asm volatile("1: hlt; jmp 1;");
 	while(1) {}
 }
 
@@ -664,8 +663,11 @@ cloudabi_sys_thread_create(
 	cloudabi_threadattr_t *attr,
 	cloudabi_tid_t *tid
 ) {
-	putstring_l(__PRETTY_FUNCTION__);
-	return CLOUDABI_ENOSYS;
+	register int32_t reg_eax asm("eax") = 12;
+	register cloudabi_threadattr_t *reg_ecx asm("ecx") = attr;
+	register cloudabi_tid_t *reg_ebx asm("ebx") = tid;
+	asm volatile("int $0x80" : "+r"(reg_eax) : "r"(reg_ecx), "r"(reg_ebx));
+	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error codes */
 }
 
 _Noreturn void
@@ -673,12 +675,16 @@ cloudabi_sys_thread_exit(
 	_Atomic(cloudabi_lock_t) *lock,
 	cloudabi_scope_t scope
 ) {
-	putstring_l(__PRETTY_FUNCTION__);
+	register int32_t reg_eax asm("eax") = 13;
+	register _Atomic(cloudabi_lock_t) *reg_ecx asm("ecx") = lock;
+	register cloudabi_scope_t reg_ebx asm("ebx") = scope;
+	asm volatile("int $0x80" : "+r"(reg_eax) : "r"(reg_ecx), "r"(reg_ebx));
 	while(1) {}
 }
 
 cloudabi_errno_t
 cloudabi_sys_thread_yield(void) {
-	putstring_l(__PRETTY_FUNCTION__);
-	return CLOUDABI_ENOSYS;
+	register int32_t reg_eax asm("eax") = 14;
+	asm volatile("int $0x80" : "+r"(reg_eax));
+	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error codes */
 }

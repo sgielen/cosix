@@ -9,6 +9,15 @@ using namespace cloudos;
 
 typedef uint8_t *addr_t;
 
+size_t cloudos::len_to_pages(size_t len) {
+	size_t num_pages = len / PAGE_SIZE;
+	if((len % PAGE_SIZE) != 0) {
+		return num_pages + 1;
+	} else {
+		return num_pages;
+	}
+}
+
 mem_mapping_t::mem_mapping_t(process_fd *o, void *a,
 	size_t n, fd_mapping_t *b,
 	cloudabi_filesize_t offset, cloudabi_mprot_t p)
@@ -50,11 +59,10 @@ void mem_mapping_t::copy_from(mem_mapping_t *other)
 			uint8_t *copy_from = reinterpret_cast<uint8_t*>(other->virtual_address) + PAGE_SIZE * i;
 			uint8_t *copy_to = reinterpret_cast<uint8_t*>(virtual_address) + PAGE_SIZE * i;
 			ensure_backed(i);
-			// assume that other->owner is the active process
+			other->owner->install_page_directory();
 			memcpy(buf, copy_from, PAGE_SIZE);
 			owner->install_page_directory();
 			memcpy(copy_to, buf, PAGE_SIZE);
-			other->owner->install_page_directory();
 		}
 	}
 }

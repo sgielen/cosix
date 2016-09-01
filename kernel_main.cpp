@@ -149,9 +149,9 @@ __attribute__((noreturn)) static void fatal_exception(int int_no, int err_code, 
 		stream << "Error Code: 0x" << hex << err_code << dec << "\n";
 	}
 
-	process_fd *proc = get_scheduler()->get_running_process();
-	if(proc) {
-		stream << "Active process: " << proc << " (\"" << proc->name << "\")\n";
+	thread *thread = get_scheduler()->get_running_thread();
+	if(thread) {
+		stream << "Active process: " << thread->get_process() << " (\"" << thread->get_process()->name << "\")\n";
 	}
 
 	stream << "Instruction pointer at point of fault: 0x" << hex << regs->eip << dec << "\n";
@@ -191,22 +191,22 @@ struct interrupt_handler : public interrupt_functor {
 		}
 
 		bool in_kernel = regs->cs == 8;
-		auto running_process = get_scheduler()->get_running_process();
-		if(running_process) {
-			running_process->set_return_state(regs);
+		auto running_thread = get_scheduler()->get_running_thread();
+		if(running_thread) {
+			running_thread->set_return_state(regs);
 		}
 
-		if(!in_kernel && !running_process) {
-			get_vga_stream() << "!!!! Interrupt occurred in userland, but without an active process !!!!\n";
+		if(!in_kernel && !running_thread) {
+			get_vga_stream() << "!!!! Interrupt occurred in userland, but without an active thread !!!!\n";
 			fatal_exception(int_no, err_code, regs);
 		}
 
 		// TODO: handle page fault as a special case, because it can be
-		// solved by the running_process
+		// solved by the running_thread
 
-		// Any exceptions in the userland are handled by the process_fd
+		// Any exceptions in the userland are handled by the thread
 		if(!in_kernel && (int_no < 0x20 || int_no >= 0x30)) {
-			running_process->interrupt(int_no, err_code);
+			running_thread->interrupt(int_no, err_code);
 		}
 		// Any exceptions in the kernel lead to immediate kernel_panic
 		else if(int_no < 0x20 || int_no >= 0x30) {
@@ -249,8 +249,8 @@ struct interrupt_handler : public interrupt_functor {
 			}
 		}
 
-		if(running_process) {
-			running_process->get_return_state(regs);
+		if(running_thread) {
+			running_thread->get_return_state(regs);
 		}
 	}
 };
@@ -354,11 +354,10 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 
 	interrupt_handler handler;
 
-	global.init = reinterpret_cast<process_fd*>(get_allocator()->allocate_aligned(sizeof(process_fd), 16));
+	global.init = get_allocator()->allocate<process_fd>();
 	new (global.init) process_fd("init");
 	stream << "Init process created\n";
 
-	global.init->add_initial_fds();
 	global.init->install_page_directory();
 	stream << "Paging directory loaded, paging is in effect\n";
 
@@ -367,11 +366,11 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	if(init_exec_fd == nullptr) {
 		kernel_panic("Failed to open init");
 	}
-	auto res = global.init->exec(init_exec_fd);
+	auto res = global.init->exec(init_exec_fd, 0, nullptr);
 	if(res != error_t::no_error) {
 		kernel_panic("Failed to start init");
 	}
-	get_scheduler()->process_fd_ready(global.init);
+	global.init->add_initial_fds();
 
 	interrupt_table interrupts;
 	interrupt_global interrupts_global(&handler);

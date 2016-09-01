@@ -2,7 +2,7 @@
 
 #include "fd.hpp"
 #include "mem_mapping.hpp"
-#include "hw/interrupt.hpp"
+#include "thread.hpp"
 #include <oslibc/list.hpp>
 #include <cloudabi/headers/cloudabi_types.h>
 
@@ -12,8 +12,6 @@ struct process_fd;
 typedef linked_list<process_fd*> process_list;
 
 struct vga_stream;
-
-typedef uint8_t sse_state_t [512] __attribute__ ((aligned (16)));
 
 struct fd_mapping_t {
 	fd_t *fd; /* can be 0, in this case, the mapping is unused and can be reused for another fd */
@@ -33,7 +31,9 @@ struct fd_mapping_t {
  * tables. The upper 0x100 page tables are in the page directory, but owned by
  * the page_allocator.
  *
- * The process_fd also holds and owns its kernel and userland stack.
+ * The process_fd also holds and owns its threads. A process_fd starts without
+ * threads, but creates one upon exec(), and copies the calling thread upon
+ * fork().
  *
  * When a process FD refcount becomes 0, the process must be exited. This means
  * all FDs in the file descriptor list are de-refcounted (and possibly cleaned
@@ -44,14 +44,6 @@ struct process_fd : public fd_t {
 	process_fd(const char *n);
 	void add_initial_fds();
 
-	void set_return_state(interrupt_state_t*);
-	void get_return_state(interrupt_state_t*);
-
-	void interrupt(int int_no, int err_code);
-	void handle_syscall();
-
-	void *get_kernel_stack_top();
-	void *get_fsbase();
 	void install_page_directory();
 	uint32_t *get_page_table(int i);
 	uint32_t *ensure_get_page_table(int i);
@@ -59,24 +51,46 @@ struct process_fd : public fd_t {
 	// Read an ELF from this fd, map it, and prepare it for execution. This
 	// function will not remove previous process contents, use unexec() for
 	// that.
-	error_t exec(fd_t *);
+	error_t exec(fd_t *, size_t fdslen, fd_mapping_t **new_fds);
 	// TODO: make this private
 	error_t exec(uint8_t *elf_buffer, size_t size);
 
+	// create a main thread from the given calling thread, belonging to
+	// another process (this function assumes its own page directory is
+	// loaded)
+	void fork(thread *t);
+
 	int add_fd(fd_t*, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting = 0);
 	error_t get_fd(fd_mapping_t **mapping, size_t num, cloudabi_rights_t has_rights);
-
-	void save_sse_state();
-	void restore_sse_state();
 
 	inline bool is_running() { return running; }
 	void exit(cloudabi_exitcode_t exitcode, cloudabi_signal_t exitsignal = 0);
 	void signal(cloudabi_signal_t exitsignal);
 
+	// Add the given mem_mapping_t to the page directory and tables, and add
+	// it to the list of mappings. If overwrite is false, will kernel_panic()
+	// on existing mappings.
+	error_t add_mem_mapping(mem_mapping_t *mapping, bool overwrite = false);
+	// Unmap the given address range
+	void mem_unmap(void *addr, size_t len);
+
+	// Find a piece of the address space that's free to be mapped.
+	void *find_free_virtual_range(size_t num_pages);
+
+	/* Add a thread to this process.
+	 * auxv_address and entrypoint must already point to valid memory in
+	 * this process; stack_address must point just beyond a valid memory region.
+	 */
+	thread *add_thread(void *stack_address, void *auxv_address, void *entrypoint);
+
 	static const int PAGE_SIZE = 4096 /* bytes */;
 
 private:
-	void initialize(void *start_addr);
+	thread_list *threads;
+	void add_thread(thread *thr);
+	// TODO: for shared mutexes, all cloudabi_tid_t's should be globally
+	// unique; we don't have shared mutexes yet
+	cloudabi_tid_t last_thread = MAIN_THREAD - 1;
 
 	static const int PAGE_DIRECTORY_SIZE = 1024 /* entries */;
 
@@ -90,24 +104,8 @@ private:
 	// entries are valid, the others are in page_allocator.kernel_page_tables
 	uint32_t **page_tables = 0;
 
-	friend struct cloudos::scheduler;
-	void *esp = 0;
-
 	// The memory mappings used by this process.
 	mem_mapping_list *mappings = 0;
-	// Add the given mem_mapping_t to the page directory and tables, and add
-	// it to the list of mappings. If overwrite is false, will kernel_panic()
-	// on existing mappings.
-	error_t add_mem_mapping(mem_mapping_t *mapping, bool overwrite = false);
-	// Find a piece of the address space that's free to be mapped.
-	void *find_free_virtual_range(size_t num_pages);
-
-	interrupt_state_t state;
-	sse_state_t sse_state;
-	size_t userland_stack_size = 0;
-	void *userland_stack_address = 0;
-	void *kernel_stack_bottom = 0;
-	size_t kernel_stack_size = 0;
 
 	void *elf_phdr = 0;
 	size_t elf_phnum = 0;

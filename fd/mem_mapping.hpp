@@ -7,6 +7,8 @@
 
 namespace cloudos {
 
+size_t len_to_pages(size_t len);
+
 struct mem_mapping_t;
 // TODO: use a more fitting data structure for mappings
 typedef linked_list<mem_mapping_t*> mem_mapping_list;
@@ -36,7 +38,7 @@ struct mem_mapping_t {
 
 	// Make a new mapping from the old one
 	mem_mapping_t(process_fd *owner, mem_mapping_t *other);
-	// Copy the contents of the old mapping. This assumes other->owner
+	// Copy the contents of the old mapping. This assumes this->owner
 	// is currently active, and also returns as such.
 	void copy_from(mem_mapping_t *other);
 

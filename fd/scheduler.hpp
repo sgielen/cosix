@@ -1,6 +1,6 @@
 #pragma once
 
-#include "process_fd.hpp"
+#include "thread.hpp"
 
 namespace cloudos {
 
@@ -13,16 +13,17 @@ struct scheduler {
 	void thread_yield();
 	void resume_running(interrupt_state_t *);
 
-	void process_fd_ready(process_fd *fd);
-	void process_fd_blocked(process_fd *fd);
+	void thread_ready(thread *thr);
+	void thread_exiting(thread *thr);
+	void thread_blocked(thread *thr);
 
-	process_fd *get_running_process();
+	thread *get_running_thread();
 
 private:
 	void schedule_next();
 
-	process_list *running;
-	process_list *ready;
+	thread_list *running;
+	thread_list *ready;
 };
 
 }
