@@ -107,9 +107,6 @@ private:
 	// The memory mappings used by this process.
 	mem_mapping_list *mappings = 0;
 
-	void *elf_phdr = 0;
-	size_t elf_phnum = 0;
-
 	bool running = false;
 	cloudabi_exitcode_t exitcode = 0;
 	cloudabi_signal_t exitsignal = 0;

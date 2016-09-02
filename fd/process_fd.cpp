@@ -363,7 +363,7 @@ error_t process_fd::exec(uint8_t *buffer, size_t buffer_size) {
 	}
 
 	// Save the phdrs
-	elf_phnum = header->e_phnum;
+	size_t elf_phnum = header->e_phnum;
 	size_t elf_ph_size = header->e_phentsize * elf_phnum;
 
 	if(header->e_phoff >= buffer_size || (header->e_phoff + elf_ph_size) >= buffer_size) {
@@ -371,7 +371,7 @@ error_t process_fd::exec(uint8_t *buffer, size_t buffer_size) {
 		return error_t::exec_format;
 	}
 
-	elf_phdr = reinterpret_cast<uint8_t*>(0x80060000);
+	void *elf_phdr = reinterpret_cast<uint8_t*>(0x80060000);
 	mem_mapping_t *phdr_mapping = get_allocator()->allocate<mem_mapping_t>();
 	new (phdr_mapping) mem_mapping_t(this, elf_phdr, len_to_pages(elf_ph_size), NULL, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE);
 	add_mem_mapping(phdr_mapping);
@@ -419,9 +419,6 @@ error_t process_fd::exec(uint8_t *buffer, size_t buffer_size) {
 	memcpy(vdso_address, vdso_blob, vdso_size);
 
 	// initialize auxv
-	if(elf_phdr == 0) {
-		kernel_panic("About to start process but no elf_phdr present");
-	}
 	size_t auxv_entries = 6; // including CLOUDABI_AT_NULL
 	size_t auxv_size = auxv_entries * sizeof(cloudabi_auxv_t);
 	uint8_t *auxv_address = reinterpret_cast<uint8_t*>(0x80010000);
@@ -487,8 +484,6 @@ void process_fd::fork(thread *otherthread) {
 	thread *mainthread = reinterpret_cast<thread*>(get_allocator()->allocate_aligned(sizeof(thread), 16));
 	new (mainthread) thread(this, otherthread);
 
-	elf_phdr = otherprocess->elf_phdr;
-	elf_phnum = otherprocess->elf_phnum;
 	running = true;
 	if(!otherprocess->running) {
 		kernel_panic("Forked from a process that wasn't running");
