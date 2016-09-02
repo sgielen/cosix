@@ -6,23 +6,29 @@
 #include <errno.h>
 #include <string.h>
 
+int start_binary(const char *name) {
+	int bfd = openat(3, name, O_RDONLY);
+	if(bfd < 0) {
+		dprintf(0, "Failed to open %s: %s\n", name, strerror(errno));
+		return bfd;
+	}
+
+	dprintf(0, "Init going to program_spawn() %s...\n", name);
+
+	int pfd = program_spawn(bfd, argdata_create_fd(0));
+	if(pfd < 0) {
+		dprintf(0, "%s failed to spawn: %s\n", name, strerror(errno));
+	} else {
+		dprintf(0, "%s spawned, fd: %d\n", name, pfd);
+	}
+	return pfd;
+}
+
 void program_main(const argdata_t *) {
 	dprintf(0, "Init starting up.\n");
 
-	int exec_test_fd = openat(3, "exec_test", O_RDONLY);
-	if(exec_test_fd < 0) {
-		dprintf(0, "Failed to open exec_test: %s\n", strerror(errno));
-		exit(1);
-	}
-
-	dprintf(0, "Init going to program_spawn() exec_test...\n");
-
-	int fd = program_spawn(exec_test_fd, argdata_create_fd(0));
-	if(fd < 0) {
-		dprintf(0, "exec_test failed to spawn: %s\n", strerror(errno));
-	} else {
-		dprintf(0, "exec_test spawned, fd: %d\n", fd);
-	}
+	start_binary("exec_test");
+	start_binary("thread_test");
 
 	// init must never exit, but we don't have sys_poll() / sys_poll_fd()
 	// yet, so we need to busy-wait
