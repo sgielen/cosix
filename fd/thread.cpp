@@ -412,6 +412,7 @@ void thread::handle_syscall() {
 		// sys_thread_exit(ecx=lock, ebx=lock_scope). Doesn't return.
 		// TODO: unlock the lock
 		thread_exit();
+		get_scheduler()->thread_yield();
 	} else if(syscall == 14) {
 		// sys_thread_yield()
 		get_scheduler()->thread_yield();
