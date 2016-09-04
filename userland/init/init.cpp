@@ -21,6 +21,10 @@ int start_binary(const char *name) {
 	} else {
 		dprintf(0, "%s spawned, fd: %d\n", name, pfd);
 	}
+
+	// wait a while until the process is probably done
+	for(int i = 0; i < 500000000; ++i) {}
+
 	return pfd;
 }
 
@@ -29,6 +33,7 @@ void program_main(const argdata_t *) {
 
 	start_binary("exec_test");
 	start_binary("thread_test");
+	start_binary("pipe_test");
 
 	// init must never exit, but we don't have sys_poll() / sys_poll_fd()
 	// yet, so we need to busy-wait

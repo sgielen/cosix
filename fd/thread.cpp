@@ -1,8 +1,10 @@
 #include "thread.hpp"
 #include "process_fd.hpp"
 #include "scheduler.hpp"
+#include "pipe_fd.hpp"
 #include <memory/page_allocator.hpp>
 #include <memory/allocator.hpp>
+#include "global.hpp"
 
 using namespace cloudos;
 
@@ -190,7 +192,7 @@ void thread::handle_syscall() {
 		res = mapping->fd->putstring(str, size);
 		state.eax = res == error_t::no_error ? 0 : -1;
 	} else if(syscall == 3) {
-		// getchar(ebx=fd, ecx=offset), returns eax=resultchar or eax=-1 on error
+		// sys_fd_read(ebx=fd, ecx=ptr, edx=size), returns eax=0 or eax=-1 on error
 		int fdnum = state.ebx;
 		fd_mapping_t *mapping;
 		auto res = process->get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FD_READ);
@@ -199,15 +201,16 @@ void thread::handle_syscall() {
 			return;
 		}
 
-		size_t offset = state.ecx;
-		char buf[1];
-
-		size_t r = mapping->fd->read(offset, &buf[0], 1);
-		if(r != 1 || mapping->fd->error != error_t::no_error) {
+		// TODO: store offset in fd
+		void *buf = reinterpret_cast<void*>(state.ecx);
+		size_t len = state.edx;
+		size_t r = mapping->fd->read(0, buf, len);
+		if(mapping->fd->error != error_t::no_error) {
 			state.eax = -1;
 			return;
 		}
-		state.eax = buf[0];
+		state.eax = 0;
+		state.edx = r;
 	} else if(syscall == 4) {
 		// sys_proc_file_open(ecx=parameters) returns eax=fd or eax=-1 on error
 		struct args_t {
@@ -416,6 +419,20 @@ void thread::handle_syscall() {
 	} else if(syscall == 14) {
 		// sys_thread_yield()
 		get_scheduler()->thread_yield();
+	} else if(syscall == 15) {
+		// sys_fd_create2(ecx=type, ebx=fd1, edx=fd2). Returns eax=0 on success, -1 otherwise.
+		if(state.ecx == CLOUDABI_FILETYPE_FIFO) {
+			cloudabi_fd_t *fd1 = reinterpret_cast<cloudabi_fd_t*>(state.ebx);
+			cloudabi_fd_t *fd2 = reinterpret_cast<cloudabi_fd_t*>(state.edx);
+			fd_t *pfd = get_allocator()->allocate<pipe_fd>();
+			new (pfd) pipe_fd(1024, "pipe_fd");
+
+			*fd1 = process->add_fd(pfd, CLOUDABI_RIGHT_FD_READ, 0);
+			*fd2 = process->add_fd(pfd, CLOUDABI_RIGHT_FD_WRITE, 0);
+			state.eax = 0;
+		} else {
+			state.eax = -1;
+		}
 	} else {
 		get_vga_stream() << "Syscall " << state.eax << " unknown, signalling process\n";
 		process->signal(CLOUDABI_SIGSYS);

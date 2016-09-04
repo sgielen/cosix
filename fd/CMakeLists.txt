@@ -9,5 +9,6 @@ if(BAREMETAL_ENABLED)
 		procfs.cpp procfs.hpp
 		bootfs.cpp bootfs.hpp
 		thread.cpp thread.hpp
+		pipe_fd.cpp pipe_fd.hpp
 	)
 endif()

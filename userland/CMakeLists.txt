@@ -52,6 +52,7 @@ endmacro()
 add_external_binary(init)
 add_external_binary(exec_test)
 add_external_binary(thread_test)
+add_external_binary(pipe_test)
 
 if(BAREMETAL_ENABLED)
 	# Create a header with definitions for all external binaries

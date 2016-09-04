@@ -76,8 +76,15 @@ cloudabi_sys_fd_create2(
 	cloudabi_fd_t *fd1,
 	cloudabi_fd_t *fd2
 ) {
-	putstring_l(__PRETTY_FUNCTION__);
-	return CLOUDABI_ENOSYS;
+	register int32_t reg_eax asm("eax") = 15;
+	register uint32_t reg_ecx asm("ecx") = type;
+	register cloudabi_fd_t *reg_ebx asm("ebx") = fd1;
+	register cloudabi_fd_t *reg_edx asm("edx") = fd2;
+	asm volatile("int $0x80"
+		: "+r"(reg_eax)
+		: "r"(reg_ebx), "r"(reg_ecx), "r"(reg_edx)
+		: "memory");
+	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error codes */
 }
 
 cloudabi_errno_t
@@ -128,8 +135,23 @@ cloudabi_sys_fd_read(
 	size_t iovcnt,
 	size_t *nread
 ) {
-	putstring_l(__PRETTY_FUNCTION__);
-	return CLOUDABI_ENOSYS;
+	register int32_t reg_eax asm("eax") = 3;
+	register uint32_t reg_ebx asm("ebx") = fd;
+	register const char *reg_ecx asm("ecx");
+	register uint32_t reg_edx asm("edx");
+	*nread = 0;
+	for(size_t i = 0; i < iovcnt; ++i) {
+		reg_ecx = iov[i].iov_base;
+		reg_edx = iov[i].iov_len;
+		asm volatile("int $0x80"
+			: "+r"(reg_eax), "+r"(reg_edx) : "r"(reg_ebx), "r"(reg_ecx)
+			: "memory");
+		if(reg_eax < 0) {
+			return CLOUDABI_EINVAL;
+		}
+		*nread += reg_edx;
+	}
+	return 0;
 }
 
 cloudabi_errno_t
