@@ -438,3 +438,29 @@ void thread::restore_sse_state() {
 	asm volatile("fxrstor %0" : "=m" (sse_state));
 }
 
+void thread::thread_block() {
+	if(blocked) {
+		kernel_panic("Trying to block a blocked thread");
+	}
+	blocked = true;
+	unscheduled = false;
+	get_scheduler()->thread_blocked(this);
+	get_scheduler()->thread_yield();
+}
+
+void thread::thread_unblock() {
+	if(!blocked) {
+		kernel_panic("unblock() while not blocked");
+	}
+
+	blocked = false;
+	if(unscheduled) {
+		// re-schedule
+		get_scheduler()->thread_ready(this);
+		unscheduled = false;
+	}
+}
+
+bool thread::is_ready() {
+	return running && process->is_running() && !blocked;
+}

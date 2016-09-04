@@ -46,9 +46,15 @@ struct thread {
 	void *get_fsbase();
 
 	inline process_fd *get_process() { return process; }
+
 	inline bool is_running() { return running; }
+	bool is_ready();
+	inline bool is_blocked() { return blocked; }
+	inline bool is_unscheduled() { return unscheduled; }
 
 	inline void thread_exit() { running = false; }
+	void thread_block();
+	void thread_unblock();
 
 private:
 	process_fd *process;
@@ -57,6 +63,9 @@ private:
 
 	friend struct cloudos::scheduler;
 	void *esp = 0;
+
+	bool blocked;
+	bool unscheduled;
 
 	interrupt_state_t state;
 	sse_state_t sse_state;

@@ -39,16 +39,27 @@ void scheduler::schedule_next()
 	auto *old_thread = running;
 
 	if(running) {
-		// Don't re-schedule processes that have exited
-		if(running->data->is_running() && running->data->get_process()->is_running()) {
+		// Immediately unschedule processes that are blocked or have exited
+		if(running->data->is_blocked()) {
+			running->data->unscheduled = true;
+		} else if(running->data->is_running() && running->data->get_process()->is_running()) {
 			append(&ready, running);
 		}
 	}
 
+	while(ready && !ready->data->is_ready()) {
+		// next thread is not ready for running, unschedule it, we'll re-schedule it
+		// later
+		ready->data->unscheduled = true;
+		ready = ready->next;
+	}
+
 	if(!ready) {
-		// for now, init() is always ready for running. When we implement blocking,
-		// it might be possible that nothing is ready for running; in that case, just
-		// do nothing until we're interrupted again.
+		// for now, init() is always ready for running. That's a waste of CPU time; we should
+		// actually halt if nothing is ready. Then, interrupts should also be enabled
+		// temporarily, so that we can be woken up again. However, I should study the effects
+		// of such preemptions on the active kernel thread, and ensure that there's no problem
+		// when such a thing happens inside the scheduler.
 		kernel_panic("schedule_next() was called, but nothing was ready");
 	}
 
@@ -56,9 +67,9 @@ void scheduler::schedule_next()
 	ready = running->next;
 	running->next = nullptr;
 
-	if(!running->data->is_running() || !running->data->get_process()->is_running()) {
-		get_vga_stream() << "Exited thread: " << running->data << ", process: " << running->data->get_process() << ", " << running->data->get_process()->name << "\n";
-		kernel_panic("A thread in the ready list had actually exited");
+	if(running->data->is_blocked() || !running->data->is_running() || !running->data->get_process()->is_running()) {
+		get_vga_stream() << "Thread: " << running->data << ", process: " << running->data->get_process() << ", " << running->data->get_process()->name << "\n";
+		kernel_panic("A thread in the ready list was blocked or had already exited");
 	}
 
 	if(old_thread != running) {
@@ -82,15 +93,16 @@ void scheduler::thread_ready(thread *fd)
 	append(&ready, e);
 }
 
-void scheduler::thread_exiting(thread *thr)
+void scheduler::thread_exiting(thread *)
 {
-	thread_blocked(thr);
+	// don't need to do anything, I'll notice it once I try
+	// to schedule this thread
 }
 
-void scheduler::thread_blocked(thread *thr)
+void scheduler::thread_blocked(thread *)
 {
-	// remove thread from the blocked list
-	remove_object(&ready, thr, [](thread*){});
+	// don't need to do anything, I'll notice it once I try
+	// to schedule this thread
 }
 
 thread *scheduler::get_running_thread()
