@@ -233,7 +233,7 @@ void *process_fd::find_free_virtual_range(size_t num_pages)
 	return nullptr;
 }
 
-error_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fds) {
+error_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fds, void const *argdata, size_t argdatalen) {
 	// read from this fd until it gives EOF, then exec(buf, buf_size)
 	// TODO: once all fds implement seek(), we can read() only the header,
 	// then seek to the phdr offset, then read() phdrs, then for every LOAD
@@ -252,6 +252,9 @@ error_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fds) {
 	if(fd->error != error_t::no_error) {
 		return fd->error;
 	}
+
+	uint8_t *argdata_buffer = get_allocator()->allocate<uint8_t>(argdatalen);
+	memcpy(argdata_buffer, argdata, argdatalen);
 
 	uint32_t *old_page_directory = page_directory;
 	uint32_t **old_page_tables = page_tables;
@@ -277,7 +280,14 @@ error_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fds) {
 	mappings = nullptr;
 	install_page_directory();
 
-	res = exec(elf_buffer, buffer_size);
+	uint8_t *argdata_address = reinterpret_cast<uint8_t*>(0x80100000);
+	mem_mapping_t *argdata_mapping = get_allocator()->allocate<mem_mapping_t>();
+	new (argdata_mapping) mem_mapping_t(this, argdata_address, len_to_pages(argdatalen), NULL, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE);
+	add_mem_mapping(argdata_mapping);
+	argdata_mapping->ensure_completely_backed();
+	memcpy(argdata_address, argdata_buffer, argdatalen);
+
+	res = exec(elf_buffer, buffer_size, argdata_address, argdatalen);
 	if(res != error_t::no_error) {
 		page_directory = old_page_directory;
 		page_tables = old_page_tables;
@@ -310,7 +320,7 @@ error_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fds) {
 	return error_t::no_error;
 }
 
-error_t process_fd::exec(uint8_t *buffer, size_t buffer_size) {
+error_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *argdata, size_t argdatalen) {
 	if(buffer_size < sizeof(Elf32_Ehdr)) {
 		// Binary too small
 		return error_t::exec_format;
@@ -419,7 +429,7 @@ error_t process_fd::exec(uint8_t *buffer, size_t buffer_size) {
 	memcpy(vdso_address, vdso_blob, vdso_size);
 
 	// initialize auxv
-	size_t auxv_entries = 6; // including CLOUDABI_AT_NULL
+	size_t auxv_entries = 8; // including CLOUDABI_AT_NULL
 	size_t auxv_size = auxv_entries * sizeof(cloudabi_auxv_t);
 	uint8_t *auxv_address = reinterpret_cast<uint8_t*>(0x80010000);
 	mem_mapping_t *auxv_mapping = get_allocator()->allocate<mem_mapping_t>();
@@ -428,6 +438,12 @@ error_t process_fd::exec(uint8_t *buffer, size_t buffer_size) {
 	auxv_mapping->ensure_completely_backed();
 	
 	cloudabi_auxv_t *auxv = reinterpret_cast<cloudabi_auxv_t*>(auxv_address);
+	auxv->a_type = CLOUDABI_AT_ARGDATA;
+	auxv->a_ptr = argdata;
+	auxv++;
+	auxv->a_type = CLOUDABI_AT_ARGDATALEN;
+	auxv->a_val = argdatalen;
+	auxv++;
 	auxv->a_type = CLOUDABI_AT_BASE;
 	auxv->a_ptr = nullptr; /* because we don't do address randomization */
 	auxv++;

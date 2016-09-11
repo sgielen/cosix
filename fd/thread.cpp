@@ -308,7 +308,7 @@ void thread::handle_syscall() {
 			new_fds[i] = old_mapping;
 		}
 
-		res = process->exec(mapping->fd, args->fdslen, new_fds);
+		res = process->exec(mapping->fd, args->fdslen, new_fds, args->data, args->datalen);
 		if(res != error_t::no_error) {
 			get_vga_stream() << "exec() failed because of " << res << "\n";
 			state.eax = -1;

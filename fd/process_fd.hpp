@@ -51,9 +51,9 @@ struct process_fd : public fd_t {
 	// Read an ELF from this fd, map it, and prepare it for execution. This
 	// function will not remove previous process contents, use unexec() for
 	// that.
-	error_t exec(fd_t *, size_t fdslen, fd_mapping_t **new_fds);
+	error_t exec(fd_t *, size_t fdslen, fd_mapping_t **new_fds, void const *argdata, size_t argdatalen);
 	// TODO: make this private
-	error_t exec(uint8_t *elf_buffer, size_t size);
+	error_t exec(uint8_t *elf_buffer, size_t size, uint8_t *argdata, size_t argdatalen);
 
 	// create a main thread from the given calling thread, belonging to
 	// another process (this function assumes its own page directory is

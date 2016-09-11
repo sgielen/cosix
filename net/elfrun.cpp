@@ -19,7 +19,7 @@ elfrun_implementation::elfrun_implementation()
 error_t elfrun_implementation::run_binary() {
 	process_fd *process = get_allocator()->allocate<process_fd>();
 	new(process) process_fd("elfrun process");
-	auto res = process->exec(buffer, pos);
+	auto res = process->exec(buffer, pos, nullptr, 0);
 	if(res != error_t::no_error) {
 		return res;
 	}

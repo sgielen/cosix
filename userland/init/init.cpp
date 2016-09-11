@@ -6,47 +6,51 @@
 #include <errno.h>
 #include <string.h>
 
+int stdout;
+int bootfs;
+
 argdata_t *argdata_create_string(const char *value) {
 	return argdata_create_str(value, strlen(value));
 }
 
 void start_unittests() {
-	int bfd = openat(3, "unittests", O_RDONLY);
+	int bfd = openat(bootfs, "unittests", O_RDONLY);
 	if(bfd < 0) {
-		dprintf(0, "Won't run unittests, because I failed to open them: %s\n", strerror(errno));
+		dprintf(stdout, "Won't run unittests, because I failed to open them: %s\n", strerror(errno));
 		return;
 	}
 
-	int tmpdir = 3; /* actually bootfs, but we don't have tempdirs yet */
-	int logfile = 0; /* vga stream */
-
-	dprintf(0, "Running unit tests...\n");
+	dprintf(stdout, "Running unit tests...\n");
 	argdata_t *keys[] = {argdata_create_string("logfile"), argdata_create_string("tmpdir"), argdata_create_string("nthreads")};
-	argdata_t *values[] = {argdata_create_fd(logfile), argdata_create_fd(tmpdir), argdata_create_int(1)};
+	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(bootfs), argdata_create_int(1)};
 	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 
 	int pfd = program_spawn(bfd, ad);
 	if(pfd < 0) {
-		dprintf(0, "unittests failed to spawn: %s\n", strerror(errno));
+		dprintf(stdout, "unittests failed to spawn: %s\n", strerror(errno));
 	} else {
-		dprintf(0, "unittests spawned, fd: %d\n", pfd);
+		dprintf(stdout, "unittests spawned, fd: %d\n", pfd);
 	}
 }
 
 int start_binary(const char *name) {
-	int bfd = openat(3, name, O_RDONLY);
+	int bfd = openat(bootfs, name, O_RDONLY);
 	if(bfd < 0) {
-		dprintf(0, "Failed to open %s: %s\n", name, strerror(errno));
+		dprintf(stdout, "Failed to open %s: %s\n", name, strerror(errno));
 		return bfd;
 	}
 
-	dprintf(0, "Init going to program_spawn() %s...\n", name);
+	dprintf(stdout, "Init going to program_spawn() %s...\n", name);
 
-	int pfd = program_spawn(bfd, argdata_create_fd(0));
+	argdata_t *keys[] = {argdata_create_string("stdout")};
+	argdata_t *values[] = {argdata_create_fd(stdout)};
+	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
+
+	int pfd = program_spawn(bfd, ad);
 	if(pfd < 0) {
-		dprintf(0, "%s failed to spawn: %s\n", name, strerror(errno));
+		dprintf(stdout, "%s failed to spawn: %s\n", name, strerror(errno));
 	} else {
-		dprintf(0, "%s spawned, fd: %d\n", name, pfd);
+		dprintf(stdout, "%s spawned, fd: %d\n", name, pfd);
 	}
 
 	// wait a while until the process is probably done
@@ -56,7 +60,9 @@ int start_binary(const char *name) {
 }
 
 void program_main(const argdata_t *) {
-	dprintf(0, "Init starting up.\n");
+	stdout = 0;
+	bootfs = 3;
+	dprintf(stdout, "Init starting up.\n");
 
 	start_binary("exec_test");
 	start_binary("thread_test");
