@@ -50,8 +50,6 @@ struct page_allocation {
 struct page_allocator {
 	page_allocator(void *handout_start, memory_map_entry *mmap, size_t memory_map_bytes);
 
-	void install();
-
 	// for kernel data
 	void *to_physical_address(const void*);
 	// for userland and kernel data
