@@ -54,6 +54,20 @@ add_external_binary(exec_test)
 add_external_binary(thread_test)
 add_external_binary(pipe_test)
 
+set(CLOUDABI_UNITTEST_BINARY "" CACHE FILEPATH "Path to the CloudABI unittest binary, will be run by init if given")
+if(CLOUDABI_UNITTEST_BINARY AND BAREMETAL_ENABLED)
+	list(APPEND EXTERNAL_BINARY_LIST "unittests")
+	add_custom_command(OUTPUT "unittests"
+		COMMAND ${CMAKE_COMMAND} -E copy "${CLOUDABI_UNITTEST_BINARY}" "unittests")
+	add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/external_binary_unittests.o"
+		COMMAND ${OBJCOPY_COMMAND} --input-target binary
+			--output-target elf32-i386
+			--binary-architecture i386
+			"unittests" "${CMAKE_CURRENT_BINARY_DIR}/external_binary_unittests.o"
+		DEPENDS "unittests"
+	)
+endif()
+
 if(BAREMETAL_ENABLED)
 	# Create a header with definitions for all external binaries
 	set(EXTERNAL_BINARY_DEFINITIONS)

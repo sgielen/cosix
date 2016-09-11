@@ -30,10 +30,13 @@ _boot_page_directory:
 	.rept (KERNEL_PAGE_NUMBER - 1)
 	.long 0
 	.endr
-	# identity map first 4 MB of upper half
+	# identity map first 12 MB of upper half
+	# TODO: determine how many mappings we actually need instead of hardcoding 3
 	.long 0x00000083
+	.long 0x00400083
+	.long 0x00800083
 	# no pages until end of memory
-	.rept (1024 - KERNEL_PAGE_NUMBER - 1)
+	.rept (1024 - KERNEL_PAGE_NUMBER - 3)
 	.long 0
 	.endr
 .global _kernel_virtual_base

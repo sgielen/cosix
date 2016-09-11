@@ -34,6 +34,7 @@ void program_main(const argdata_t *) {
 	start_binary("exec_test");
 	start_binary("thread_test");
 	start_binary("pipe_test");
+	start_binary("unittests");
 
 	// init must never exit, but we don't have sys_poll() / sys_poll_fd()
 	// yet, so we need to busy-wait
