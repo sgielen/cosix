@@ -6,6 +6,33 @@
 #include <errno.h>
 #include <string.h>
 
+argdata_t *argdata_create_string(const char *value) {
+	return argdata_create_str(value, strlen(value));
+}
+
+void start_unittests() {
+	int bfd = openat(3, "unittests", O_RDONLY);
+	if(bfd < 0) {
+		dprintf(0, "Won't run unittests, because I failed to open them: %s\n", strerror(errno));
+		return;
+	}
+
+	int tmpdir = 3; /* actually bootfs, but we don't have tempdirs yet */
+	int logfile = 0; /* vga stream */
+
+	dprintf(0, "Running unit tests...\n");
+	argdata_t *keys[] = {argdata_create_string("logfile"), argdata_create_string("tmpdir"), argdata_create_string("nthreads")};
+	argdata_t *values[] = {argdata_create_fd(logfile), argdata_create_fd(tmpdir), argdata_create_int(1)};
+	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
+
+	int pfd = program_spawn(bfd, ad);
+	if(pfd < 0) {
+		dprintf(0, "unittests failed to spawn: %s\n", strerror(errno));
+	} else {
+		dprintf(0, "unittests spawned, fd: %d\n", pfd);
+	}
+}
+
 int start_binary(const char *name) {
 	int bfd = openat(3, name, O_RDONLY);
 	if(bfd < 0) {
@@ -34,7 +61,8 @@ void program_main(const argdata_t *) {
 	start_binary("exec_test");
 	start_binary("thread_test");
 	start_binary("pipe_test");
-	start_binary("unittests");
+
+	start_unittests();
 
 	// init must never exit, but we don't have sys_poll() / sys_poll_fd()
 	// yet, so we need to busy-wait
