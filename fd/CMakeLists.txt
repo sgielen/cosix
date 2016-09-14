@@ -10,6 +10,7 @@ if(BAREMETAL_ENABLED)
 		bootfs.cpp bootfs.hpp
 		thread.cpp thread.hpp
 		pipe_fd.cpp pipe_fd.hpp
+		pseudo_fd.cpp pseudo_fd.hpp
 		socket_fd.cpp socket_fd.hpp
 	)
 endif()

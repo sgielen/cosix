@@ -9,6 +9,8 @@
 #include <fd/memory_fd.hpp>
 #include <fd/procfs.hpp>
 #include <fd/bootfs.hpp>
+#include <fd/pseudo_fd.hpp>
+#include <fd/socket_fd.hpp>
 #include <fd/scheduler.hpp>
 #include <userland/vdso_support.h>
 #include <elf.h>
@@ -53,6 +55,32 @@ void process_fd::add_initial_fds() {
 	add_fd(procfs::get_root_fd(), CLOUDABI_RIGHT_FILE_OPEN, CLOUDABI_RIGHT_FD_READ | CLOUDABI_RIGHT_FILE_OPEN);
 
 	add_fd(bootfs::get_root_fd(), CLOUDABI_RIGHT_FILE_OPEN, CLOUDABI_RIGHT_FD_READ | CLOUDABI_RIGHT_FILE_OPEN | CLOUDABI_RIGHT_PROC_EXEC);
+
+	socket_fd *my_reverse, *their_reverse;
+	socket_fd::socketpair(&my_reverse, &their_reverse, 1024);
+	add_fd(their_reverse, CLOUDABI_RIGHT_FD_READ | CLOUDABI_RIGHT_FD_WRITE);
+
+	pseudo_fd *pseudo = get_allocator()->allocate<pseudo_fd>();
+	new (pseudo) pseudo_fd(0, my_reverse, CLOUDABI_FILETYPE_DIRECTORY, "toplevel pseudo fd");
+	add_fd(pseudo,
+		/* base rights */
+		CLOUDABI_RIGHT_FILE_CREATE_DIRECTORY |
+		CLOUDABI_RIGHT_FILE_CREATE_FILE |
+		CLOUDABI_RIGHT_FILE_CREATE_FIFO |
+		CLOUDABI_RIGHT_FILE_LINK_SOURCE |
+		CLOUDABI_RIGHT_FILE_LINK_TARGET |
+		CLOUDABI_RIGHT_FILE_OPEN,
+		/* inherited rights */
+		CLOUDABI_RIGHT_FILE_CREATE_DIRECTORY |
+		CLOUDABI_RIGHT_FILE_CREATE_FILE |
+		CLOUDABI_RIGHT_FILE_CREATE_FIFO |
+		CLOUDABI_RIGHT_FILE_LINK_SOURCE |
+		CLOUDABI_RIGHT_FILE_LINK_TARGET |
+		CLOUDABI_RIGHT_FILE_OPEN |
+		CLOUDABI_RIGHT_FD_READ |
+		CLOUDABI_RIGHT_FD_SEEK |
+		CLOUDABI_RIGHT_FD_WRITE |
+		CLOUDABI_RIGHT_PROC_EXEC);
 }
 
 int process_fd::add_fd(fd_t *fd, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting) {

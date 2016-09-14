@@ -59,6 +59,13 @@ struct fd_t {
 	}
 
 	/* For directories */
+	/** Open a path. In the cloudabi_fdstat_t, rights_base and rights_inheriting specify the
+	 * initial rights of the newly created file descriptor. The rights that do not apply to
+	 * the filetype that will be opened (e.g. RIGHT_FD_SEEK on a socket) must be removed without
+	 * error; rights that do apply to it but are unobtainable (e.g. RIGHT_FD_WRITE on a read-only
+	 * filesystem) must generate ENOTCAPABLE. fs_flags specifies the initial flags of the fd; the
+	 * filetype is ignored.
+	 */
 	virtual fd_t *openat(const char * /*path */, size_t /*pathlen*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) {
 		error = error_t::invalid_argument;
 		return nullptr;
