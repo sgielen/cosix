@@ -8,6 +8,8 @@
 
 int stdout;
 int bootfs;
+int reversefd;
+int pseudofd;
 
 argdata_t *argdata_create_string(const char *value) {
 	return argdata_create_str(value, strlen(value));
@@ -22,7 +24,7 @@ void start_unittests() {
 
 	dprintf(stdout, "Running unit tests...\n");
 	argdata_t *keys[] = {argdata_create_string("logfile"), argdata_create_string("tmpdir"), argdata_create_string("nthreads")};
-	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(bootfs), argdata_create_int(1)};
+	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(pseudofd), argdata_create_int(1)};
 	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 
 	int pfd = program_spawn(bfd, ad);
@@ -30,6 +32,26 @@ void start_unittests() {
 		dprintf(stdout, "unittests failed to spawn: %s\n", strerror(errno));
 	} else {
 		dprintf(stdout, "unittests spawned, fd: %d\n", pfd);
+	}
+}
+
+void start_tmpfs() {
+	int bfd = openat(bootfs, "tmpfs", O_RDONLY);
+	if(bfd < 0) {
+		dprintf(stdout, "Can't run tmpfs, because it failed to open: %s\n", strerror(errno));
+		return;
+	}
+
+	dprintf(stdout, "Running tmpfs...\n");
+	argdata_t *keys[] = {argdata_create_string("stdout"), argdata_create_string("reversefd")};
+	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(reversefd)};
+	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
+
+	int pfd = program_spawn(bfd, ad);
+	if(pfd < 0) {
+		dprintf(stdout, "tmpfs failed to spawn: %s\n", strerror(errno));
+	} else {
+		dprintf(stdout, "tmpfs spawned, fd: %d\n", pfd);
 	}
 }
 
@@ -42,8 +64,8 @@ int start_binary(const char *name) {
 
 	dprintf(stdout, "Init going to program_spawn() %s...\n", name);
 
-	argdata_t *keys[] = {argdata_create_string("stdout")};
-	argdata_t *values[] = {argdata_create_fd(stdout)};
+	argdata_t *keys[] = {argdata_create_string("stdout"), argdata_create_string("tmpdir")};
+	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(pseudofd)};
 	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 
 	int pfd = program_spawn(bfd, ad);
@@ -62,13 +84,18 @@ int start_binary(const char *name) {
 void program_main(const argdata_t *) {
 	stdout = 0;
 	bootfs = 3;
+	reversefd = 4;
+	pseudofd = 5;
 	dprintf(stdout, "Init starting up.\n");
 
-	start_binary("exec_test");
+	/*start_binary("exec_test");
 	start_binary("thread_test");
-	start_binary("pipe_test");
+	start_binary("pipe_test");*/
 
-	start_unittests();
+	start_tmpfs();
+	start_binary("tmptest");
+
+	//start_unittests();
 
 	// init must never exit, but we don't have sys_poll() / sys_poll_fd()
 	// yet, so we need to busy-wait
