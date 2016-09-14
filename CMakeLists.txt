@@ -46,7 +46,7 @@ if(BAREMETAL_ENABLED)
 	set_target_properties(cloudkernel PROPERTIES LINK_DEPENDS "${CMAKE_SOURCE_DIR}/linker.ld")
 	set_target_properties(cloudkernel PROPERTIES LINK_FLAGS "-T ${CMAKE_SOURCE_DIR}/linker.ld")
 
-	set(QEMU_ARGS -kernel cloudkernel
+	set(QEMU_ARGS -kernel cloudkernel -m 512
 		-net nic,model=virtio -net dump,file=dump.pcap -net user
 		-no-reboot -no-shutdown -d int -d cpu_reset -d guest_errors)
 
