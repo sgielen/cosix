@@ -57,8 +57,12 @@ cloudabi_errno_t
 cloudabi_sys_fd_close(
 	cloudabi_fd_t fd
 ) {
-	putstring_l(__PRETTY_FUNCTION__);
-	return CLOUDABI_ENOSYS;
+	register int32_t reg_eax asm("eax") = 16;
+	register cloudabi_fd_t reg_ecx asm("ecx") = fd;
+	asm volatile("int $0x80"
+		: "+r"(reg_eax) : "r"(reg_ecx)
+		: "memory", "eax", "ecx");
+	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error handling */
 }
 
 cloudabi_errno_t

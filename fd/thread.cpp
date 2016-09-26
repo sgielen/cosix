@@ -433,6 +433,15 @@ void thread::handle_syscall() {
 		} else {
 			state.eax = -1;
 		}
+	} else if(syscall == 16) {
+		// sys_fd_close(ecx=fd)
+		int fdnum = state.ecx;
+		auto res = process->close_fd(fdnum);
+		if(res == error_t::no_error) {
+			state.eax = 0;
+		} else {
+			state.eax = -1;
+		}
 	} else {
 		get_vga_stream() << "Syscall " << state.eax << " unknown, signalling process\n";
 		process->signal(CLOUDABI_SIGSYS);

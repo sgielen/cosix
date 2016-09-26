@@ -120,6 +120,17 @@ error_t process_fd::get_fd(fd_mapping_t **r_mapping, size_t num, cloudabi_rights
 	return error_t::no_error;
 }
 
+error_t process_fd::close_fd(size_t num) {
+	fd_mapping_t *mapping;
+	auto res = get_fd(&mapping, num, 0);
+	if(res != error_t::no_error) {
+		return res;
+	}
+	mapping->fd = 0;
+	fds[num] = 0;
+	return error_t::no_error;
+}
+
 uint32_t *process_fd::get_page_table(int i) {
 	if(i >= 0x300) {
 		kernel_panic("process_fd::get_page_table() cannot answer for kernel pages");

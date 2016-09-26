@@ -62,6 +62,7 @@ struct process_fd : public fd_t {
 
 	int add_fd(fd_t*, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting = 0);
 	error_t get_fd(fd_mapping_t **mapping, size_t num, cloudabi_rights_t has_rights);
+	error_t close_fd(size_t num);
 
 	inline bool is_running() { return running; }
 	void exit(cloudabi_exitcode_t exitcode, cloudabi_signal_t exitsignal = 0);
