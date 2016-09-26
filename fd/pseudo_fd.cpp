@@ -4,7 +4,7 @@
 
 using namespace cloudos;
 
-pseudo_fd::pseudo_fd(int id, fd_t *r, cloudabi_filetype_t t, const char *n)
+pseudo_fd::pseudo_fd(pseudofd_t id, fd_t *r, cloudabi_filetype_t t, const char *n)
 : fd_t(t, n)
 , pseudo_id(id)
 , reverse_fd(r)
@@ -62,21 +62,25 @@ reverse_response_t *pseudo_fd::lookup_inode(const char *path, size_t length, clo
 	request.op = reverse_request_t::operation::lookup;
 	request.inode = 0;
 	request.flags = oflags;
+	if(length > sizeof(request.buffer)) {
+		length = sizeof(request.buffer);
+	}
 	request.length = length;
 	memcpy(request.buffer, path, length);
 	return send_request(&request);
 }
 
-size_t pseudo_fd::read(size_t /*offset*/, void *dest, size_t count)
+size_t pseudo_fd::read(size_t offset, void *dest, size_t count)
 {
 	if(count > UINT8_MAX) {
 		count = UINT8_MAX;
 	}
 	reverse_request_t request;
 	request.pseudofd = pseudo_id;
-	request.op = reverse_request_t::operation::read;
+	request.op = reverse_request_t::operation::pread;
 	request.inode = 0;
 	request.flags = 0;
+	request.offset = offset;
 	request.length = count;
 	reverse_response_t *response = send_request(&request);
 	if(!response || response->result < 0) {
@@ -102,9 +106,10 @@ error_t pseudo_fd::putstring(const char *str, size_t remaining)
 
 		reverse_request_t request;
 		request.pseudofd = pseudo_id;
-		request.op = reverse_request_t::operation::write;
+		request.op = reverse_request_t::operation::pwrite;
 		request.inode = 0;
 		request.flags = 0;
+		request.offset = 0; /* TODO */
 		request.length = count;
 		memcpy(request.buffer, str + copied, count);
 		copied += count;
@@ -121,18 +126,36 @@ error_t pseudo_fd::putstring(const char *str, size_t remaining)
 
 fd_t *pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_oflags_t oflags, const cloudabi_fdstat_t * fdstat)
 {
-	reverse_response_t *response = lookup_inode(path, pathlen, oflags);
-	if(!response /* invalid path */) {
-		error = error_t::invalid_argument;
-		return nullptr;
-	} else if(response->result < 0) {
-		// TODO: errno to error to errno
-		error = error_t::invalid_argument;
-		return nullptr;
-	}
+	// TODO HACK because of exception breakage in tmpfs
+	// if O_CREAT is given, assume the file doesn't exist, create it
+	int64_t inode;
+	int filetype;
+	if(oflags & CLOUDABI_O_CREAT) {
+		filetype = CLOUDABI_FILETYPE_REGULAR_FILE;
+		reverse_request_t request;
+		request.pseudofd = pseudo_id;
+		request.op = reverse_request_t::operation::create;
+		request.inode = 0;
+		request.flags = filetype;
+		request.length = pathlen < sizeof(request.buffer) ? pathlen : sizeof(request.buffer);
+		memcpy(request.buffer, path, request.length);
 
-	int inode = response->result;
-	int filetype = response->flags;
+		reverse_response_t *response = send_request(&request);
+		inode = response->result;
+	} else {
+		reverse_response_t *response = lookup_inode(path, pathlen, oflags);
+		if(!response /* invalid path */) {
+			error = error_t::invalid_argument;
+			return nullptr;
+		} else if(response->result < 0) {
+			// TODO: errno to error to errno
+			error = error_t::invalid_argument;
+			return nullptr;
+		}
+
+		inode = response->result;
+		filetype = response->flags;
+	}
 
 	reverse_request_t request;
 	request.pseudofd = pseudo_id;
@@ -140,7 +163,7 @@ fd_t *pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_oflags_t ofla
 	request.inode = inode;
 	request.flags = oflags;
 	request.length = 0;
-	response = send_request(&request);
+	reverse_response_t *response = send_request(&request);
 
 	if(!response) {
 		// TODO: this can't currently happen
@@ -152,7 +175,7 @@ fd_t *pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_oflags_t ofla
 		return nullptr;
 	}
 
-	int new_pseudo_id = response->result;
+	pseudofd_t new_pseudo_id = response->result;
 
 	pseudo_fd *new_fd = get_allocator()->allocate<pseudo_fd>();
 	new (new_fd) pseudo_fd(new_pseudo_id, reverse_fd, filetype, "new pseudofd");
@@ -161,4 +184,25 @@ fd_t *pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_oflags_t ofla
 	new_fd->flags = fdstat->fs_flags;
 
 	return new_fd;
+}
+
+void pseudo_fd::file_create(const char *path, size_t pathlen, cloudabi_filetype_t type)
+{
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::create;
+	request.inode = 0;
+	request.flags = type;
+	request.length = pathlen < sizeof(request.buffer) ? pathlen : sizeof(request.buffer);
+	memcpy(request.buffer, path, request.length);
+
+	reverse_response_t *response = send_request(&request);
+	if(!response /* invalid path */) {
+		error = error_t::invalid_argument;
+	} else if(response->result < 0) {
+		// TODO: errno to error to errno
+		error = error_t::invalid_argument;
+	} else {
+		error = error_t::no_error;
+	}
 }

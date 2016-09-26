@@ -442,6 +442,37 @@ void thread::handle_syscall() {
 		} else {
 			state.eax = -1;
 		}
+	} else if(syscall == 17) {
+		// sys_file_create(ecx=fd, ebx=path, edx=pathlen, esi=type)
+		cloudabi_filetype_t type = state.esi;
+		/* TODO remove this */
+		type = CLOUDABI_FILETYPE_DIRECTORY;
+		cloudabi_rights_t right_needed = 0;
+		if(type == CLOUDABI_FILETYPE_DIRECTORY) {
+			right_needed = CLOUDABI_RIGHT_FILE_CREATE_DIRECTORY;
+		} else {
+			get_vga_stream() << "Unknown file type to create, failing\n";
+			state.eax = -1;
+			return;
+		}
+
+		int fdnum = state.ecx;
+		fd_mapping_t *mapping;
+		auto res = process->get_fd(&mapping, fdnum, right_needed);
+		if(res != error_t::no_error) {
+			state.eax = -1;
+			return;
+		}
+
+		const char *path = reinterpret_cast<const char*>(state.ebx);
+		size_t pathlen = state.edx;
+
+		mapping->fd->file_create(path, pathlen, type);
+		if(mapping->fd->error != error_t::no_error) {
+			state.eax = -1;
+		} else {
+			state.eax = 0;
+		}
 	} else {
 		get_vga_stream() << "Syscall " << state.eax << " unknown, signalling process\n";
 		process->signal(CLOUDABI_SIGSYS);

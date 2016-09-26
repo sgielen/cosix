@@ -71,6 +71,13 @@ struct fd_t {
 		return nullptr;
 	}
 
+	/** Create a path of given type.
+	 */
+	virtual void file_create(const char * /*path*/, size_t /*pathlen*/, cloudabi_filetype_t /*type*/)
+	{
+		error = error_t::invalid_argument;
+	}
+
 protected:
 	inline fd_t(cloudabi_filetype_t t, const char *n) : type(t), flags(0), refcount(1), invalid(false), error(error_t::no_error) {
 		strncpy(name, n, sizeof(name));

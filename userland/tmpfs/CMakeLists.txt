@@ -6,6 +6,6 @@ include(../../wubwubcmake/enable_cpp11.cmake)
 include(../../wubwubcmake/warning_settings.cmake)
 add_sane_warning_flags()
 
-add_executable(tmpfs tmpfs.cpp)
+add_executable(tmpfs main.cpp tmpfs.cpp tmpfs.hpp)
 
 install(TARGETS tmpfs RUNTIME DESTINATION bin)

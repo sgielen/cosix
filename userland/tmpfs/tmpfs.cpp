@@ -1,65 +1,238 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <program.h>
-#include <argdata.h>
-#include <sched.h>
-#include <pthread.h>
-#include <atomic>
-#include <unistd.h>
+#include "tmpfs.hpp"
 #include <errno.h>
-#include <string.h>
-#include "../../fd/reverse_proto.hpp"
+#include <stdlib.h>
+#include <cassert>
 
-int stdout;
-int reversefd;
+tmpfs::tmpfs(cloudabi_device_t d)
+: device(d)
+{
+	// make directory entry /
+	file_entry_ptr root(new file_entry);
+	cloudabi_inode_t root_inode = reinterpret_cast<cloudabi_inode_t>(root.get());
+	root->device = device;
+	root->inode = root_inode;
+	root->type = CLOUDABI_FILETYPE_DIRECTORY;
+	inodes[root_inode] = root;
 
-using reverse_proto::reverse_request_t;
-using reverse_proto::reverse_response_t;
+	// TODO: make a hard-link for . and .. as well
 
-reverse_response_t *handle_request(reverse_request_t *request) {
-	dprintf(stdout, "Got a request, failing it\n");
-	reverse_response_t *response = new reverse_response_t;
-	response->result = -EINVAL;
-	response->flags = 0;
-	response->length = 0;
-	return response;
+	pseudo_fd_ptr root_pseudo(new pseudo_fd_entry);
+	root_pseudo->file = root;
+	pseudo_fds[0] = root_pseudo;
 }
 
-void program_main(const argdata_t *ad) {
-	argdata_map_iterator_t it;
-	const argdata_t *key;
-	const argdata_t *value;
-	argdata_map_iterate(ad, &it);
-	while (argdata_map_next(&it, &key, &value)) {
-		const char *keystr;
-		if(argdata_get_str_c(key, &keystr) != 0) {
-			continue;
-		}
+cloudabi_inode_t tmpfs::lookup(pseudofd_t pseudo, const char *p, size_t len, cloudabi_lookupflags_t lookupflags)
+{
+	char *path = const_cast<char*>(p);
+	path[len] = 0;
+	file_entry_ptr entry = get_file_entry_from_path(pseudo, path, len, lookupflags);
+	return entry->inode;
+}
 
-		if(strcmp(keystr, "stdout") == 0) {
-			argdata_get_fd(value, &stdout);
-		} else if(strcmp(keystr, "reversefd") == 0) {
-			argdata_get_fd(value, &reversefd);
-		}
+pseudofd_t tmpfs::open(cloudabi_inode_t inode, int flags)
+{
+	file_entry_ptr entry = get_file_entry_from_inode(inode);
+	pseudo_fd_ptr pseudo(new pseudo_fd_entry);
+	pseudo->file = entry;
+	pseudofd_t fd = reinterpret_cast<pseudofd_t>(pseudo.get());
+	pseudo_fds[fd] = pseudo;
+	return fd;
+}
+
+void tmpfs::unlink(pseudofd_t pseudo, const char *path, size_t len, cloudabi_ulflags_t unlinkflags)
+{
+	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
+
+	std::string filename = normalize_path(directory, path, len, 0 /* TODO: lookupflags */);
+	auto it = directory->files.find(filename);
+	if(it == directory->files.end()) {
+		throw filesystem_error(ENOENT);
 	}
 
-	dprintf(stdout, "tmpfs spawned -- awaiting requests on reverse FD %d\n", reversefd);
-	while(1) {
-		size_t received = 0;
-		char buf[sizeof(reverse_request_t)];
-		while(received < sizeof(reverse_request_t)) {
-			size_t remaining = sizeof(reverse_request_t) - received;
-			ssize_t count = read(reversefd, buf + received, remaining);
-			if(count <= 0) {
-				dprintf(stdout, "tmpfs read() failed: %s\n", strerror(errno));
-				abort();
+	auto entry = it->second;
+	directory->files.erase(filename);
+
+	// TODO: erase inode if this was the last reference to it
+	// (possibly, using the deleter of the inode bound to this tmpfs*)
+}
+
+cloudabi_inode_t tmpfs::create(pseudofd_t pseudo, const char *path, size_t len, cloudabi_filetype_t type)
+{
+	if(type != CLOUDABI_FILETYPE_DIRECTORY && type != CLOUDABI_FILETYPE_REGULAR_FILE) {
+		// TODO: implement this for types other than directories
+		throw filesystem_error(EINVAL);
+	}
+
+	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
+
+	std::string filename = normalize_path(directory, path, len, 0 /* TODO: lookup flags */);
+	auto it = directory->files.find(filename);
+	if(it != directory->files.end()) {
+		// TODO: only for directories, or if O_CREAT and O_EXCL are given?
+		throw filesystem_error(EEXIST);
+	}
+
+	file_entry_ptr entry(new file_entry);
+	cloudabi_inode_t inode = reinterpret_cast<cloudabi_inode_t>(entry.get());
+	entry->device = device;
+	entry->inode = inode;
+	entry->type = type;
+
+	// TODO: if directory, make a hard-link for . and ..
+	// entry->files...
+
+	inodes[inode] = entry;
+	directory->files[filename] = entry;
+	return inode;
+}
+
+void tmpfs::close(pseudofd_t pseudo)
+{
+	auto it = pseudo_fds.find(pseudo);
+	if(it != pseudo_fds.end()) {
+		pseudo_fds.erase(it);
+	} else {
+		throw filesystem_error(EBADF);
+	}
+}
+
+size_t tmpfs::pread(pseudofd_t pseudo, off_t offset, char *dest, size_t requested)
+{
+	auto entry = get_file_entry_from_pseudo(pseudo);
+	if(offset > entry->contents.size()) {
+		throw filesystem_error(EINVAL /* The specified file offset is invalid */);
+	}
+
+	size_t remaining = entry->contents.size() - offset;
+	size_t returned = remaining < requested ? remaining : requested;
+	const char *data = entry->contents.c_str() + offset;
+	memcpy(dest, data, returned);
+	return returned;
+}
+
+void tmpfs::pwrite(pseudofd_t pseudo, off_t offset, const char *buf, size_t length)
+{
+	auto entry = get_file_entry_from_pseudo(pseudo);
+	if(offset > entry->contents.size()) {
+		// TODO: should we increase to this size?
+		throw filesystem_error(EINVAL /* The specified file offset is invalid */);
+	}
+
+	if(entry->contents.size() < offset + length) {
+		entry->contents.resize(offset + length);
+	}
+
+	entry->contents.replace(offset, length, std::string(buf, length));
+}
+
+/** Normalizes the given path. When it returns normally, directory
+ * points at the innermost directory pointed to by path. It returns the
+ * filename that is to be opened, created or unlinked.
+ *
+ * It returns an error if the given file_entry ptr is not a directory,
+ * if any of the path components don't reference a directory, or if the
+ * path eventually points outside of the given file_entry.
+ */
+std::string tmpfs::normalize_path(file_entry_ptr &directory, const char *p, size_t len, cloudabi_lookupflags_t lookupflags)
+{
+	if(directory->type != CLOUDABI_FILETYPE_DIRECTORY) {
+		throw filesystem_error(ENOTDIR);
+	}
+
+	std::string path(p, len);
+	// remove any slashes at the end of the path, so "foo////" is interpreted as "foo"
+	while(path.back() == '/') {
+		path.pop_back();
+	}
+
+	// depth may not go under 0, because that means a file outside of the
+	// given file_entry is referenced. A depth of 0 means that the file is
+	// opened immediately in the given directory.
+	int depth = 0;
+	do {
+		size_t splitter = path.find('/');
+		if(splitter == std::string::npos) {
+			// filename component.
+			if(lookupflags & CLOUDABI_LOOKUP_SYMLINK_FOLLOW) {
+				auto it = directory->files.find(path);
+				if(it != directory->files.end()) {
+					if(it->second->type == CLOUDABI_FILETYPE_SYMBOLIC_LINK) {
+						// TODO: follow symlinks
+						// if we followed too many symlinks (e.g. 30) return ELOOP
+						// for now, symlinks aren't supported, so just return the result
+					}
+				}
 			}
-			received += count;
+			// done with lookup
+			return path;
 		}
-		reverse_request_t *request = reinterpret_cast<reverse_request_t*>(&buf[0]);
-		reverse_response_t *response = handle_request(request);
-		uint8_t *msg = reinterpret_cast<uint8_t*>(response);
-		write(reversefd, msg, sizeof(reverse_response_t));
-		delete response;
+
+		// path component; it must exist
+		std::string component = path.substr(0, splitter);
+		path = path.substr(splitter + 1);
+		if(component.empty() || component == ".") {
+			// no-op path component, just continue
+			continue;
+		}
+		auto it = directory->files.find(component);
+		if(it == directory->files.end()) {
+			throw filesystem_error(ENOENT);
+		}
+		auto entry = it->second;
+		if(entry->type == CLOUDABI_FILETYPE_SYMBOLIC_LINK) {
+			// TODO: follow symlinks
+			// if we followed too many symlinks (e.g. 30) return ELOOP
+			// for now, symlinks aren't supported, so just throw ENOTDIR
+			throw filesystem_error(ENOTDIR);
+		}
+		if(entry->type != CLOUDABI_FILETYPE_DIRECTORY) {
+			throw filesystem_error(ENOTDIR);
+		}
+		directory = entry;
+		if(component == "..") {
+			if(depth == 0) {
+				throw filesystem_error(EACCES /* TODO: is this the right error code for going outside the given pseudo? */);
+			}
+			depth--;
+		} else {
+			depth++;
+		}
+	} while(!path.empty());
+
+	/* unreachable code */
+	assert(!"Unreachable");
+	exit(123);
+}
+
+file_entry_ptr tmpfs::get_file_entry_from_inode(cloudabi_inode_t inode)
+{
+	auto it = inodes.find(inode);
+	if(it != inodes.end()) {
+		return it->second;
+	} else {
+		throw filesystem_error(ENOENT);
+	}
+}
+
+file_entry_ptr tmpfs::get_file_entry_from_pseudo(pseudofd_t pseudo)
+{
+	auto it = pseudo_fds.find(pseudo);
+	if(it != pseudo_fds.end()) {
+		return it->second->file;
+	} else {
+		throw filesystem_error(EBADF);
+	}
+}
+
+file_entry_ptr tmpfs::get_file_entry_from_path(pseudofd_t pseudo, const char *path, size_t len, cloudabi_lookupflags_t lookupflags)
+{
+	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
+
+	std::string filename = normalize_path(directory, path, len, lookupflags);
+	auto it = directory->files.find(filename);
+	if(it == directory->files.end()) {
+		throw filesystem_error(ENOENT);
+	} else {
+		return it->second;
 	}
 }

@@ -262,8 +262,15 @@ cloudabi_sys_file_create(
 	size_t pathlen,
 	cloudabi_filetype_t type
 ) {
-	putstring_l(__PRETTY_FUNCTION__);
-	return CLOUDABI_ENOSYS;
+	register int32_t reg_eax asm("eax") = 17;
+	register cloudabi_fd_t reg_ecx asm("ecx") = fd;
+	register const char *reg_ebx asm("ebx") = path;
+	register size_t reg_edx asm("edx") = pathlen;
+	// type is fixed to CLOUDABI_FILETYPE_DIRECTORY
+	asm volatile("int $0x80"
+		: "+r"(reg_eax) : "r"(reg_ecx), "r"(reg_edx), "r"(reg_ebx)
+		: "memory", "eax", "ecx", "edx", "ebx");
+	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error handling */
 }
 
 cloudabi_errno_t

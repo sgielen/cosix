@@ -7,6 +7,7 @@ namespace cloudos {
 
 using reverse_proto::reverse_request_t;
 using reverse_proto::reverse_response_t;
+using reverse_proto::pseudofd_t;
 
 /** A pseudo-fd. This is a file descriptor where all calls on it are converted
  * to RPCs. These RPCs are sent to a given file descriptor, called the "reverse
@@ -19,7 +20,7 @@ using reverse_proto::reverse_response_t;
  * call.
  */
 struct pseudo_fd : public fd_t {
-	pseudo_fd(int id, fd_t *reverse_fd, cloudabi_filetype_t t, const char *n);
+	pseudo_fd(pseudofd_t id, fd_t *reverse_fd, cloudabi_filetype_t t, const char *n);
 
 	/* For memory, pipes and files */
 	size_t read(size_t offset, void *dest, size_t count) override;
@@ -27,13 +28,14 @@ struct pseudo_fd : public fd_t {
 
 	/* For directories */
 	fd_t *openat(const char *path, size_t pathlen, cloudabi_oflags_t oflags, const cloudabi_fdstat_t * fdstat) override;
+	void file_create(const char *path, size_t pathlen, cloudabi_filetype_t type) override;
 
 private:
 	reverse_response_t *send_request(reverse_request_t *request);
 	bool is_valid_path(const char *path, size_t length);
 	reverse_response_t *lookup_inode(const char *path, size_t length, cloudabi_oflags_t oflags);
 
-	int pseudo_id;
+	pseudofd_t pseudo_id;
 	fd_t *reverse_fd;
 };
 
