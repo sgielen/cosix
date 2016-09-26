@@ -284,9 +284,14 @@ error_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fds, void c
 	uint8_t *argdata_buffer = get_allocator()->allocate<uint8_t>(argdatalen);
 	memcpy(argdata_buffer, argdata, argdatalen);
 
+	char old_name[sizeof(name)];
+	strncpy(old_name, name, sizeof(name));
 	uint32_t *old_page_directory = page_directory;
 	uint32_t **old_page_tables = page_tables;
 	mem_mapping_list *old_mappings = mappings;
+
+	strncpy(name, "exec<-", sizeof(name));
+	strncat(name, fd->name, sizeof(name) - strlen(name) - 1);
 
 	page_allocation p;
 	auto res = get_page_allocator()->allocate(&p);
@@ -320,6 +325,7 @@ error_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fds, void c
 		page_directory = old_page_directory;
 		page_tables = old_page_tables;
 		mappings = old_mappings;
+		strncpy(name, old_name, sizeof(name));
 		install_page_directory();
 		return res;
 	}
@@ -524,6 +530,9 @@ void process_fd::fork(thread *otherthread) {
 	if(threads != nullptr) {
 		kernel_panic("Cannot call fork() on a process_fd that already has threads");
 	}
+
+	strncpy(name, otherprocess->name, sizeof(name));
+	strncat(name, "->forked", sizeof(name) - strlen(name) - 1);
 
 	thread *mainthread = reinterpret_cast<thread*>(get_allocator()->allocate_aligned(sizeof(thread), 16));
 	new (mainthread) thread(this, otherthread);

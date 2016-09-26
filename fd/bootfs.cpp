@@ -16,8 +16,8 @@ struct bootfs_directory_fd : fd_t {
 };
 
 struct bootfs_file_fd : fd_t {
-	bootfs_file_fd(external_binary_t const &file)
-	: fd_t(CLOUDABI_FILETYPE_REGULAR_FILE, file.name)
+	bootfs_file_fd(external_binary_t const &file, const char *n)
+	: fd_t(CLOUDABI_FILETYPE_REGULAR_FILE, n)
 	, addr(file.start)
 	, length(file.end - file.start)
 	{}
@@ -45,8 +45,11 @@ fd_t *bootfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi
 
 	for(size_t i = 0; external_binaries_table[i].name; ++i) {
 		if(strcmp(buf, external_binaries_table[i].name) == 0) {
+			char name[64];
+			strncpy(name, "bootfs/", sizeof(name));
+			strncat(name, external_binaries_table[i].name, sizeof(name) - strlen(name) - 1);
 			bootfs_file_fd *fd = get_allocator()->allocate<bootfs_file_fd>();
-			new (fd) bootfs_file_fd(external_binaries_table[i]);
+			new (fd) bootfs_file_fd(external_binaries_table[i], name);
 			return fd;
 		}
 	}

@@ -64,3 +64,10 @@ strncpy(char *dst, const char *src, size_t n) {
 	return dst;
 }
 
+
+char *
+strncat(char *s1, const char *s2, size_t n) {
+	size_t s1len = strlen(s1);
+	strncpy(s1 + s1len, s2, n);
+	return s1;
+}

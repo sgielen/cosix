@@ -25,6 +25,9 @@ strcmp(const char *left, const char *right);
 char *
 strncpy(char *dst, const char *src, size_t n);
 
+char *
+strncat(char *s1, const char *s2, size_t n);
+
 #if defined(__cplusplus)
 }
 #endif

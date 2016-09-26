@@ -378,7 +378,7 @@ void thread::handle_syscall() {
 		// * in the parent, returns eax=child_fd, ecx=thread_id
 		// * in the child, returns eax=CLOUDABI_PROCESS_CHILD, ecx=MAIN_THREAD
 		process_fd *newprocess = get_allocator()->allocate<process_fd>();
-		new(newprocess) process_fd("forked process");
+		new(newprocess) process_fd("initializing process");
 
 		// Change child state before fork(), as it inherits the state
 		// and puts it into the interrupt frame on the kernel stack
