@@ -69,7 +69,8 @@ void process_fd::add_initial_fds() {
 		CLOUDABI_RIGHT_FILE_CREATE_FIFO |
 		CLOUDABI_RIGHT_FILE_LINK_SOURCE |
 		CLOUDABI_RIGHT_FILE_LINK_TARGET |
-		CLOUDABI_RIGHT_FILE_OPEN,
+		CLOUDABI_RIGHT_FILE_OPEN |
+		CLOUDABI_RIGHT_FILE_READDIR,
 		/* inherited rights */
 		CLOUDABI_RIGHT_FILE_CREATE_DIRECTORY |
 		CLOUDABI_RIGHT_FILE_CREATE_FILE |
@@ -80,7 +81,8 @@ void process_fd::add_initial_fds() {
 		CLOUDABI_RIGHT_FD_READ |
 		CLOUDABI_RIGHT_FD_SEEK |
 		CLOUDABI_RIGHT_FD_WRITE |
-		CLOUDABI_RIGHT_PROC_EXEC);
+		CLOUDABI_RIGHT_PROC_EXEC |
+		CLOUDABI_RIGHT_FILE_READDIR);
 }
 
 int process_fd::add_fd(fd_t *fd, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting) {
