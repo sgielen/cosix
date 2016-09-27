@@ -5,6 +5,7 @@
 #include <memory/page_allocator.hpp>
 #include <memory/allocator.hpp>
 #include "global.hpp"
+#include <rng/rng.hpp>
 
 using namespace cloudos;
 
@@ -473,6 +474,12 @@ void thread::handle_syscall() {
 		} else {
 			state.eax = 0;
 		}
+	} else if(syscall == 18) {
+		// sys_random_get(ecx=buf, edx=nbyte)
+		char *buf = reinterpret_cast<char*>(state.ecx);
+		size_t nbyte = state.edx;
+		get_random()->get(buf, nbyte);
+		state.eax = 0;
 	} else {
 		get_vga_stream() << "Syscall " << state.eax << " unknown, signalling process\n";
 		process->signal(CLOUDABI_SIGSYS);

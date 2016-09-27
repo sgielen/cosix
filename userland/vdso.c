@@ -607,8 +607,12 @@ cloudabi_sys_random_get(
 	void *buf,
 	size_t nbyte
 ) {
-	putstring_l(__PRETTY_FUNCTION__);
-	return CLOUDABI_ENOSYS;
+	register int32_t reg_eax asm("eax") = 18;
+	register void *reg_ecx asm("ecx") = buf;
+	register size_t reg_edx asm("edx") = nbyte;
+	asm volatile("int $0x80" : "+r"(reg_eax) : "r"(reg_ecx), "r"(reg_edx) : "memory");
+	/* this syscall never fails */
+	return 0;
 }
 
 cloudabi_errno_t

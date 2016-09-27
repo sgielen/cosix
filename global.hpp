@@ -14,6 +14,7 @@ struct interface_store;
 struct device;
 struct scheduler;
 struct process_fd;
+struct rng;
 
 extern global_state *global_state_;
 
@@ -30,6 +31,7 @@ struct global_state {
 	cloudos::device *root_device;
 	cloudos::scheduler *scheduler;
 	cloudos::process_fd *init;
+	cloudos::rng *random;
 };
 
 __attribute__((noreturn)) inline void kernel_panic(const char *message) {
@@ -110,6 +112,14 @@ inline scheduler *get_scheduler() {
 	}
 
 	return global_state_->scheduler;
+}
+
+inline rng *get_random() {
+	if(!global_state_ || !global_state_->random) {
+		kernel_panic("No RNG is set");
+	}
+
+	return global_state_->random;
 }
 
 }

@@ -22,6 +22,7 @@
 #include "memory/allocator.hpp"
 #include "memory/page_allocator.hpp"
 #include "global.hpp"
+#include "rng/rng.hpp"
 
 extern uint32_t _kernel_virtual_base;
 
@@ -353,6 +354,10 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	global.scheduler = &sched;
 
 	interrupt_handler handler;
+
+	rng rng;
+	rng.seed(98764);
+	global.random = &rng;
 
 	global.init = get_allocator()->allocate<process_fd>();
 	new (global.init) process_fd("init");
