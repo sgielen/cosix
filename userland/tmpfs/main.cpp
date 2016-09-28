@@ -39,9 +39,12 @@ reverse_response_t *handle_request(reverse_request_t *request) {
 
 	try {
 		switch(request->op) {
-		case op::lookup:
-			response->result = fs->lookup(request->pseudofd, reinterpret_cast<const char*>(request->buffer), request->length, request->flags);
+		case op::lookup: {
+			auto file_entry = fs->lookup(request->pseudofd, reinterpret_cast<const char*>(request->buffer), request->length, request->flags);
+			response->result = file_entry->inode;
+			response->flags = file_entry->type;
 			break;
+		}
 		case op::open:
 			response->result = fs->open(request->inode, request->flags);
 			break;

@@ -21,12 +21,17 @@ tmpfs::tmpfs(cloudabi_device_t d)
 	pseudo_fds[0] = root_pseudo;
 }
 
-cloudabi_inode_t tmpfs::lookup(pseudofd_t pseudo, const char *p, size_t len, cloudabi_lookupflags_t lookupflags)
+file_entry_ptr tmpfs::lookup(pseudofd_t pseudo, const char *path, size_t len, cloudabi_lookupflags_t lookupflags)
 {
-	char *path = const_cast<char*>(p);
-	path[len] = 0;
-	file_entry_ptr entry = get_file_entry_from_path(pseudo, path, len, lookupflags);
-	return entry->inode;
+	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
+
+	std::string filename = normalize_path(directory, path, len, lookupflags);
+	auto it = directory->files.find(filename);
+	if(it == directory->files.end()) {
+		throw filesystem_error(ENOENT);
+	} else {
+		return it->second;
+	}
 }
 
 pseudofd_t tmpfs::open(cloudabi_inode_t inode, int flags)
@@ -221,18 +226,5 @@ file_entry_ptr tmpfs::get_file_entry_from_pseudo(pseudofd_t pseudo)
 		return it->second->file;
 	} else {
 		throw filesystem_error(EBADF);
-	}
-}
-
-file_entry_ptr tmpfs::get_file_entry_from_path(pseudofd_t pseudo, const char *path, size_t len, cloudabi_lookupflags_t lookupflags)
-{
-	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
-
-	std::string filename = normalize_path(directory, path, len, lookupflags);
-	auto it = directory->files.find(filename);
-	if(it == directory->files.end()) {
-		throw filesystem_error(ENOENT);
-	} else {
-		return it->second;
 	}
 }

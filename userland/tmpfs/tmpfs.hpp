@@ -42,7 +42,7 @@ struct filesystem_error : public std::runtime_error {
 struct tmpfs {
 	tmpfs(cloudabi_device_t device_id);
 
-	cloudabi_inode_t lookup(pseudofd_t pseudo, const char *path, size_t len, cloudabi_lookupflags_t lookupflags);
+	file_entry_ptr lookup(pseudofd_t pseudo, const char *path, size_t len, cloudabi_lookupflags_t lookupflags);
 	pseudofd_t open(cloudabi_inode_t inode, int flags);
 	void unlink(pseudofd_t pseudo, const char *path, size_t len, cloudabi_ulflags_t unlinkflags);
 	cloudabi_inode_t create(pseudofd_t pseudo, const char *path, size_t len, cloudabi_filetype_t type);
@@ -67,5 +67,4 @@ private:
 
 	file_entry_ptr get_file_entry_from_inode(cloudabi_inode_t inode);
 	file_entry_ptr get_file_entry_from_pseudo(pseudofd_t pseudo);
-	file_entry_ptr get_file_entry_from_path(pseudofd_t pseudo, const char *path, size_t len, cloudabi_lookupflags_t lookupflags);
 };
