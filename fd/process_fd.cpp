@@ -61,7 +61,7 @@ void process_fd::add_initial_fds() {
 	add_fd(their_reverse, CLOUDABI_RIGHT_FD_READ | CLOUDABI_RIGHT_FD_WRITE);
 
 	pseudo_fd *pseudo = get_allocator()->allocate<pseudo_fd>();
-	new (pseudo) pseudo_fd(0, my_reverse, CLOUDABI_FILETYPE_DIRECTORY, "toplevel pseudo fd");
+	new (pseudo) pseudo_fd(0, my_reverse, CLOUDABI_FILETYPE_DIRECTORY, "pseudo_root");
 	add_fd(pseudo,
 		/* base rights */
 		CLOUDABI_RIGHT_FILE_CREATE_DIRECTORY |

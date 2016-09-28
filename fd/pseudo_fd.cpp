@@ -178,7 +178,13 @@ fd_t *pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_oflags_t ofla
 	pseudofd_t new_pseudo_id = response->result;
 
 	pseudo_fd *new_fd = get_allocator()->allocate<pseudo_fd>();
-	new (new_fd) pseudo_fd(new_pseudo_id, reverse_fd, filetype, "new pseudofd");
+	char new_name[sizeof(name)];
+	strncpy(new_name, name, sizeof(new_name));
+	strncat(new_name, "->", sizeof(new_name) - strlen(new_name) - 1);
+	size_t copy = sizeof(new_name) - strlen(new_name) - 1;
+	if(copy > pathlen) copy = pathlen;
+	strncat(new_name, path, copy);
+	new (new_fd) pseudo_fd(new_pseudo_id, reverse_fd, filetype, new_name);
 	// TODO: check if the rights are actually obtainable before opening the file;
 	// ignore those that don't apply to this filetype, return ENOTCAPABLE if not
 	new_fd->flags = fdstat->fs_flags;
