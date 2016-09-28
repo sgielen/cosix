@@ -14,7 +14,8 @@ tmpfs::tmpfs(cloudabi_device_t d)
 	root->type = CLOUDABI_FILETYPE_DIRECTORY;
 	inodes[root_inode] = root;
 
-	// TODO: make a hard-link for . and .. as well
+	root->files["."] = root;
+	root->files[".."] = root;
 
 	pseudo_fd_ptr root_pseudo(new pseudo_fd_entry);
 	root_pseudo->file = root;
@@ -83,8 +84,10 @@ cloudabi_inode_t tmpfs::create(pseudofd_t pseudo, const char *path, size_t len, 
 	entry->inode = inode;
 	entry->type = type;
 
-	// TODO: if directory, make a hard-link for . and ..
-	// entry->files...
+	if(type == CLOUDABI_FILETYPE_DIRECTORY) {
+		entry->files["."] = entry;
+		entry->files[".."] = directory;
+	}
 
 	inodes[inode] = entry;
 	directory->files[filename] = entry;
