@@ -70,6 +70,16 @@ struct fd_t {
 		error = error_t::invalid_argument;
 		return nullptr;
 	}
+	/** Write directory entries to the given buffer, until it is filled. Each entry consists of a
+	 * cloudabi_dirent_t object, follwed by cloudabi_dirent_t::d_namlen bytes holding the name of the
+	 * entry. As much of the output buffer as possible is filled, potentially truncating the last entry.
+	 * This allows the caller to grow its read buffer in case it's too small, and also noticing that
+	 * the end of the directory was reached if the size returned < the nbyte given.
+	 */
+	virtual size_t readdir(char * /*buf*/, size_t /*nbyte*/, cloudabi_dircookie_t /*cookie*/) {
+		error = error_t::invalid_argument;
+		return 0;
+	}
 
 	/** Create a path of given type.
 	 */

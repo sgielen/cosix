@@ -50,6 +50,8 @@ struct tmpfs {
 	size_t pread(pseudofd_t pseudo, off_t offset, char *dest, size_t requested);
 	void pwrite(pseudofd_t pseudo, off_t offset, const char *buf, size_t length);
 
+	size_t readdir(pseudofd_t pseudo, char *buffer, size_t buflen, cloudabi_dircookie_t &cookie);
+
 private:
 	cloudabi_device_t device;
 	std::map<cloudabi_inode_t, file_entry_ptr> inodes;

@@ -212,3 +212,46 @@ void pseudo_fd::file_create(const char *path, size_t pathlen, cloudabi_filetype_
 		error = error_t::no_error;
 	}
 }
+
+size_t pseudo_fd::readdir(char *buf, size_t nbyte, cloudabi_dircookie_t cookie)
+{
+	// TODO: the RPC protocol allows requesting a single readdir buffer. We
+	// will keep requesting such buffers until our own buffer is full, or
+	// until there are no left.
+	size_t written = 0;
+	while(written < nbyte) {
+		reverse_request_t request;
+		request.pseudofd = pseudo_id;
+		request.op = reverse_request_t::operation::readdir;
+		request.flags = cookie;
+		request.length = 0;
+		reverse_response_t *response = send_request(&request);
+		if(!response) {
+			error = error_t::input_output;
+			return 0;
+		} else if(response->result < 0) {
+			// TODO: errno to error to errno
+			error = error_t::invalid_argument;
+			return 0;
+		}
+		if(response->result == 0) {
+			// there were no more entries
+			break;
+		}
+		cookie = response->result;
+		// check the entry, add it to buf
+		cloudabi_dirent_t *dirent = reinterpret_cast<cloudabi_dirent_t*>(response->buffer);
+		if(response->length != sizeof(cloudabi_dirent_t) + dirent->d_namlen) {
+			// filesystem did not provide enough data, maybe the filename didn't fit?
+			error = error_t::input_output;
+			return 0;
+		}
+		// append this buf to the given buffer
+		size_t remaining = nbyte - written;
+		size_t write = remaining < response->length ? remaining : response->length;
+		memcpy(buf + written, response->buffer, write);
+		written += write;
+	}
+	error = error_t::no_error;
+	return written;
+}

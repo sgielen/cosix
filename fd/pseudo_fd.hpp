@@ -28,6 +28,7 @@ struct pseudo_fd : public fd_t {
 
 	/* For directories */
 	fd_t *openat(const char *path, size_t pathlen, cloudabi_oflags_t oflags, const cloudabi_fdstat_t * fdstat) override;
+	size_t readdir(char *buf, size_t nbyte, cloudabi_dircookie_t cookie) override;
 	void file_create(const char *path, size_t pathlen, cloudabi_filetype_t type) override;
 
 private:

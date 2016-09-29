@@ -73,9 +73,14 @@ reverse_response_t *handle_request(reverse_request_t *request) {
 			fs->unlink(request->pseudofd, reinterpret_cast<const char*>(request->buffer), request->length, request->flags);
 			response->result = 0;
 			break;
+		case op::readdir: {
+			cloudabi_dircookie_t cookie = request->flags;
+			response->length = fs->readdir(request->pseudofd, reinterpret_cast<char*>(response->buffer), sizeof(response->buffer), cookie);
+			response->result = cookie;
+			break;
+		}
 		case op::stat_get:
 		case op::stat_put:
-		case op::readdir:
 		case op::rename:
 		default:
 			dprintf(stdout, "tmpfs: Got an unimplemented request operation, failing it\n");

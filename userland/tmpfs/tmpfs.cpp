@@ -133,6 +133,47 @@ void tmpfs::pwrite(pseudofd_t pseudo, off_t offset, const char *buf, size_t leng
 	entry->contents.replace(offset, length, std::string(buf, length));
 }
 
+/**
+ * Reads the next entry from the given directory. If there are no more entries,
+ * sets cookie to 0 and returns 0.
+ */
+size_t tmpfs::readdir(pseudofd_t pseudo, char *buffer, size_t buflen, cloudabi_dircookie_t &cookie)
+{
+	auto directory = get_file_entry_from_pseudo(pseudo);
+	if(directory->type != CLOUDABI_FILETYPE_DIRECTORY) {
+		throw filesystem_error(ENOTDIR);
+	}
+
+	// cookie is the index into the files map
+	// TODO: if files are created or removed during a readdir, this may cause readdir to miss
+	// files or return them twice
+	auto it = directory->files.begin();
+	std::advance(it, cookie);
+	if(it == directory->files.end()) {
+		cookie = 0;
+		return 0;
+	}
+
+	std::string filename = it->first;
+	file_entry_ptr entry = it->second;
+	cookie += 1;
+
+	cloudabi_dirent_t dirent;
+	dirent.d_next = cookie;
+	dirent.d_ino = entry->inode;
+	dirent.d_namlen = filename.length();
+	dirent.d_type = entry->type;
+
+	size_t to_copy = sizeof(cloudabi_dirent_t) < buflen ? sizeof(cloudabi_dirent_t) : buflen;
+	memcpy(buffer, &dirent, to_copy);
+	if(buflen - to_copy > 0) {
+		to_copy = dirent.d_namlen < buflen - to_copy ? dirent.d_namlen : buflen - to_copy;
+		memcpy(buffer + sizeof(cloudabi_dirent_t), filename.c_str(), to_copy);
+		return sizeof(cloudabi_dirent_t) + to_copy;
+	}
+	return to_copy;
+}
+
 /** Normalizes the given path. When it returns normally, directory
  * points at the innermost directory pointed to by path. It returns the
  * filename that is to be opened, created or unlinked.

@@ -320,8 +320,20 @@ cloudabi_sys_file_readdir(
 	cloudabi_dircookie_t cookie,
 	size_t *bufused
 ) {
-	putstring_l(__PRETTY_FUNCTION__);
-	return CLOUDABI_ENOSYS;
+	struct args_t {
+		cloudabi_fd_t fd;
+		void *buf;
+		size_t nbyte;
+		cloudabi_dircookie_t cookie;
+		size_t *bufused;
+	};
+	struct args_t args = {fd, buf, nbyte, cookie, bufused};
+	register int32_t reg_eax asm("eax") = 19;
+	register struct args_t *reg_ecx asm("ecx") = &args;
+	asm volatile("int $0x80"
+		: "+r"(reg_eax) : "r"(reg_ecx)
+		: "memory", "eax", "ecx");
+	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error handling */
 }
 
 cloudabi_errno_t

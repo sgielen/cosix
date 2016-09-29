@@ -72,6 +72,11 @@ void program_main(const argdata_t *ad) {
 		dprintf(stdout, "Failed to opendirat: %s\n", strerror(errno));
 		exit(1);
 	}
+	dprintf(stdout, "Contents of %s:\n", dirname);
+	struct dirent *ent;
+	while((ent = readdir(dir)) != nullptr) {
+		dprintf(stdout, "- \"%s\" (inode %llu, type %d)\n", ent->d_name, ent->d_ino, ent->d_type);
+	}
 
 	/* move file */
 	dprintf(stdout, "Moving file to dir\n");

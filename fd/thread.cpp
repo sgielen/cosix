@@ -480,6 +480,31 @@ void thread::handle_syscall() {
 		size_t nbyte = state.edx;
 		get_random()->get(buf, nbyte);
 		state.eax = 0;
+	} else if(syscall == 19) {
+		// sys_file_readdir
+		struct args_t {
+			cloudabi_fd_t fd;
+			char *buf;
+			size_t nbyte;
+			cloudabi_dircookie_t cookie;
+			size_t *bufused;
+		};
+
+		args_t *args = reinterpret_cast<args_t*>(state.ecx);
+		int fdnum = args->fd;
+		fd_mapping_t *mapping;
+		auto res = process->get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FILE_READDIR);
+		if(res != error_t::no_error) {
+			state.eax = -1;
+			return;
+		}
+
+		*args->bufused = mapping->fd->readdir(args->buf, args->nbyte, args->cookie);
+		if(mapping->fd->error != error_t::no_error) {
+			state.eax = -1;
+		} else {
+			state.eax = 0;
+		}
 	} else {
 		get_vga_stream() << "Syscall " << state.eax << " unknown, signalling process\n";
 		process->signal(CLOUDABI_SIGSYS);

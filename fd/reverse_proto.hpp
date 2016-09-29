@@ -13,7 +13,7 @@ struct reverse_request_t {
 		stat_put,
 		open,
 		create,
-		readdir,
+		readdir, // cookie in result (0 if last entry), put a cloudabi_dirent_t + name in buffer
 		rename,
 		unlink,
 		pread,
@@ -21,7 +21,7 @@ struct reverse_request_t {
 		close
 	} op;
 	uint64_t inode;
-	int flags;
+	uint64_t flags;
 	uint64_t offset;
 	uint8_t length; // bytes used in buffer (for paths and writes), otherwise, length to read
 	uint8_t buffer[256];
@@ -29,7 +29,7 @@ struct reverse_request_t {
 
 struct reverse_response_t {
 	int64_t result; // < 0 is -errno, 0 is success, >= 0 is result (can be inode or pseudo-fd)
-	int flags; // filetype in case of lookup
+	uint64_t flags; // filetype in case of lookup
 	uint8_t length; // bytes used in buffer (bytes actually read)
 	uint8_t buffer[256];
 };
