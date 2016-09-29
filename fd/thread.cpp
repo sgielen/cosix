@@ -505,6 +505,19 @@ void thread::handle_syscall() {
 		} else {
 			state.eax = 0;
 		}
+	} else if(syscall == 20) {
+		// sys_fd_dup(ebx=from, ecx=to)
+		int fdnum = state.ebx;
+		fd_mapping_t *mapping;
+		auto res = process->get_fd(&mapping, fdnum, 0);
+		if(res != error_t::no_error) {
+			state.eax = -1;
+			return;
+		}
+
+		int *fd_to = reinterpret_cast<int*>(state.ecx);
+		*fd_to = process->add_fd(mapping->fd, mapping->rights_base, mapping->rights_inheriting);
+		state.eax = 0;
 	} else {
 		get_vga_stream() << "Syscall " << state.eax << " unknown, signalling process\n";
 		process->signal(CLOUDABI_SIGSYS);
