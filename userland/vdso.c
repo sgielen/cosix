@@ -151,12 +151,13 @@ cloudabi_sys_fd_read(
 	size_t iovcnt,
 	size_t *nread
 ) {
-	register int32_t reg_eax asm("eax") = 3;
+	register int32_t reg_eax asm("eax");
 	register uint32_t reg_ebx asm("ebx") = fd;
 	register const char *reg_ecx asm("ecx");
 	register uint32_t reg_edx asm("edx");
 	*nread = 0;
 	for(size_t i = 0; i < iovcnt; ++i) {
+		reg_eax = 3;
 		reg_ecx = iov[i].iov_base;
 		reg_edx = iov[i].iov_len;
 		asm volatile("int $0x80"
@@ -230,12 +231,13 @@ cloudabi_sys_fd_write(
 	size_t iovcnt,
 	size_t *nwritten
 ) {
-	register int32_t reg_eax asm("eax") = 2;
+	register int32_t reg_eax asm("eax");
 	register uint32_t reg_ebx asm("ebx") = fd;
 	register const char *reg_ecx asm("ecx");
 	register uint32_t reg_edx asm("edx");
 	*nwritten = 0;
 	for(size_t i = 0; i < iovcnt; ++i) {
+		reg_eax = 2;
 		reg_ecx = iov[i].iov_base;
 		reg_edx = iov[i].iov_len;
 		asm volatile("int $0x80"
