@@ -440,8 +440,11 @@ void thread::handle_syscall() {
 			fd_t *pfd = get_allocator()->allocate<pipe_fd>();
 			new (pfd) pipe_fd(1024, "pipe_fd");
 
-			*fd1 = process->add_fd(pfd, CLOUDABI_RIGHT_FD_READ, 0);
-			*fd2 = process->add_fd(pfd, CLOUDABI_RIGHT_FD_WRITE, 0);
+			auto pipe_rights = CLOUDABI_RIGHT_POLL_FD_READWRITE
+			                 | CLOUDABI_RIGHT_FD_STAT_PUT_FLAGS
+			                 | CLOUDABI_RIGHT_FILE_STAT_FGET;
+			*fd1 = process->add_fd(pfd, pipe_rights | CLOUDABI_RIGHT_FD_READ, 0);
+			*fd2 = process->add_fd(pfd, pipe_rights | CLOUDABI_RIGHT_FD_WRITE, 0);
 			state.eax = 0;
 		} else {
 			state.eax = -1;
