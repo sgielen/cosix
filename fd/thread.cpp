@@ -25,7 +25,11 @@ thread::thread(process_fd *p, void *stack_location, void *auxv_address, void *en
 , running(true)
 , userland_stack_top(stack_location)
 {
-	// Initialize the process
+	if((thread_id & 0x80000000) != 0) {
+		kernel_panic("Upper 2 bits of the thread ID must not be set");
+	}
+
+	// initialize the stack
 	kernel_stack_size = 0x10000 /* 64 kb */;
 	kernel_stack_bottom   = reinterpret_cast<uint8_t*>(get_allocator()->allocate_aligned(kernel_stack_size, process_fd::PAGE_SIZE));
 
@@ -38,7 +42,7 @@ thread::thread(process_fd *p, void *stack_location, void *auxv_address, void *en
 	// set fsbase
 	state.fs = 0x33;
 
-	// stack location for new process
+	// stack location for new thread
 	state.useresp = reinterpret_cast<uint32_t>(userland_stack_top);
 
 	// memory for the TCB pointer and area

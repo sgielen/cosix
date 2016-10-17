@@ -12,6 +12,9 @@ struct scheduler;
 struct thread;
 typedef linked_list<thread*> thread_list;
 
+// MAIN_THREAD should be set to a value higher than 0, so that locks that are
+// acquired by a thread always have a nonzero value. This is assumed in the
+// implementation.
 static const cloudabi_tid_t MAIN_THREAD = 1;
 
 typedef uint8_t sse_state_t [512] __attribute__ ((aligned (16)));
@@ -58,6 +61,7 @@ struct thread {
 
 private:
 	process_fd *process;
+	// note: only the bottom 30 bits may be used
 	cloudabi_tid_t thread_id;
 	bool running;
 
