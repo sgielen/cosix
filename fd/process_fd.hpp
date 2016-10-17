@@ -12,12 +12,30 @@ struct process_fd;
 typedef linked_list<process_fd*> process_list;
 
 struct vga_stream;
+struct cv_t;
 
 struct fd_mapping_t {
 	fd_t *fd; /* can be 0, in this case, the mapping is unused and can be reused for another fd */
 	cloudabi_rights_t rights_base;
 	cloudabi_rights_t rights_inheriting;
 };
+
+struct userland_lock_waiters_t {
+	_Atomic(cloudabi_lock_t) *lock;
+	cv_t *readers_cv;
+	size_t number_of_readers;
+	thread_list *waiting_writers;
+};
+
+typedef linked_list<userland_lock_waiters_t*> userland_lock_waiters_list;
+
+struct userland_condvar_waiters_t {
+	_Atomic(cloudabi_condvar_t) *condvar;
+	size_t waiters;
+	cv_t *cv;
+};
+
+typedef linked_list<userland_condvar_waiters_t*> userland_condvar_waiters_list;
 
 /** Process file descriptor
  *
@@ -86,6 +104,19 @@ struct process_fd : public fd_t {
 
 	static const int PAGE_SIZE = 4096 /* bytes */;
 
+	/* If given lock is known to the kernel, return its info. Otherwise, return nullptr. */
+	userland_lock_waiters_t *get_userland_lock_info(_Atomic(cloudabi_lock_t) *lock);
+	/* If given lock is known to the kernel, return its info. Otherwise, make given lock
+	 * known to the kernel, and return a new info object. */
+	userland_lock_waiters_t *get_or_create_userland_lock_info(_Atomic(cloudabi_lock_t) *lock);
+	/* Forget about the given lock: it just became unmanaged. */
+	void forget_userland_lock_info(_Atomic(cloudabi_lock_t) *lock);
+
+	/* Likewise, but for userland condition variables. */
+	userland_condvar_waiters_t *get_userland_condvar_cv(_Atomic(cloudabi_condvar_t) *condvar);
+	userland_condvar_waiters_t *get_or_create_userland_condvar_cv(_Atomic(cloudabi_condvar_t) *condvar);
+	void forget_userland_condvar_cv(_Atomic(cloudabi_condvar_t) *condvar);
+
 private:
 	thread_list *threads;
 	void add_thread(thread *thr);
@@ -107,6 +138,10 @@ private:
 
 	// The memory mappings used by this process.
 	mem_mapping_list *mappings = 0;
+
+	// The kernel managed lock & condvar information for this process.
+	userland_lock_waiters_list *userland_locks = 0;
+	userland_condvar_waiters_list *userland_condvars = 0;
 
 	bool running = false;
 	cloudabi_exitcode_t exitcode = 0;

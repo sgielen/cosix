@@ -49,8 +49,14 @@ cloudabi_sys_condvar_signal(
 	cloudabi_scope_t scope,
 	cloudabi_nthreads_t nwaiters
 ) {
-	putstring_l(__PRETTY_FUNCTION__);
-	return CLOUDABI_ENOSYS;
+	register int32_t reg_eax asm("eax") = 23;
+	register _Atomic(cloudabi_condvar_t) *reg_ebx asm("ebx") = condvar;
+	register cloudabi_scope_t reg_ecx asm("ecx") = scope;
+	register cloudabi_nthreads_t reg_edx asm("edx") = nwaiters;
+	asm volatile("int $0x80"
+		: "+r"(reg_eax) : "r"(reg_ebx), "r"(reg_ecx), "r"(reg_edx)
+		: "memory", "eax", "ebx", "ecx", "edx");
+	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error handling */
 }
 
 cloudabi_errno_t
@@ -438,8 +444,13 @@ cloudabi_sys_lock_unlock(
 	_Atomic(cloudabi_lock_t) *lock,
 	cloudabi_scope_t scope
 ) {
-	putstring_l(__PRETTY_FUNCTION__);
-	return CLOUDABI_ENOSYS;
+	register int32_t reg_eax asm("eax") = 22;
+	register _Atomic(cloudabi_lock_t) *reg_ebx asm("ebx") = lock;
+	register cloudabi_scope_t reg_ecx asm("ecx") = scope;
+	asm volatile("int $0x80"
+		: "+r"(reg_eax) : "r"(reg_ebx), "r"(reg_ecx)
+		: "memory", "eax", "ebx", "ecx");
+	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error handling */
 }
 
 cloudabi_errno_t
@@ -539,8 +550,15 @@ cloudabi_sys_poll(
 	size_t nsubscriptions,
 	size_t *nevents
 ) {
-	putstring_l(__PRETTY_FUNCTION__);
-	return CLOUDABI_ENOSYS;
+	register int32_t reg_eax asm("eax") = 21;
+	register const cloudabi_subscription_t *reg_ebx asm("ebx") = in;
+	register cloudabi_event_t *reg_ecx asm("ecx") = out;
+	register size_t reg_edx asm("edx") = nsubscriptions;
+	asm volatile("int $0x80"
+		: "+r"(reg_eax), "+r"(reg_edx) : "r"(reg_ebx), "r"(reg_ecx)
+		: "memory", "eax", "ebx", "ecx", "edx");
+	*nevents = reg_edx;
+	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error handling */
 }
 
 cloudabi_errno_t

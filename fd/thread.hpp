@@ -60,6 +60,12 @@ struct thread {
 	void thread_unblock();
 
 private:
+	void acquire_userspace_lock(_Atomic(cloudabi_lock_t) *lock, cloudabi_eventtype_t locktype);
+	void drop_userspace_lock(_Atomic(cloudabi_lock_t) *lock);
+
+	void wait_userspace_cv(_Atomic(cloudabi_condvar_t) *condvar);
+	void signal_userspace_cv(_Atomic(cloudabi_condvar_t) *condvar, cloudabi_nthreads_t nwaiters);
+
 	process_fd *process;
 	// note: only the bottom 30 bits may be used
 	cloudabi_tid_t thread_id;

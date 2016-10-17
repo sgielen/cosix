@@ -418,8 +418,16 @@ void thread::handle_syscall() {
 		state.eax = 0;
 	} else if(syscall == 13) {
 		// sys_thread_exit(ecx=lock, ebx=lock_scope). Doesn't return.
-		// TODO: unlock the lock
+		auto *lock = reinterpret_cast<_Atomic(cloudabi_condvar_t)*>(state.ecx);
+		auto scope = state.ebx;
+		if(scope != CLOUDABI_SCOPE_PRIVATE) {
+			get_vga_stream() << "thread_exit(): non-private locks are not supported yet\n";
+			state.edx = 0;
+			state.eax = -1;
+			return;
+		}
 		thread_exit();
+		drop_userspace_lock(lock);
 		get_scheduler()->thread_yield();
 	} else if(syscall == 14) {
 		// sys_thread_yield()
@@ -522,6 +530,127 @@ void thread::handle_syscall() {
 		int *fd_to = reinterpret_cast<int*>(state.ecx);
 		*fd_to = process->add_fd(mapping->fd, mapping->rights_base, mapping->rights_inheriting);
 		state.eax = 0;
+	} else if(syscall == 21) {
+		// sys_poll(ebx=in, ecx=out, edx=nsubscriptions)
+		// sets edx to nevents
+		auto *in = reinterpret_cast<const cloudabi_subscription_t *>(state.ebx);
+		auto *out = reinterpret_cast<cloudabi_event_t *>(state.ecx);
+		size_t nsubscriptions = reinterpret_cast<size_t>(state.edx);
+		// There are a limited number of valid options for the contents of 'in':
+		// - empty
+		// - [0] lock_rdlock/lock_wrlock, and optionally [1] a clock
+		// - [0] condvar, and optionally [1] a clock
+		// - any number of clock/fd_read/fd_write/proc_terminate
+		if(nsubscriptions == 0) {
+			state.edx = 0;
+			state.eax = 0;
+			return;
+		}
+		cloudabi_eventtype_t first_event = in[0].type;
+		if(first_event == CLOUDABI_EVENTTYPE_LOCK_RDLOCK
+		|| first_event == CLOUDABI_EVENTTYPE_LOCK_WRLOCK
+		|| first_event == CLOUDABI_EVENTTYPE_CONDVAR) {
+			if(nsubscriptions == 2) {
+				// second event must be clock
+				if(in[1].type != CLOUDABI_EVENTTYPE_CLOCK) {
+					state.edx = 0;
+					state.eax = -1;
+					return;
+				}
+			} else if(nsubscriptions > 2) {
+				// must be at most 2 events
+				state.edx = 0;
+				state.eax = -1;
+				return;
+			}
+		}
+
+		if(first_event == CLOUDABI_EVENTTYPE_LOCK_RDLOCK
+		|| first_event == CLOUDABI_EVENTTYPE_LOCK_WRLOCK) {
+			// acquire the lock, optionally timing out when the
+			// timeout passes.
+			auto *lock = in[0].lock.lock;
+			if(nsubscriptions == 2) {
+				get_vga_stream() << "poll(): clocks are not supported yet\n";
+				state.edx = 0;
+				state.eax = -1;
+				return;
+			}
+			if(in[0].lock.lock_scope != CLOUDABI_SCOPE_PRIVATE) {
+				get_vga_stream() << "poll(): non-private locks are not supported yet\n";
+				state.edx = 0;
+				state.eax = -1;
+				return;
+			}
+			// this call blocks this thread until the lock is acquired
+			acquire_userspace_lock(lock, in[0].type);
+			out[0].userdata = in[0].userdata;
+			out[0].error = 0;
+			out[0].type = in[0].type;
+			out[0].lock.lock = in[0].lock.lock;
+			state.edx = 1;
+			state.eax = 0;
+		} else if(first_event == CLOUDABI_EVENTTYPE_CONDVAR) {
+			// release the lock, wait() for the condvar, and
+			// re-acquire the lock when it is notified, optionally
+			// timing out when the timeout passes.
+			auto *condvar = in[0].condvar.condvar;
+			auto *lock = in[0].condvar.lock;
+			if(nsubscriptions == 2) {
+				get_vga_stream() << "poll(): clocks are not supported yet\n";
+				state.edx = 0;
+				state.eax = -1;
+				return;
+			}
+			if(in[0].condvar.condvar_scope != CLOUDABI_SCOPE_PRIVATE || in[0].condvar.lock_scope != CLOUDABI_SCOPE_PRIVATE) {
+				get_vga_stream() << "poll(): non-private locks or condvars are not supported yet\n";
+				state.edx = 0;
+				state.eax = -1;
+				return;
+			}
+			// this call blocks this thread until the condition variable is notified
+			// TODO: this currently does not cause a race because we are UP and without
+			// kernel preemption, but will cause a race later
+			drop_userspace_lock(lock);
+			wait_userspace_cv(condvar);
+			acquire_userspace_lock(lock, CLOUDABI_EVENTTYPE_LOCK_WRLOCK);
+			out[0].userdata = in[0].userdata;
+			out[0].error = 0;
+			out[0].type = in[0].type;
+			out[0].lock.lock = in[0].condvar.lock;
+			state.edx = 1;
+			state.eax = 0;
+		} else {
+			// return an event when any of these subscriptions happen.
+			get_vga_stream() << "Wait for a normal eventtype\n";
+			state.edx = 0;
+			state.eax = -1;
+		}
+	} else if(syscall == 22) {
+		// lock_unlock(ebx=lock, ecx=scope)
+		auto *lock = reinterpret_cast<_Atomic(cloudabi_lock_t)*>(state.ebx);
+		auto scope = state.ecx;
+		if(scope != CLOUDABI_SCOPE_PRIVATE) {
+			get_vga_stream() << "lock_unlock(): non-private locks are not supported yet\n";
+			state.edx = 0;
+			state.eax = -1;
+			return;
+		}
+		drop_userspace_lock(lock);
+		state.eax = 0;
+	} else if(syscall == 23) {
+		// condvar_signal(ebx=condvar, ecx=scope, edx=nwaiters)
+		auto *condvar = reinterpret_cast<_Atomic(cloudabi_condvar_t)*>(state.ebx);
+		auto scope = state.ecx;
+		auto nwaiters = reinterpret_cast<cloudabi_nthreads_t>(state.edx);
+		if(scope != CLOUDABI_SCOPE_PRIVATE) {
+			get_vga_stream() << "condvar_signal(): non-private condition variables are not supported yet\n";
+			state.edx = 0;
+			state.eax = -1;
+			return;
+		}
+		signal_userspace_cv(condvar, nwaiters);
+		state.eax = 0;
 	} else {
 		get_vga_stream() << "Syscall " << state.eax << " unknown, signalling process\n";
 		process->signal(CLOUDABI_SIGSYS);
@@ -569,4 +698,146 @@ void thread::thread_unblock() {
 
 bool thread::is_ready() {
 	return running && process->is_running() && !blocked;
+}
+
+void thread::acquire_userspace_lock(_Atomic(cloudabi_lock_t) *lock, cloudabi_eventtype_t locktype)
+{
+	bool is_write_locked = (*lock & CLOUDABI_LOCK_WRLOCKED) != 0;
+	bool want_write_lock = locktype == CLOUDABI_EVENTTYPE_LOCK_WRLOCK;
+
+	// TODO: kernel-lock this userland lock
+
+	if((*lock & 0x3fffffff) == 0) {
+		// The lock is unlocked, assume no contention
+		if(want_write_lock) {
+			// Make this thread writer
+			*lock = CLOUDABI_LOCK_WRLOCKED | (thread_id & 0x3fffffff);
+		} else {
+			// Make this thread reader
+			*lock = 1;
+		}
+		return;
+	}
+
+	userland_lock_waiters_t *lock_info = process->get_userland_lock_info(lock);
+
+	if(!is_write_locked && !want_write_lock && (lock_info == nullptr || lock_info->waiting_writers == nullptr)) {
+		// The lock is read-locked, this thread wants a read-lock, there are no waiting writers
+		// Add it as a reader, still not kernel-managed as this could have been done in userspace as well
+		*lock += 1;
+		return;
+	}
+
+	// All other cases:
+	// - The lock could be read-locked, this thread wants a readlock, there are waiting writers
+	// - The lock could be read-locked, this thread wants a writelock
+	// - The lock could be write-locked
+	// In all three cases, this thread needs to wait for its turn. The lock
+	// becomes kernel-managed, so that the kernel always notices when the
+	// relevant unlocks happen.
+
+	*lock = *lock | CLOUDABI_LOCK_KERNEL_MANAGED;
+	if(lock_info == nullptr) {
+		lock_info = process->get_or_create_userland_lock_info(lock);
+	}
+
+	if(want_write_lock) {
+		thread_list *t = get_allocator()->allocate<thread_list>();
+		t->data = this;
+		t->next = nullptr;
+		append(&(lock_info->waiting_writers), t);
+		thread_block();
+	} else {
+		lock_info->number_of_readers += 1;
+		lock_info->readers_cv->wait();
+	}
+
+	// Verify that this thread has the lock now
+	if(want_write_lock) {
+		if((*lock & CLOUDABI_LOCK_WRLOCKED) == 0 || (*lock & 0x3fffffff) != thread_id) {
+			kernel_panic("Thought I had a writelock, but it's not writelocked or thread ID isn't mine");
+		}
+	} else {
+		if((*lock & 0x3fffffff) == 0) {
+			kernel_panic("Thought I had a readlock, but readcount is 0");
+		}
+	}
+}
+
+void thread::drop_userspace_lock(_Atomic(cloudabi_lock_t) *lock)
+{
+	// as implemented by cloudlibc:
+	// if userspace wants to drop a readlock, they can freely do so if
+	// there are still other readers left. the last reader converts his
+	// lock into a write-lock, then unlocks it. so, we only support
+	// unlocking write-locks.
+	if((*lock & CLOUDABI_LOCK_WRLOCKED) == 0) {
+		get_vga_stream() << "drop_userspace_lock: lock not acquired for writing\n";
+		return;
+	}
+
+	if((*lock & 0x3fffffff) != thread_id) {
+		get_vga_stream() << "drop_userspace_lock: lock not acquired by this thread\n";
+		return;
+	}
+
+	// are there any write-waiters for this lock?
+	userland_lock_waiters_t *lock_info = process->get_userland_lock_info(lock);
+	if(lock_info != nullptr && lock_info->waiting_writers != nullptr) {
+		thread_list *first_thread = lock_info->waiting_writers;
+		lock_info->waiting_writers = first_thread->next;
+		thread *new_owner = first_thread->data;
+		*lock = CLOUDABI_LOCK_WRLOCKED | (new_owner->thread_id & 0x3fffffff);
+		// delete(first_thread);
+
+		// no more readers and writers?
+		if(lock_info->waiting_writers == nullptr && lock_info->number_of_readers == 0) {
+			// lock is now contention-free
+			lock_info = nullptr;
+			process->forget_userland_lock_info(lock);
+		} else {
+			// lock is still kernel managed
+			*lock |= CLOUDABI_LOCK_KERNEL_MANAGED;
+		}
+
+		new_owner->thread_unblock();
+		return;
+	}
+
+	// lock is no longer kernel-managed, because it's now contention-free
+	if(lock_info != nullptr) {
+		*lock = lock_info->number_of_readers;
+		lock_info->readers_cv->broadcast();
+		process->forget_userland_lock_info(lock);
+	} else {
+		*lock = 0;
+	}
+}
+
+void thread::wait_userspace_cv(_Atomic(cloudabi_condvar_t) *condvar)
+{
+	userland_condvar_waiters_t *condvar_cv = process->get_or_create_userland_condvar_cv(condvar);
+	condvar_cv->waiters += 1;
+	*condvar = 1;
+	condvar_cv->cv->wait();
+}
+
+void thread::signal_userspace_cv(_Atomic(cloudabi_condvar_t) *condvar, cloudabi_nthreads_t nwaiters)
+{
+	userland_condvar_waiters_t *condvar_cv = process->get_userland_condvar_cv(condvar);
+	if(!condvar_cv) {
+		// no waiters
+		return;
+	}
+
+	if(condvar_cv->waiters <= nwaiters) {
+		*condvar = 0;
+		condvar_cv->cv->broadcast();
+		process->forget_userland_condvar_cv(condvar);
+	} else {
+		while(nwaiters-- > 0) {
+			condvar_cv->waiters -= 1;
+			condvar_cv->cv->notify();
+		}
+	}
 }
