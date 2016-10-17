@@ -560,11 +560,15 @@ void process_fd::fork(thread *otherthread) {
 	last_fd = otherprocess->last_fd;
 	for(int i = 0; i <= last_fd; ++i) {
 		fd_mapping_t *old_mapping = otherprocess->fds[i];
+		fd_mapping_t *mapping = nullptr;
 
-		fd_mapping_t *mapping = get_allocator()->allocate<fd_mapping_t>();
-		mapping->fd = old_mapping->fd;
-		mapping->rights_base = old_mapping->rights_base;
-		mapping->rights_inheriting = old_mapping->rights_inheriting;
+		if(old_mapping != nullptr) {
+			mapping = get_allocator()->allocate<fd_mapping_t>();
+			mapping->fd = old_mapping->fd;
+			mapping->rights_base = old_mapping->rights_base;
+			mapping->rights_inheriting = old_mapping->rights_inheriting;
+		}
+
 		fds[i] = mapping;
 	}
 
