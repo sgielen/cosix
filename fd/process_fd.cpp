@@ -86,34 +86,47 @@ void process_fd::add_initial_fds() {
 		CLOUDABI_RIGHT_FILE_READDIR);
 }
 
-int process_fd::add_fd(fd_t *fd, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting) {
-	if(last_fd >= MAX_FD - 1) {
-		// TODO: instead of keeping a last_fd counter, put mappings
-		// into a freelist when they are closed, and allow them to be
-		// reused. Then, return an error when there is no more free
-		// space for fd's.
-		kernel_panic("fd's expired for process");
+cloudabi_fd_t process_fd::add_fd(fd_t *fd, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting) {
+	cloudabi_fd_t fdnum;
+	bool found = false;
+	// TODO: this doesn't scale, make this search nonlinear
+	for(fdnum = 0; fdnum < fd_capacity; ++fdnum) {
+		if(fds[fdnum] == nullptr) {
+			found = true;
+			break;
+		}
 	}
+
+	if(!found) {
+		// no place for fd's, grow the fd storage
+		// (note, fd_capacity is 0 for the first call of this method)
+		auto old_capacity = fd_capacity;
+		fd_mapping_t **old_fds = fds;
+
+		fd_capacity += 100;
+		fds = get_allocator()->allocate<fd_mapping_t*>(fd_capacity * sizeof(fd_mapping_t*));
+
+		memcpy(fds, old_fds, old_capacity * sizeof(fd_mapping_t*));
+		fdnum = old_capacity;
+	}
+
 	fd_mapping_t *mapping = get_allocator()->allocate<fd_mapping_t>();
 	mapping->fd = fd;
 	mapping->rights_base = rights_base;
 	mapping->rights_inheriting = rights_inheriting;
 
-	int fdnum = ++last_fd;
 	fds[fdnum] = mapping;
 	return fdnum;
 }
 
-error_t process_fd::get_fd(fd_mapping_t **r_mapping, size_t num, cloudabi_rights_t has_rights) {
+error_t process_fd::get_fd(fd_mapping_t **r_mapping, cloudabi_fd_t num, cloudabi_rights_t has_rights) {
 	*r_mapping = 0;
-	if(num >= MAX_FD) {
-		get_vga_stream() << "fdnum " << num << " is too high for an fd\n";
-		return error_t::resource_exhausted;
+	if(num >= fd_capacity) {
+		return error_t::bad_fd;
 	}
 	fd_mapping_t *mapping = fds[num];
 	if(mapping == 0 || mapping->fd == 0) {
-		get_vga_stream() << "fdnum " << num << " is not a valid fd\n";
-		return error_t::invalid_argument;
+		return error_t::bad_fd;
 	}
 	if((mapping->rights_base & has_rights) != has_rights) {
 		get_vga_stream() << "get_fd: fd " << num << " has insufficient rights 0x" << hex << has_rights << dec << "\n";
@@ -123,7 +136,7 @@ error_t process_fd::get_fd(fd_mapping_t **r_mapping, size_t num, cloudabi_rights
 	return error_t::no_error;
 }
 
-error_t process_fd::close_fd(size_t num) {
+error_t process_fd::close_fd(cloudabi_fd_t num) {
 	fd_mapping_t *mapping;
 	auto res = get_fd(&mapping, num, 0);
 	if(res != error_t::no_error) {
@@ -345,24 +358,28 @@ error_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fds, void c
 	}
 
 	// Close all unused FDs
-	for(int i = 0; i <= last_fd; ++i) {
+	for(cloudabi_fd_t i = 0; i < fd_capacity; ++i) {
+		if(fds[i] == nullptr || fds[i]->fd == nullptr) {
+			continue;
+		}
+
 		bool fd_is_used = false;
-		for(size_t j = 0; j < fdslen; ++j) {
+		for(cloudabi_fd_t j = 0; j < fdslen; ++j) {
 			// TODO: cloudabi does not allow an fd to be mapped twice in exec()
 			if(new_fds[j]->fd == fds[i]->fd) {
 				fd_is_used = true;
+				break;
 			}
 		}
+
 		if(!fd_is_used) {
-			// TODO: actually close
-			fds[i]->fd = nullptr;
+			close_fd(i);
 		}
 	}
 
-	for(size_t i = 0; i < fdslen; ++i) {
+	for(cloudabi_fd_t i = 0; i < fdslen; ++i) {
 		fds[i] = new_fds[i];
 	}
-	last_fd = fdslen - 1;
 
 	// now, when process is scheduled again, we will return to the entrypoint of the new binary
 	return error_t::no_error;
@@ -557,8 +574,9 @@ void process_fd::fork(thread *otherthread) {
 	}
 
 	// dup all fd's
-	last_fd = otherprocess->last_fd;
-	for(int i = 0; i <= last_fd; ++i) {
+	fd_capacity = otherprocess->fd_capacity;
+	fds = get_allocator()->allocate<fd_mapping_t*>(fd_capacity * sizeof(fd_mapping_t*));
+	for(cloudabi_fd_t i = 0; i < fd_capacity; ++i) {
 		fd_mapping_t *old_mapping = otherprocess->fds[i];
 		fd_mapping_t *mapping = nullptr;
 

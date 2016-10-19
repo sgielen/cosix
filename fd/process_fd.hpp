@@ -78,9 +78,9 @@ struct process_fd : public fd_t {
 	// loaded)
 	void fork(thread *t);
 
-	int add_fd(fd_t*, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting = 0);
-	error_t get_fd(fd_mapping_t **mapping, size_t num, cloudabi_rights_t has_rights);
-	error_t close_fd(size_t num);
+	cloudabi_fd_t add_fd(fd_t*, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting = 0);
+	error_t get_fd(fd_mapping_t **mapping, cloudabi_fd_t num, cloudabi_rights_t has_rights);
+	error_t close_fd(cloudabi_fd_t num);
 
 	inline bool is_running() { return running; }
 	void exit(cloudabi_exitcode_t exitcode, cloudabi_signal_t exitsignal = 0);
@@ -126,9 +126,8 @@ private:
 
 	static const int PAGE_DIRECTORY_SIZE = 1024 /* entries */;
 
-	static const int MAX_FD = 256 /* file descriptors */;
-	fd_mapping_t *fds[MAX_FD];
-	int last_fd = -1;
+	size_t fd_capacity = 0;
+	fd_mapping_t **fds;
 
 	// Page directory, filled with physical addresses to page tables
 	uint32_t *page_directory = 0;
