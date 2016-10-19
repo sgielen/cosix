@@ -180,12 +180,21 @@ size_t tmpfs::readdir(pseudofd_t pseudo, char *buffer, size_t buflen, cloudabi_d
  *
  * It returns an error if the given file_entry ptr is not a directory,
  * if any of the path components don't reference a directory, or if the
- * path eventually points outside of the given file_entry.
+ * path (eventually) points outside of the given file_entry.
  */
 std::string tmpfs::normalize_path(file_entry_ptr &directory, const char *p, size_t len, cloudabi_lookupflags_t lookupflags)
 {
 	if(directory->type != CLOUDABI_FILETYPE_DIRECTORY) {
 		throw filesystem_error(ENOTDIR);
+	}
+
+	if(len == 0) {
+		throw filesystem_error(ENOENT);
+	}
+
+	if(p[0] == '/') {
+		// no absolute paths allowed
+		throw filesystem_error(EACCES);
 	}
 
 	std::string path(p, len);
