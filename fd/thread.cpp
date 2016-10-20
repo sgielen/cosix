@@ -346,6 +346,17 @@ void thread::handle_syscall() {
 		}
 		void *address_requested = args->addr;
 		bool fixed = args->flags & CLOUDABI_MAP_FIXED;
+		auto prot = args->prot;
+		if((prot & CLOUDABI_PROT_EXEC) && (prot & CLOUDABI_PROT_WRITE)) {
+			// CloudABI enforces W xor X
+			state.eax = ENOTSUP;
+			return;
+		}
+		if(prot & ~(CLOUDABI_PROT_EXEC | CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE)) {
+			// invalid protection bits
+			state.eax = ENOTSUP;
+			return;
+		}
 		// NOTE: cloudabi sys_mem_map() defines that address_requested
 		// is only used when MAP_FIXED is given, but in other mmap()
 		// implementations address_requested is considered a hint when
@@ -366,7 +377,7 @@ void thread::handle_syscall() {
 			return;
 		}
 		mem_mapping_t *mapping = get_allocator()->allocate<mem_mapping_t>();
-		new (mapping) mem_mapping_t(process, address_requested, len_to_pages(args->len), NULL, 0, args->prot);
+		new (mapping) mem_mapping_t(process, address_requested, len_to_pages(args->len), NULL, 0, prot);
 		process->add_mem_mapping(mapping, fixed);
 		// TODO: instead of completely backing, await the page fault and do it then
 		mapping->ensure_completely_backed();
