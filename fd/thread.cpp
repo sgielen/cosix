@@ -331,10 +331,6 @@ void thread::handle_syscall() {
 
 		args_t *args = reinterpret_cast<args_t*>(state.ecx);
 		if(!(args->flags & CLOUDABI_MAP_ANON)) {
-			if(args->fd != CLOUDABI_MAP_ANON_FD) {
-				state.eax = EBADF;
-				return;
-			}
 			get_vga_stream() << "Only anonymous mappings are supported at the moment\n";
 			state.eax = ENOSYS;
 			return;
@@ -342,6 +338,10 @@ void thread::handle_syscall() {
 		if(!(args->flags & CLOUDABI_MAP_PRIVATE)) {
 			get_vga_stream() << "Only private mappings are supported at the moment\n";
 			state.eax = ENOSYS;
+			return;
+		}
+		if(args->flags & CLOUDABI_MAP_ANON && args->fd != CLOUDABI_MAP_ANON_FD) {
+			state.eax = EINVAL;
 			return;
 		}
 		void *address_requested = args->addr;
