@@ -833,6 +833,8 @@ void thread::signal_userspace_cv(_Atomic(cloudabi_condvar_t) *condvar, cloudabi_
 		return;
 	}
 
+	// TODO: add the waked threads to the lock writers-waiting list, so that if the
+	// thread wakes up, it already atomically has the lock
 	if(condvar_cv->waiters <= nwaiters) {
 		*condvar = 0;
 		condvar_cv->cv->broadcast();
