@@ -119,32 +119,31 @@ cloudabi_fd_t process_fd::add_fd(fd_t *fd, cloudabi_rights_t rights_base, clouda
 	return fdnum;
 }
 
-error_t process_fd::get_fd(fd_mapping_t **r_mapping, cloudabi_fd_t num, cloudabi_rights_t has_rights) {
+cloudabi_errno_t process_fd::get_fd(fd_mapping_t **r_mapping, cloudabi_fd_t num, cloudabi_rights_t has_rights) {
 	*r_mapping = 0;
 	if(num >= fd_capacity) {
-		return error_t::bad_fd;
+		return EBADF;
 	}
 	fd_mapping_t *mapping = fds[num];
 	if(mapping == 0 || mapping->fd == 0) {
-		return error_t::bad_fd;
+		return EBADF;
 	}
 	if((mapping->rights_base & has_rights) != has_rights) {
 		get_vga_stream() << "get_fd: fd " << num << " has insufficient rights 0x" << hex << has_rights << dec << "\n";
-		return error_t::not_capable;
+		return ENOTCAPABLE;
 	}
 	*r_mapping = mapping;
-	return error_t::no_error;
+	return 0;
 }
 
-error_t process_fd::close_fd(cloudabi_fd_t num) {
+cloudabi_errno_t process_fd::close_fd(cloudabi_fd_t num) {
 	fd_mapping_t *mapping;
 	auto res = get_fd(&mapping, num, 0);
-	if(res != error_t::no_error) {
-		return res;
+	if(res == 0) {
+		mapping->fd = 0;
+		fds[num] = 0;
 	}
-	mapping->fd = 0;
-	fds[num] = 0;
-	return error_t::no_error;
+	return res;
 }
 
 uint32_t *process_fd::get_page_table(int i) {

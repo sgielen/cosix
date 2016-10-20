@@ -79,8 +79,8 @@ struct process_fd : public fd_t {
 	void fork(thread *t);
 
 	cloudabi_fd_t add_fd(fd_t*, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting = 0);
-	error_t get_fd(fd_mapping_t **mapping, cloudabi_fd_t num, cloudabi_rights_t has_rights);
-	error_t close_fd(cloudabi_fd_t num);
+	cloudabi_errno_t get_fd(fd_mapping_t **mapping, cloudabi_fd_t num, cloudabi_rights_t has_rights);
+	cloudabi_errno_t close_fd(cloudabi_fd_t num);
 
 	inline bool is_running() { return running; }
 	void exit(cloudabi_exitcode_t exitcode, cloudabi_signal_t exitsignal = 0);

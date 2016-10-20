@@ -179,8 +179,8 @@ void thread::handle_syscall() {
 		int fdnum = state.ebx;
 		fd_mapping_t *mapping;
 		auto res = process->get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FD_WRITE);
-		if(res != error_t::no_error) {
-			state.eax = EBADF;
+		if(res != 0) {
+			state.eax = res;
 			return;
 		}
 
@@ -203,8 +203,8 @@ void thread::handle_syscall() {
 		int fdnum = state.ebx;
 		fd_mapping_t *mapping;
 		auto res = process->get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FD_READ);
-		if(res != error_t::no_error) {
-			state.eax = EBADF;
+		if(res != 0) {
+			state.eax = res;
 			return;
 		}
 
@@ -229,8 +229,8 @@ void thread::handle_syscall() {
 		int fdnum = args->dirfd.fd;
 		fd_mapping_t *mapping;
 		auto res = process->get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FILE_OPEN);
-		if(res != error_t::no_error) {
-			state.eax = EBADF;
+		if(res != 0) {
+			state.eax = res;
 			return;
 		}
 
@@ -258,8 +258,8 @@ void thread::handle_syscall() {
 		int fdnum = state.ebx;
 		fd_mapping_t *mapping;
 		auto res = process->get_fd(&mapping, fdnum, 0);
-		if(res != error_t::no_error) {
-			state.eax = EBADF;
+		if(res != 0) {
+			state.eax = res;
 			return;
 		}
 
@@ -293,8 +293,8 @@ void thread::handle_syscall() {
 
 		fd_mapping_t *mapping;
 		auto res = process->get_fd(&mapping, args->fd, CLOUDABI_RIGHT_PROC_EXEC);
-		if(res != error_t::no_error) {
-			state.eax = EBADF;
+		if(res != 0) {
+			state.eax = res;
 			return;
 		}
 
@@ -302,17 +302,17 @@ void thread::handle_syscall() {
 		for(size_t i = 0; i < args->fdslen; ++i) {
 			fd_mapping_t *old_mapping;
 			res = process->get_fd(&old_mapping, args->fds[i], 0);
-			if(res != error_t::no_error) {
+			if(res != 0) {
 				// request to map an invalid fd
-				state.eax = EBADF;
+				state.eax = res;
 				return;
 			}
 			// copy the mapping to the new process
 			new_fds[i] = old_mapping;
 		}
 
-		res = process->exec(mapping->fd, args->fdslen, new_fds, args->data, args->datalen);
-		if(res != error_t::no_error) {
+		auto eres = process->exec(mapping->fd, args->fdslen, new_fds, args->data, args->datalen);
+		if(eres != error_t::no_error) {
 			get_vga_stream() << "exec() failed because of " << res << "\n";
 			state.eax = EINVAL;
 			return;
@@ -470,12 +470,7 @@ void thread::handle_syscall() {
 	} else if(syscall == 16) {
 		// sys_fd_close(ecx=fd)
 		int fdnum = state.ecx;
-		auto res = process->close_fd(fdnum);
-		if(res == error_t::no_error) {
-			state.eax = 0;
-		} else {
-			state.eax = EBADF;
-		}
+		state.eax = process->close_fd(fdnum);
 	} else if(syscall == 17) {
 		// sys_file_create(ecx=fd, ebx=path, edx=pathlen, esi=type)
 		cloudabi_filetype_t type = state.esi;
@@ -493,8 +488,8 @@ void thread::handle_syscall() {
 		int fdnum = state.ecx;
 		fd_mapping_t *mapping;
 		auto res = process->get_fd(&mapping, fdnum, right_needed);
-		if(res != error_t::no_error) {
-			state.eax = EBADF;
+		if(res != 0) {
+			state.eax = res;
 			return;
 		}
 
@@ -523,8 +518,8 @@ void thread::handle_syscall() {
 		int fdnum = args->fd;
 		fd_mapping_t *mapping;
 		auto res = process->get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FILE_READDIR);
-		if(res != error_t::no_error) {
-			state.eax = EBADF;
+		if(res != 0) {
+			state.eax = res;
 			return;
 		}
 
@@ -535,8 +530,8 @@ void thread::handle_syscall() {
 		int fdnum = state.ebx;
 		fd_mapping_t *mapping;
 		auto res = process->get_fd(&mapping, fdnum, 0);
-		if(res != error_t::no_error) {
-			state.eax = EBADF;
+		if(res != 0) {
+			state.eax = res;
 			return;
 		}
 
