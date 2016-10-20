@@ -125,11 +125,14 @@ void pseudo_fd::putstring(const char *str, size_t remaining)
 
 fd_t *pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_oflags_t oflags, const cloudabi_fdstat_t * fdstat)
 {
-	// TODO HACK because of exception breakage in tmpfs
-	// if O_CREAT is given, assume the file doesn't exist, create it
 	int64_t inode;
 	int filetype;
-	if(oflags & CLOUDABI_O_CREAT) {
+	reverse_response_t *response = lookup_inode(path, pathlen, oflags);
+	if(!response /* invalid path */) {
+		error = EINVAL;
+		return nullptr;
+	} else if(response->result == -ENOENT && (oflags & CLOUDABI_O_CREAT)) {
+		// The file doesn't exist and should be created.
 		filetype = CLOUDABI_FILETYPE_REGULAR_FILE;
 		reverse_request_t request;
 		request.pseudofd = pseudo_id;
@@ -139,21 +142,17 @@ fd_t *pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_oflags_t ofla
 		request.length = pathlen < sizeof(request.buffer) ? pathlen : sizeof(request.buffer);
 		memcpy(request.buffer, path, request.length);
 
-		reverse_response_t *response = send_request(&request);
-		inode = response->result;
-	} else {
-		reverse_response_t *response = lookup_inode(path, pathlen, oflags);
-		if(!response /* invalid path */) {
-			error = EINVAL;
-			return nullptr;
-		} else if(response->result < 0) {
-			error = -response->result;
-			return nullptr;
-		}
+		response = send_request(&request);
 
+		inode = response->result;
+	} else if(response->result < 0) {
+		error = -response->result;
+		return nullptr;
+	} else {
 		inode = response->result;
 		filetype = response->flags;
 	}
+
 
 	reverse_request_t request;
 	request.pseudofd = pseudo_id;
@@ -161,7 +160,8 @@ fd_t *pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_oflags_t ofla
 	request.inode = inode;
 	request.flags = oflags;
 	request.length = 0;
-	reverse_response_t *response = send_request(&request);
+
+	response = send_request(&request);
 
 	if(!response) {
 		// TODO: this can't currently happen
@@ -185,6 +185,7 @@ fd_t *pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_oflags_t ofla
 	// TODO: check if the rights are actually obtainable before opening the file;
 	// ignore those that don't apply to this filetype, return ENOTCAPABLE if not
 	new_fd->flags = fdstat->fs_flags;
+	error = 0;
 
 	return new_fd;
 }
