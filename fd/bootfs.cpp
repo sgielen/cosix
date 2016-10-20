@@ -33,7 +33,7 @@ private:
 
 fd_t *bootfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi_oflags_t, const cloudabi_fdstat_t *) {
 	if(pathname == 0 || pathname[0] == 0 || pathname[0] == '/') {
-		error = error_t::invalid_argument;
+		error = EINVAL;
 		return nullptr;
 	}
 
@@ -54,12 +54,12 @@ fd_t *bootfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi
 		}
 	}
 
-	error = error_t::no_entity;
+	error = ENOENT;
 	return nullptr;
 }
 
 size_t bootfs_file_fd::read(size_t offset, void *dest, size_t count) {
-	error = error_t::no_error;
+	error = 0;
 
 	// TODO this is the same code for every file for which we
 	// already have all contents in memory, so unify this

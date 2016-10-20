@@ -56,7 +56,7 @@ cloudabi_sys_condvar_signal(
 	asm volatile("int $0x80"
 		: "+r"(reg_eax) : "r"(reg_ebx), "r"(reg_ecx), "r"(reg_edx)
 		: "memory", "eax", "ebx", "ecx", "edx");
-	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error handling */
+	return reg_eax;
 }
 
 cloudabi_errno_t
@@ -68,7 +68,7 @@ cloudabi_sys_fd_close(
 	asm volatile("int $0x80"
 		: "+r"(reg_eax) : "r"(reg_ecx)
 		: "memory", "eax", "ecx");
-	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error handling */
+	return reg_eax;
 }
 
 cloudabi_errno_t
@@ -94,7 +94,7 @@ cloudabi_sys_fd_create2(
 		: "+r"(reg_eax)
 		: "r"(reg_ebx), "r"(reg_ecx), "r"(reg_edx)
 		: "memory");
-	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error codes */
+	return reg_eax;
 }
 
 cloudabi_errno_t
@@ -117,7 +117,7 @@ cloudabi_sys_fd_dup(
 		: "+r"(reg_eax)
 		: "r"(reg_ebx), "r"(reg_ecx)
 		: "memory");
-	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error codes */
+	return reg_eax;
 }
 
 cloudabi_errno_t
@@ -163,8 +163,8 @@ cloudabi_sys_fd_read(
 		asm volatile("int $0x80"
 			: "+r"(reg_eax), "+r"(reg_edx) : "r"(reg_ebx), "r"(reg_ecx)
 			: "memory");
-		if(reg_eax < 0) {
-			return CLOUDABI_EINVAL;
+		if(reg_eax != 0) {
+			return reg_eax;
 		}
 		*nread += reg_edx;
 	}
@@ -196,14 +196,14 @@ cloudabi_sys_fd_stat_get(
 	cloudabi_fd_t fd,
 	cloudabi_fdstat_t *buf
 ) {
-	// sys_fd_stat_get(ebx=fd, ecx=fdstat_t) returns eax=fd or eax=-1 on error
+	// sys_fd_stat_get(ebx=fd, ecx=fdstat_t)
 	register int32_t reg_eax asm("eax") = 5;
 	register uint32_t reg_ebx asm("ebx") = fd;
 	register void *reg_ecx asm("ecx") = buf;
 	asm volatile("int $0x80"
 		: "+r"(reg_eax) : "r"(reg_ebx), "r"(reg_ecx)
 		: "memory", "eax", "ebx", "ecx");
-	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error codes */
+	return reg_eax;
 }
 
 cloudabi_errno_t
@@ -243,6 +243,9 @@ cloudabi_sys_fd_write(
 		asm volatile("int $0x80"
 			: "+r"(reg_eax), "+r"(reg_edx) : "r"(reg_ecx), "r"(reg_ebx)
 			: "memory", "eax", "ebx", "ecx", "edx");
+		if(reg_eax != 0) {
+			return reg_eax;
+		}
 		*nwritten += reg_edx;
 	}
 	return 0;
@@ -284,7 +287,7 @@ cloudabi_sys_file_create(
 	asm volatile("int $0x80"
 		: "+r"(reg_eax) : "r"(reg_ecx), "r"(reg_edx), "r"(reg_ebx)
 		: "memory", "eax", "ecx", "edx", "ebx");
-	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error handling */
+	return reg_eax;
 }
 
 cloudabi_errno_t
@@ -323,7 +326,7 @@ cloudabi_sys_file_open(
 	asm volatile("int $0x80"
 		: "+r"(reg_eax) : "r"(reg_ecx)
 		: "memory", "eax", "ecx");
-	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error handling */
+	return reg_eax;
 }
 
 cloudabi_errno_t
@@ -347,7 +350,7 @@ cloudabi_sys_file_readdir(
 	asm volatile("int $0x80"
 		: "+r"(reg_eax) : "r"(reg_ecx)
 		: "memory", "eax", "ecx");
-	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error handling */
+	return reg_eax;
 }
 
 cloudabi_errno_t
@@ -452,7 +455,7 @@ cloudabi_sys_lock_unlock(
 	asm volatile("int $0x80"
 		: "+r"(reg_eax) : "r"(reg_ebx), "r"(reg_ecx)
 		: "memory", "eax", "ebx", "ecx");
-	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error handling */
+	return reg_eax;
 }
 
 cloudabi_errno_t
@@ -499,7 +502,7 @@ cloudabi_sys_mem_map(
 	asm volatile("int $0x80"
 		: "+r"(reg_eax) : "r"(reg_ecx)
 		: "memory", "eax", "ecx");
-	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error handling */
+	return reg_eax;
 }
 
 cloudabi_errno_t
@@ -542,7 +545,7 @@ cloudabi_sys_mem_unmap(
 	asm volatile("int $0x80"
 		: "+r"(reg_eax) : "r"(reg_ecx), "r"(reg_edx)
 		: "memory", "eax", "ecx", "edx");
-	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error handling */
+	return reg_eax;
 }
 
 cloudabi_errno_t
@@ -560,7 +563,7 @@ cloudabi_sys_poll(
 		: "+r"(reg_eax), "+r"(reg_edx) : "r"(reg_ebx), "r"(reg_ecx)
 		: "memory", "eax", "ebx", "ecx", "edx");
 	*nevents = reg_edx;
-	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error handling */
+	return reg_eax;
 }
 
 cloudabi_errno_t
@@ -598,7 +601,7 @@ cloudabi_sys_proc_exec(
 	asm volatile("int $0x80"
 		: "+r"(reg_eax) : "r"(reg_ecx)
 		: "memory", "eax", "ecx");
-	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error handling */
+	return reg_eax;
 }
 
 _Noreturn void
@@ -617,16 +620,15 @@ cloudabi_sys_proc_fork(
 	cloudabi_tid_t *tid
 ) {
 	register int32_t reg_eax asm("eax") = 9;
+	register int32_t reg_ebx asm("ebx") = 0;
 	register int32_t reg_ecx asm("ecx") = 0;
 	asm volatile("int $0x80"
-		: "+r"(reg_eax), "+r"(reg_ecx) : "r"(reg_eax), "r"(reg_ecx)
-		: "memory", "eax", "ecx");
+		: "+r"(reg_eax), "+r"(reg_ebx), "+r"(reg_ecx) :
+		: "memory", "eax", "ebx", "ecx");
 
-	// TODO: handle error codes
-	// (reg_eax == -1 for CLOUDABI_PROC_CHILD, so that's not an error)
-	*fd = reg_eax;
+	*fd = reg_ebx;
 	*tid = reg_ecx;
-	return 0;
+	return reg_eax;
 }
 
 cloudabi_errno_t
@@ -742,7 +744,7 @@ cloudabi_sys_thread_create(
 	register cloudabi_threadattr_t *reg_ecx asm("ecx") = attr;
 	register cloudabi_tid_t *reg_ebx asm("ebx") = tid;
 	asm volatile("int $0x80" : "+r"(reg_eax) : "r"(reg_ecx), "r"(reg_ebx));
-	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error codes */
+	return reg_eax;
 }
 
 _Noreturn void
@@ -761,5 +763,5 @@ cloudabi_errno_t
 cloudabi_sys_thread_yield(void) {
 	register int32_t reg_eax asm("eax") = 14;
 	asm volatile("int $0x80" : "+r"(reg_eax));
-	return reg_eax < 0 ? CLOUDABI_EINVAL : 0; /* TODO error codes */
+	return reg_eax;
 }

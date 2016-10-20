@@ -85,16 +85,16 @@ size_t pseudo_fd::read(size_t offset, void *dest, size_t count)
 	reverse_response_t *response = send_request(&request);
 	if(!response || response->result < 0) {
 		// TODO error handling
-		error = error_t::invalid_argument;
+		error = EINVAL;
 		return 0;
 	}
 
-	error = error_t::no_error;
+	error = 0;
 	memcpy(dest, response->buffer, response->length < count ? response->length : count);
 	return response->length;
 }
 
-error_t pseudo_fd::putstring(const char *str, size_t remaining)
+void pseudo_fd::putstring(const char *str, size_t remaining)
 {
 	size_t copied = 0;
 	while(remaining > 0) {
@@ -116,12 +116,11 @@ error_t pseudo_fd::putstring(const char *str, size_t remaining)
 		reverse_response_t *response = send_request(&request);
 		if(!response || response->result < 0) {
 			// TODO error handling
-			error = error_t::invalid_argument;
-			return error;
+			error = EINVAL;
+			return;
 		}
 	}
-	error = error_t::no_error;
-	return error;
+	error = 0;
 }
 
 fd_t *pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_oflags_t oflags, const cloudabi_fdstat_t * fdstat)
@@ -145,11 +144,10 @@ fd_t *pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_oflags_t ofla
 	} else {
 		reverse_response_t *response = lookup_inode(path, pathlen, oflags);
 		if(!response /* invalid path */) {
-			error = error_t::invalid_argument;
+			error = EINVAL;
 			return nullptr;
 		} else if(response->result < 0) {
-			// TODO: errno to error to errno
-			error = error_t::invalid_argument;
+			error = -response->result;
 			return nullptr;
 		}
 
@@ -167,11 +165,10 @@ fd_t *pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_oflags_t ofla
 
 	if(!response) {
 		// TODO: this can't currently happen
-		error = error_t::invalid_argument;
+		error = EINVAL;
 		return nullptr;
 	} else if(response->result < 0) {
-		// TODO: errno to error to errno
-		error = error_t::invalid_argument;
+		error = -response->result;
 		return nullptr;
 	}
 
@@ -204,12 +201,11 @@ void pseudo_fd::file_create(const char *path, size_t pathlen, cloudabi_filetype_
 
 	reverse_response_t *response = send_request(&request);
 	if(!response /* invalid path */) {
-		error = error_t::invalid_argument;
+		error = EINVAL;
 	} else if(response->result < 0) {
-		// TODO: errno to error to errno
-		error = error_t::invalid_argument;
+		error = -response->result;
 	} else {
-		error = error_t::no_error;
+		error = 0;
 	}
 }
 
@@ -227,11 +223,10 @@ size_t pseudo_fd::readdir(char *buf, size_t nbyte, cloudabi_dircookie_t cookie)
 		request.length = 0;
 		reverse_response_t *response = send_request(&request);
 		if(!response) {
-			error = error_t::input_output;
+			error = EIO;
 			return 0;
 		} else if(response->result < 0) {
-			// TODO: errno to error to errno
-			error = error_t::invalid_argument;
+			error = -response->result;
 			return 0;
 		}
 		if(response->result == 0) {
@@ -243,7 +238,7 @@ size_t pseudo_fd::readdir(char *buf, size_t nbyte, cloudabi_dircookie_t cookie)
 		cloudabi_dirent_t *dirent = reinterpret_cast<cloudabi_dirent_t*>(response->buffer);
 		if(response->length != sizeof(cloudabi_dirent_t) + dirent->d_namlen) {
 			// filesystem did not provide enough data, maybe the filename didn't fit?
-			error = error_t::input_output;
+			error = EIO;
 			return 0;
 		}
 		// append this buf to the given buffer
@@ -252,6 +247,6 @@ size_t pseudo_fd::readdir(char *buf, size_t nbyte, cloudabi_dircookie_t cookie)
 		memcpy(buf + written, response->buffer, write);
 		written += write;
 	}
-	error = error_t::no_error;
+	error = 0;
 	return written;
 }

@@ -16,7 +16,7 @@ size_t socket_fd::read(size_t offset, void *dest, size_t count)
 	return readfd->read(offset, dest, count);
 }
 
-error_t socket_fd::putstring(const char *str, size_t count)
+void socket_fd::putstring(const char *str, size_t count)
 {
 	return writefd->putstring(str, count);
 }

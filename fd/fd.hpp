@@ -46,16 +46,15 @@ struct fd_t {
 	bool invalid;
 
 	char name[64]; /* for debugging */
-	error_t error;
+	cloudabi_errno_t error;
 
 	/* For memory, pipes and files */
 	virtual size_t read(size_t /*offset*/, void * /*dest*/, size_t /*count*/) {
-		error = error_t::invalid_argument;
+		error = EINVAL;
 		return 0;
 	}
-	virtual error_t putstring(const char * /*str*/, size_t /*count*/) {
-		error = error_t::invalid_argument;
-		return error;
+	virtual void putstring(const char * /*str*/, size_t /*count*/) {
+		error = EINVAL;
 	}
 
 	/* For directories */
@@ -67,7 +66,7 @@ struct fd_t {
 	 * filetype is ignored.
 	 */
 	virtual fd_t *openat(const char * /*path */, size_t /*pathlen*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) {
-		error = error_t::invalid_argument;
+		error = EINVAL;
 		return nullptr;
 	}
 	/** Write directory entries to the given buffer, until it is filled. Each entry consists of a
@@ -77,7 +76,7 @@ struct fd_t {
 	 * the end of the directory was reached if the size returned < the nbyte given.
 	 */
 	virtual size_t readdir(char * /*buf*/, size_t /*nbyte*/, cloudabi_dircookie_t /*cookie*/) {
-		error = error_t::invalid_argument;
+		error = EINVAL;
 		return 0;
 	}
 
@@ -85,11 +84,11 @@ struct fd_t {
 	 */
 	virtual void file_create(const char * /*path*/, size_t /*pathlen*/, cloudabi_filetype_t /*type*/)
 	{
-		error = error_t::invalid_argument;
+		error = EINVAL;
 	}
 
 protected:
-	inline fd_t(cloudabi_filetype_t t, const char *n) : type(t), flags(0), refcount(1), invalid(false), error(error_t::no_error) {
+	inline fd_t(cloudabi_filetype_t t, const char *n) : type(t), flags(0), refcount(1), invalid(false), error(0) {
 		strncpy(name, n, sizeof(name));
 		name[sizeof(name)-1] = 0;
 	}

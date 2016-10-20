@@ -81,7 +81,7 @@ error_t procfs_directory_fd::to_string(char *buf, size_t length) {
 
 fd_t *procfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi_oflags_t oflags, const cloudabi_fdstat_t *) {
 	if(pathname == 0 || pathlen == 0 || pathname[0] == 0 || pathname[0] == '/') {
-		error = error_t::invalid_argument;
+		error = EINVAL;
 		return nullptr;
 	}
 
@@ -92,7 +92,7 @@ fd_t *procfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi
 	size_t pathbuf_length = strlen(pathbuf);
 
 	if(pathlen + 1 + pathbuf_length >= sizeof(pathbuf)) {
-		error = error_t::no_memory;
+		error = ENOMEM;
 		return nullptr;
 	}
 
@@ -104,16 +104,16 @@ fd_t *procfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi
 
 	if(strcmp(pathbuf, "kernel/uptime") == 0) {
 		if(must_be_directory) {
-			error = error_t::not_a_directory;
+			error = ENOTDIR;
 			return nullptr;
 		} else {
-			error = error_t::no_error;
+			error = 0;
 			procfs_uptime_fd *fd = get_allocator()->allocate<procfs_uptime_fd>();
 			new (fd) procfs_uptime_fd(pathbuf);
 			return fd;
 		}
 	} else if(strcmp(pathbuf, "kernel") == 0 || strcmp(pathbuf, "kernel/") == 0) {
-		error = error_t::no_error;
+		error = 0;
 		char pb[2][PROCFS_FILE_MAX];
 		strncpy(pb[0], "kernel", PROCFS_FILE_MAX);
 		pb[1][0] = 0;
@@ -121,13 +121,13 @@ fd_t *procfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi
 		new (fd) procfs_directory_fd(pb, "procfs_kernel_dir");
 		return fd;
 	} else {
-		error = error_t::no_entity;
+		error = ENOENT;
 		return nullptr;
 	}
 }
 
 size_t procfs_uptime_fd::read(size_t offset, void *dest, size_t count) {
-	error = error_t::no_error;
+	error = 0;
 	// TODO compute uptime
 	int uptime = 12345;
 	char buf[10];

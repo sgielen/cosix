@@ -17,10 +17,10 @@ size_t pipe_fd::read(size_t offset, void *dest, size_t count)
 	// count > capacity is no problem, we limit to the used size
 
 	if(offset != 0) {
-		error = error_t::invalid_argument;
+		error = EINVAL;
 		return 0;
 	}
-	error = error_t::no_error;
+	error = 0;
 
 	while(used == 0) {
 		readcv.wait();
@@ -37,12 +37,12 @@ size_t pipe_fd::read(size_t offset, void *dest, size_t count)
 	return num_bytes;
 }
 
-error_t pipe_fd::putstring(const char *str, size_t count)
+void pipe_fd::putstring(const char *str, size_t count)
 {
 	if(count > capacity) {
 		// TODO: write only a part
-		error = error_t::invalid_argument;
-		return error;
+		error = EINVAL;
+		return;
 	}
 
 	while(used + count > capacity) {
@@ -52,6 +52,5 @@ error_t pipe_fd::putstring(const char *str, size_t count)
 	memcpy(buffer + used, str, count);
 	used += count;
 	readcv.broadcast();
-	error = error_t::no_error;
-	return error;
+	error = 0;
 }

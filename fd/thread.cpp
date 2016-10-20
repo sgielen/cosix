@@ -168,17 +168,19 @@ void thread::handle_syscall() {
 	// TODO: for all system calls: check if all pointers refer to valid
 	// memory areas and if userspace has access to all of them
 
+	// All system calls return eax=0 on success, or eax=cloudabi_error_t on failure.
+
 	int syscall = state.eax;
 	if(syscall == 1) {
 		// retired
 		process->signal(CLOUDABI_SIGSYS);
 	} else if(syscall == 2) {
-		// putstring(ebx=fd, ecx=ptr, edx=size), returns eax=0 or eax=-1 on error
+		// putstring(ebx=fd, ecx=ptr, edx=size)
 		int fdnum = state.ebx;
 		fd_mapping_t *mapping;
 		auto res = process->get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FD_WRITE);
 		if(res != error_t::no_error) {
-			state.eax = -1;
+			state.eax = EBADF;
 			return;
 		}
 
@@ -190,19 +192,19 @@ void thread::handle_syscall() {
 		|| size >= 0x40000000
 		|| get_page_allocator()->to_physical_address(process, reinterpret_cast<const void*>(str)) == nullptr) {
 			get_vga_stream() << "putstring() of a non-userland-accessible string\n";
-			state.eax = -1;
+			state.eax = EFAULT;
 			return;
 		}
 
-		res = mapping->fd->putstring(str, size);
-		state.eax = res == error_t::no_error ? 0 : -1;
+		mapping->fd->putstring(str, size);
+		state.eax = mapping->fd->error;
 	} else if(syscall == 3) {
-		// sys_fd_read(ebx=fd, ecx=ptr, edx=size), returns eax=0 or eax=-1 on error
+		// sys_fd_read(ebx=fd, ecx=ptr, edx=size)
 		int fdnum = state.ebx;
 		fd_mapping_t *mapping;
 		auto res = process->get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FD_READ);
 		if(res != error_t::no_error) {
-			state.eax = -1;
+			state.eax = EBADF;
 			return;
 		}
 
@@ -210,14 +212,10 @@ void thread::handle_syscall() {
 		void *buf = reinterpret_cast<void*>(state.ecx);
 		size_t len = state.edx;
 		size_t r = mapping->fd->read(0, buf, len);
-		if(mapping->fd->error != error_t::no_error) {
-			state.eax = -1;
-			return;
-		}
-		state.eax = 0;
+		state.eax = mapping->fd->error;
 		state.edx = r;
 	} else if(syscall == 4) {
-		// sys_proc_file_open(ecx=parameters) returns eax=fd or eax=-1 on error
+		// sys_proc_file_open(ecx=parameters)
 		struct args_t {
 			cloudabi_lookup_t dirfd;
 			const char *path;
@@ -232,7 +230,7 @@ void thread::handle_syscall() {
 		fd_mapping_t *mapping;
 		auto res = process->get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FILE_OPEN);
 		if(res != error_t::no_error) {
-			state.eax = -1;
+			state.eax = EBADF;
 			return;
 		}
 
@@ -242,13 +240,13 @@ void thread::handle_syscall() {
 		if((mapping->rights_inheriting & args->fds->fs_rights_base) != args->fds->fs_rights_base
 		|| (mapping->rights_inheriting & args->fds->fs_rights_inheriting) != args->fds->fs_rights_inheriting) {
 			get_vga_stream() << "userspace wants too many permissions\n";
-			state.eax = -1;
+			state.eax = ENOTCAPABLE;
 		}
 
 		fd_t *new_fd = mapping->fd->openat(args->path, args->pathlen, args->oflags, args->fds);
-		if(!new_fd || mapping->fd->error != error_t::no_error) {
+		if(!new_fd || mapping->fd->error != 0) {
 			get_vga_stream() << "failed to openat()\n";
-			state.eax = -1;
+			state.eax = mapping->fd->error;
 			return;
 		}
 
@@ -256,12 +254,12 @@ void thread::handle_syscall() {
 		*(args->fd) = new_fdnum;
 		state.eax = 0;
 	} else if(syscall == 5) {
-		// sys_fd_stat_get(ebx=fd, ecx=fdstat_t) returns eax=fd or eax=-1 on error
+		// sys_fd_stat_get(ebx=fd, ecx=fdstat_t)
 		int fdnum = state.ebx;
 		fd_mapping_t *mapping;
 		auto res = process->get_fd(&mapping, fdnum, 0);
 		if(res != error_t::no_error) {
-			state.eax = -1;
+			state.eax = EBADF;
 			return;
 		}
 
@@ -272,7 +270,7 @@ void thread::handle_syscall() {
 		|| reinterpret_cast<uint32_t>(stat) + sizeof(cloudabi_fdstat_t) >= _kernel_virtual_base
 		|| get_page_allocator()->to_physical_address(process, reinterpret_cast<const void*>(stat)) == nullptr) {
 			get_vga_stream() << "sys_fd_stat_get() of a non-userland-accessible string\n";
-			state.eax = -1;
+			state.eax = EFAULT;
 			return;
 		}
 
@@ -282,7 +280,7 @@ void thread::handle_syscall() {
 		stat->fs_rights_inheriting = mapping->rights_inheriting;
 		state.eax = 0;
 	} else if(syscall == 6) {
-		// sys_fd_proc_exec(ecx=parameters) returns eax=-1 on error
+		// sys_fd_proc_exec(ecx=parameters)
 		struct args_t {
 			cloudabi_fd_t fd;
 			const void *data;
@@ -296,7 +294,7 @@ void thread::handle_syscall() {
 		fd_mapping_t *mapping;
 		auto res = process->get_fd(&mapping, args->fd, CLOUDABI_RIGHT_PROC_EXEC);
 		if(res != error_t::no_error) {
-			state.eax = -1;
+			state.eax = EBADF;
 			return;
 		}
 
@@ -306,7 +304,7 @@ void thread::handle_syscall() {
 			res = process->get_fd(&old_mapping, args->fds[i], 0);
 			if(res != error_t::no_error) {
 				// request to map an invalid fd
-				state.eax = -1;
+				state.eax = EBADF;
 				return;
 			}
 			// copy the mapping to the new process
@@ -316,7 +314,7 @@ void thread::handle_syscall() {
 		res = process->exec(mapping->fd, args->fdslen, new_fds, args->data, args->datalen);
 		if(res != error_t::no_error) {
 			get_vga_stream() << "exec() failed because of " << res << "\n";
-			state.eax = -1;
+			state.eax = EINVAL;
 			return;
 		}
 	} else if(syscall == 7) {
@@ -332,14 +330,18 @@ void thread::handle_syscall() {
 		};
 
 		args_t *args = reinterpret_cast<args_t*>(state.ecx);
-		if(!(args->flags & CLOUDABI_MAP_ANON) || args->fd != CLOUDABI_MAP_ANON_FD) {
+		if(!(args->flags & CLOUDABI_MAP_ANON)) {
+			if(args->fd != CLOUDABI_MAP_ANON_FD) {
+				state.eax = EBADF;
+				return;
+			}
 			get_vga_stream() << "Only anonymous mappings are supported at the moment\n";
-			state.eax = -1;
+			state.eax = ENOSYS;
 			return;
 		}
 		if(!(args->flags & CLOUDABI_MAP_PRIVATE)) {
 			get_vga_stream() << "Only private mappings are supported at the moment\n";
-			state.eax = -1;
+			state.eax = ENOSYS;
 			return;
 		}
 		void *address_requested = args->addr;
@@ -354,13 +356,13 @@ void thread::handle_syscall() {
 			address_requested = process->find_free_virtual_range(len_to_pages(args->len));
 			if(address_requested == nullptr) {
 				get_vga_stream() << "Failed to find virtual memory for mapping.\n";
-				state.eax = -1;
+				state.eax = ENOMEM;
 				return;
 			}
 		}
 		if((reinterpret_cast<uint32_t>(address_requested) % process_fd::PAGE_SIZE) != 0) {
 			get_vga_stream() << "Address requested isn't page aligned\n";
-			state.eax = -1;
+			state.eax = EINVAL;
 			return;
 		}
 		mem_mapping_t *mapping = get_allocator()->allocate<mem_mapping_t>();
@@ -378,17 +380,19 @@ void thread::handle_syscall() {
 		size_t len = state.edx;
 
 		process->mem_unmap(addr, len);
+		state.eax = 0;
 	} else if(syscall == 9) {
 		// cloudabi_sys_proc_fork() takes no arguments, creates a new process, and:
-		// * in the parent, returns eax=child_fd, ecx=thread_id
-		// * in the child, returns eax=CLOUDABI_PROCESS_CHILD, ecx=MAIN_THREAD
+		// * in the parent, returns ebx=child_fd, ecx=thread_id
+		// * in the child, returns ebx=CLOUDABI_PROCESS_CHILD, ecx=MAIN_THREAD
 		process_fd *newprocess = get_allocator()->allocate<process_fd>();
 		new(newprocess) process_fd("initializing process");
 
 		// Change child state before fork(), as it inherits the state
 		// and puts it into the interrupt frame on the kernel stack
 		// immediately
-		state.eax = CLOUDABI_PROCESS_CHILD;
+		state.eax = 0;
+		state.ebx = CLOUDABI_PROCESS_CHILD;
 		state.ecx = MAIN_THREAD;
 
 		newprocess->install_page_directory();
@@ -397,7 +401,8 @@ void thread::handle_syscall() {
 
 		// set return values for parent
 		int fdnum = process->add_fd(newprocess, CLOUDABI_RIGHT_POLL_PROC_TERMINATE, 0);
-		state.eax = fdnum;
+		state.eax = 0;
+		state.ebx = fdnum;
 		state.ecx = thread_id;
 	} else if(syscall == 10) {
 		// sys_proc_exit(ecx=rval). Doesn't return.
@@ -407,7 +412,8 @@ void thread::handle_syscall() {
 	} else if(syscall == 11) {
 		// sys_proc_raise(ecx=signal). Returns only if signal is not fatal.
 		process->signal(state.ecx);
-		// like with exit, running will be false, we'll be cleaned up later
+		state.eax = 0;
+		// like with exit, if signal is fatal running will be false, we'll be cleaned up later
 	} else if(syscall == 12) {
 		// sys_thread_create(ecx=threadattr, ebx=tid_t).
 		cloudabi_threadattr_t *attr = reinterpret_cast<cloudabi_threadattr_t*>(state.ecx);
@@ -422,8 +428,8 @@ void thread::handle_syscall() {
 		auto scope = state.ebx;
 		if(scope != CLOUDABI_SCOPE_PRIVATE) {
 			get_vga_stream() << "thread_exit(): non-private locks are not supported yet\n";
+			state.eax = ENOSYS;
 			state.edx = 0;
-			state.eax = -1;
 			return;
 		}
 		thread_exit();
@@ -432,6 +438,7 @@ void thread::handle_syscall() {
 	} else if(syscall == 14) {
 		// sys_thread_yield()
 		get_scheduler()->thread_yield();
+		state.eax = 0;
 	} else if(syscall == 15) {
 		// sys_fd_create2(ecx=type, ebx=fd1, edx=fd2). Returns eax=0 on success, -1 otherwise.
 		if(state.ecx == CLOUDABI_FILETYPE_FIFO) {
@@ -447,7 +454,7 @@ void thread::handle_syscall() {
 			*fd2 = process->add_fd(pfd, pipe_rights | CLOUDABI_RIGHT_FD_WRITE, 0);
 			state.eax = 0;
 		} else {
-			state.eax = -1;
+			state.eax = ENOSYS;
 		}
 	} else if(syscall == 16) {
 		// sys_fd_close(ecx=fd)
@@ -456,7 +463,7 @@ void thread::handle_syscall() {
 		if(res == error_t::no_error) {
 			state.eax = 0;
 		} else {
-			state.eax = -1;
+			state.eax = EBADF;
 		}
 	} else if(syscall == 17) {
 		// sys_file_create(ecx=fd, ebx=path, edx=pathlen, esi=type)
@@ -476,7 +483,7 @@ void thread::handle_syscall() {
 		fd_mapping_t *mapping;
 		auto res = process->get_fd(&mapping, fdnum, right_needed);
 		if(res != error_t::no_error) {
-			state.eax = -1;
+			state.eax = EBADF;
 			return;
 		}
 
@@ -484,11 +491,7 @@ void thread::handle_syscall() {
 		size_t pathlen = state.edx;
 
 		mapping->fd->file_create(path, pathlen, type);
-		if(mapping->fd->error != error_t::no_error) {
-			state.eax = -1;
-		} else {
-			state.eax = 0;
-		}
+		state.eax = mapping->fd->error;
 	} else if(syscall == 18) {
 		// sys_random_get(ecx=buf, edx=nbyte)
 		char *buf = reinterpret_cast<char*>(state.ecx);
@@ -510,23 +513,19 @@ void thread::handle_syscall() {
 		fd_mapping_t *mapping;
 		auto res = process->get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FILE_READDIR);
 		if(res != error_t::no_error) {
-			state.eax = -1;
+			state.eax = EBADF;
 			return;
 		}
 
 		*args->bufused = mapping->fd->readdir(args->buf, args->nbyte, args->cookie);
-		if(mapping->fd->error != error_t::no_error) {
-			state.eax = -1;
-		} else {
-			state.eax = 0;
-		}
+		state.eax = mapping->fd->error;
 	} else if(syscall == 20) {
 		// sys_fd_dup(ebx=from, ecx=to)
 		int fdnum = state.ebx;
 		fd_mapping_t *mapping;
 		auto res = process->get_fd(&mapping, fdnum, 0);
 		if(res != error_t::no_error) {
-			state.eax = -1;
+			state.eax = EBADF;
 			return;
 		}
 
@@ -557,13 +556,13 @@ void thread::handle_syscall() {
 				// second event must be clock
 				if(in[1].type != CLOUDABI_EVENTTYPE_CLOCK) {
 					state.edx = 0;
-					state.eax = -1;
+					state.eax = EINVAL;
 					return;
 				}
 			} else if(nsubscriptions > 2) {
 				// must be at most 2 events
 				state.edx = 0;
-				state.eax = -1;
+				state.eax = EINVAL;
 				return;
 			}
 		}
@@ -576,13 +575,13 @@ void thread::handle_syscall() {
 			if(nsubscriptions == 2) {
 				get_vga_stream() << "poll(): clocks are not supported yet\n";
 				state.edx = 0;
-				state.eax = -1;
+				state.eax = ENOSYS;
 				return;
 			}
 			if(in[0].lock.lock_scope != CLOUDABI_SCOPE_PRIVATE) {
 				get_vga_stream() << "poll(): non-private locks are not supported yet\n";
 				state.edx = 0;
-				state.eax = -1;
+				state.eax = ENOSYS;
 				return;
 			}
 			// this call blocks this thread until the lock is acquired
@@ -602,13 +601,13 @@ void thread::handle_syscall() {
 			if(nsubscriptions == 2) {
 				get_vga_stream() << "poll(): clocks are not supported yet\n";
 				state.edx = 0;
-				state.eax = -1;
+				state.eax = ENOSYS;
 				return;
 			}
 			if(in[0].condvar.condvar_scope != CLOUDABI_SCOPE_PRIVATE || in[0].condvar.lock_scope != CLOUDABI_SCOPE_PRIVATE) {
 				get_vga_stream() << "poll(): non-private locks or condvars are not supported yet\n";
 				state.edx = 0;
-				state.eax = -1;
+				state.eax = ENOSYS;
 				return;
 			}
 			// this call blocks this thread until the condition variable is notified
@@ -627,7 +626,7 @@ void thread::handle_syscall() {
 			// return an event when any of these subscriptions happen.
 			get_vga_stream() << "Wait for a normal eventtype\n";
 			state.edx = 0;
-			state.eax = -1;
+			state.eax = ENOSYS;
 		}
 	} else if(syscall == 22) {
 		// lock_unlock(ebx=lock, ecx=scope)
@@ -636,7 +635,7 @@ void thread::handle_syscall() {
 		if(scope != CLOUDABI_SCOPE_PRIVATE) {
 			get_vga_stream() << "lock_unlock(): non-private locks are not supported yet\n";
 			state.edx = 0;
-			state.eax = -1;
+			state.eax = ENOSYS;
 			return;
 		}
 		drop_userspace_lock(lock);
@@ -649,7 +648,7 @@ void thread::handle_syscall() {
 		if(scope != CLOUDABI_SCOPE_PRIVATE) {
 			get_vga_stream() << "condvar_signal(): non-private condition variables are not supported yet\n";
 			state.edx = 0;
-			state.eax = -1;
+			state.eax = ENOSYS;
 			return;
 		}
 		signal_userspace_cv(condvar, nwaiters);

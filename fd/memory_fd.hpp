@@ -11,7 +11,7 @@ struct memory_fd : public fd_t {
 	inline memory_fd(char *a, size_t l, const char *n) : fd_t(CLOUDABI_FILETYPE_SHARED_MEMORY, n), addr(a), length(l) {}
 
 	size_t read(size_t offset, void *dest, size_t count) override {
-		error = error_t::no_error;
+		error = 0;
 		if(offset + count > length) {
 			// EOF, don't change dest
 			return 0;

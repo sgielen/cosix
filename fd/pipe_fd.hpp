@@ -25,7 +25,7 @@ struct pipe_fd : fd_t {
 	/** putstring() blocks until there is capacity for at least count
 	 * bytes, then, it appends the given buffer to the stored one.
 	 */
-	error_t putstring(const char * /*str*/, size_t /*count*/) override;
+	void putstring(const char * /*str*/, size_t /*count*/) override;
 
 private:
 	char *buffer;

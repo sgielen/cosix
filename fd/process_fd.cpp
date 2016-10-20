@@ -302,10 +302,10 @@ error_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fds, void c
 		if(read == 0) {
 			break;
 		}
-	} while(fd->error == error_t::no_error);
+	} while(fd->error == 0);
 
-	if(fd->error != error_t::no_error) {
-		return fd->error;
+	if(fd->error != 0) {
+		return error_t::invalid_argument;
 	}
 
 	uint8_t *argdata_buffer = get_allocator()->allocate<uint8_t>(argdatalen);
