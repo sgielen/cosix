@@ -194,7 +194,7 @@ std::string tmpfs::normalize_path(file_entry_ptr &directory, const char *p, size
 
 	if(p[0] == '/') {
 		// no absolute paths allowed
-		throw filesystem_error(EACCES);
+		throw filesystem_error(ENOTCAPABLE);
 	}
 
 	std::string path(p, len);
@@ -249,7 +249,8 @@ std::string tmpfs::normalize_path(file_entry_ptr &directory, const char *p, size
 		directory = entry;
 		if(component == "..") {
 			if(depth == 0) {
-				throw filesystem_error(EACCES /* TODO: is this the right error code for going outside the given pseudo? */);
+				// don't allow going outside of the file descriptor
+				throw filesystem_error(ENOTCAPABLE);
 			}
 			depth--;
 		} else {
