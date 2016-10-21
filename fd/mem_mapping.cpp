@@ -113,8 +113,8 @@ void mem_mapping_t::ensure_backed(size_t page)
 	if(!(page_entry & 0x1)) {
 		page_allocation p;
 		auto res = get_page_allocator()->allocate(&p);
-		if(res != error_t::no_error) {
-			kernel_panic("Failed to allocate page for mapping");
+		if(res != 0) {
+			kernel_panic("Failed to allocate page to back a mapping");
 		}
 
 		auto phys_addr = get_page_allocator()->to_physical_address(p.address);

@@ -14,8 +14,9 @@ allocator::allocator()
 void *allocator::allocate(size_t x) {
 	while(capacity < x) {
 		page_allocation a;
-		if(get_page_allocator()->allocate(&a) != error_t::no_error) {
-			kernel_panic("Page allocator failed to allocate");
+		if(get_page_allocator()->allocate(&a) != 0) {
+			get_vga_stream() << "Page allocator failed to allocate";
+			return nullptr;
 		}
 		capacity += a.capacity;
 		if(handout == 0) {

@@ -63,7 +63,7 @@ page_allocator::page_allocator(void *h, memory_map_entry *mmap, size_t mmap_size
 		// but in the next loop, we will make sure to map all pages used for kernel page tables to the
 		// physical memory, so we can safely use allocate_phys here
 		auto res = allocate_phys(&p);
-		if(res != error_t::no_error) {
+		if(res != 0) {
 			kernel_panic("Failed to allocate kernel paging table");
 		}
 		if((reinterpret_cast<uint32_t>(p.address) & 0xfff) != 0) {
@@ -137,9 +137,13 @@ void *page_allocator::to_physical_address(process_fd *fd, const void *logical) {
 	return reinterpret_cast<void*>(page_address);
 }
 
-error_t page_allocator::allocate_phys(page_allocation *a) {
+cloudabi_errno_t page_allocator::allocate_phys(page_allocation *a) {
 	if(empty(free_pages)) {
-		kernel_panic("allocate() called, but there are no pages left");
+		a->address = 0;
+		a->page_ptr = 0;
+		a->capacity = 0;
+		get_vga_stream() << "allocate() called, but there are no pages left\n";
+		return ENOMEM;
 	}
 
 	page_list *page = free_pages;
@@ -152,12 +156,12 @@ error_t page_allocator::allocate_phys(page_allocation *a) {
 	a->page_ptr = page;
 	a->capacity = PAGE_SIZE;
 
-	return error_t::no_error;
+	return 0;
 }
 
-error_t page_allocator::allocate(page_allocation *a) {
+cloudabi_errno_t page_allocator::allocate(page_allocation *a) {
 	auto res = allocate_phys(a);
-	if(res != error_t::no_error) {
+	if(res != 0) {
 		return res;
 	}
 
@@ -168,12 +172,13 @@ error_t page_allocator::allocate(page_allocation *a) {
 			if(page_table[entry] == 0) {
 				page_table[entry] = reinterpret_cast<uint64_t>(a->address) | 0x03;
 				a->address = reinterpret_cast<void*>((0x300 + table) * PAGE_SIZE * PAGING_TABLE_SIZE + entry * PAGE_SIZE);
-				return error_t::no_error;
+				return 0;
 			}
 		}
 	}
 
-	kernel_panic("allocate() called, but there is no virtual address space left");
+	get_vga_stream() << "allocate() called, but there is no virtual address space left\n";
+	return ENOMEM;
 }
 
 void page_allocator::fill_kernel_pages(uint32_t *page_directory) {

@@ -372,7 +372,7 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 		kernel_panic("Failed to open init");
 	}
 	auto res = global.init->exec(init_exec_fd, 0, nullptr, nullptr, 0);
-	if(res != error_t::no_error) {
+	if(res != 0) {
 		kernel_panic("Failed to start init");
 	}
 	global.init->add_initial_fds();

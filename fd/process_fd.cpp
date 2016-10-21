@@ -24,7 +24,7 @@ process_fd::process_fd(const char *n)
 {
 	page_allocation p;
 	auto res = get_page_allocator()->allocate(&p);
-	if(res != error_t::no_error) {
+	if(res != 0) {
 		kernel_panic("Failed to allocate process paging directory");
 	}
 	page_directory = reinterpret_cast<uint32_t*>(p.address);
@@ -32,7 +32,7 @@ process_fd::process_fd(const char *n)
 	get_page_allocator()->fill_kernel_pages(page_directory);
 
 	res = get_page_allocator()->allocate(&p);
-	if(res != error_t::no_error) {
+	if(res != 0) {
 		kernel_panic("Failed to allocate page table list");
 	}
 	page_tables = reinterpret_cast<uint32_t**>(p.address);
@@ -168,7 +168,7 @@ uint32_t *process_fd::ensure_get_page_table(int i) {
 	// allocate page table
 	page_allocation p;
 	auto res = get_page_allocator()->allocate(&p);
-	if(res != error_t::no_error) {
+	if(res != 0) {
 		kernel_panic("Failed to allocate paging table");
 	}
 
@@ -207,7 +207,7 @@ void process_fd::install_page_directory() {
 #endif
 }
 
-error_t process_fd::add_mem_mapping(mem_mapping_t *mapping, bool overwrite)
+cloudabi_errno_t process_fd::add_mem_mapping(mem_mapping_t *mapping, bool overwrite)
 {
 	mem_mapping_list *covering_mappings = nullptr;
 	remove_all(&mappings, [&](mem_mapping_list *item) {
@@ -233,7 +233,7 @@ error_t process_fd::add_mem_mapping(mem_mapping_t *mapping, bool overwrite)
 	entry->data = mapping;
 	entry->next = nullptr;
 	append(&mappings, entry);
-	return error_t::no_error;
+	return 0;
 
 	// the page tables already contain all zeroes for this mapping. when we page
 	// fault for the first time, or ensure_backed() is called on the mapping,
@@ -287,7 +287,7 @@ void *process_fd::find_free_virtual_range(size_t num_pages)
 	return nullptr;
 }
 
-error_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fds, void const *argdata, size_t argdatalen) {
+cloudabi_errno_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fds, void const *argdata, size_t argdatalen) {
 	// read from this fd until it gives EOF, then exec(buf, buf_size)
 	// TODO: once all fds implement seek(), we can read() only the header,
 	// then seek to the phdr offset, then read() phdrs, then for every LOAD
@@ -304,7 +304,7 @@ error_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fds, void c
 	} while(fd->error == 0);
 
 	if(fd->error != 0) {
-		return error_t::invalid_argument;
+		return EINVAL;
 	}
 
 	uint8_t *argdata_buffer = get_allocator()->allocate<uint8_t>(argdatalen);
@@ -321,7 +321,7 @@ error_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fds, void c
 
 	page_allocation p;
 	auto res = get_page_allocator()->allocate(&p);
-	if(res != error_t::no_error) {
+	if(res != 0) {
 		kernel_panic("Failed to allocate process paging directory");
 	}
 	page_directory = reinterpret_cast<uint32_t*>(p.address);
@@ -329,7 +329,7 @@ error_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fds, void c
 
 	get_page_allocator()->fill_kernel_pages(page_directory);
 	res = get_page_allocator()->allocate(&p);
-	if(res != error_t::no_error) {
+	if(res != 0) {
 		kernel_panic("Failed to allocate page table list");
 	}
 	page_tables = reinterpret_cast<uint32_t**>(p.address);
@@ -347,7 +347,7 @@ error_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fds, void c
 	memcpy(argdata_address, argdata_buffer, argdatalen);
 
 	res = exec(elf_buffer, buffer_size, argdata_address, argdatalen);
-	if(res != error_t::no_error) {
+	if(res != 0) {
 		page_directory = old_page_directory;
 		page_tables = old_page_tables;
 		mappings = old_mappings;
@@ -381,40 +381,40 @@ error_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fds, void c
 	}
 
 	// now, when process is scheduled again, we will return to the entrypoint of the new binary
-	return error_t::no_error;
+	return 0;
 }
 
-error_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *argdata, size_t argdatalen) {
+cloudabi_errno_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *argdata, size_t argdatalen) {
 	if(buffer_size < sizeof(Elf32_Ehdr)) {
 		// Binary too small
-		return error_t::exec_format;
+		return ENOEXEC;
 	}
 
 	Elf32_Ehdr *header = reinterpret_cast<Elf32_Ehdr*>(buffer);
 	if(memcmp(header->e_ident, "\x7F" "ELF", 4) != 0) {
 		// Not an ELF binary
-		return error_t::exec_format;
+		return ENOEXEC;
 	}
 
 	if(header->e_ident[EI_CLASS] != ELFCLASS32) {
 		// Not a 32-bit ELF binary
-		return error_t::exec_format;
+		return ENOEXEC;
 	}
 
 	if(header->e_ident[EI_DATA] != ELFDATA2LSB) {
 		// Not least-significant byte first, unsupported at the moment
-		return error_t::exec_format;
+		return ENOEXEC;
 	}
 
 	if(header->e_ident[EI_VERSION] != 1) {
 		// Not ELF version 1
-		return error_t::exec_format;
+		return ENOEXEC;
 	}
 
 	if(header->e_ident[EI_OSABI] != ELFOSABI_CLOUDABI
 	|| header->e_ident[EI_ABIVERSION] != 0) {
 		// Not CloudABI v0
-		return error_t::exec_format;
+		return ENOEXEC;
 	}
 
 	if(header->e_type != ET_EXEC && header->e_type != ET_DYN) {
@@ -422,18 +422,18 @@ error_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *argdata, 
 		// (CloudABI binaries can be shipped as shared object files,
 		// which are actually executables, so that the kernel knows it
 		// can map them anywhere in address space for ASLR)
-		return error_t::exec_format;
+		return ENOEXEC;
 	}
 
 	if(header->e_machine != EM_386) {
 		// TODO: when we support different machine types, check that
 		// header->e_machine is supported.
-		return error_t::exec_format;
+		return ENOEXEC;
 	}
 
 	if(header->e_version != EV_CURRENT) {
 		// Not a current version ELF
-		return error_t::exec_format;
+		return ENOEXEC;
 	}
 
 	// Save the phdrs
@@ -442,7 +442,7 @@ error_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *argdata, 
 
 	if(header->e_phoff >= buffer_size || (header->e_phoff + elf_ph_size) >= buffer_size) {
 		// Phdrs weren't shipped in this ELF
-		return error_t::exec_format;
+		return ENOEXEC;
 	}
 
 	void *elf_phdr = reinterpret_cast<uint8_t*>(0x80060000);
@@ -458,7 +458,7 @@ error_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *argdata, 
 		size_t offset = header->e_phoff + phi * header->e_phentsize;
 		if(offset >= buffer_size || (offset + sizeof(Elf32_Phdr)) >= buffer_size) {
 			// Phdr wasn't shipped in this ELF
-			return error_t::exec_format;
+			return ENOEXEC;
 		}
 
 		Elf32_Phdr *phdr = reinterpret_cast<Elf32_Phdr*>(buffer + offset);
@@ -466,11 +466,11 @@ error_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *argdata, 
 		if(phdr->p_type == PT_LOAD) {
 			if(phdr->p_offset >= buffer_size || (phdr->p_offset + phdr->p_filesz) >= buffer_size) {
 				// Phdr data wasn't shipped in this ELF
-				return error_t::exec_format;
+				return ENOEXEC;
 			}
 			if((phdr->p_vaddr % PAGE_SIZE) != 0) {
 				// Phdr load section wasn't aligned
-				return error_t::exec_format;
+				return ENOEXEC;
 			}
 			uint8_t *vaddr = reinterpret_cast<uint8_t*>(phdr->p_vaddr);
 			uint8_t *code_offset = buffer + phdr->p_offset;
@@ -551,7 +551,7 @@ error_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *argdata, 
 	// create the main thread
 	add_thread(userland_stack_top, auxv_address, reinterpret_cast<void*>(header->e_entry));
 
-	return error_t::no_error;
+	return 0;
 }
 
 void process_fd::fork(thread *otherthread) {

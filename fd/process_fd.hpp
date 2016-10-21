@@ -69,9 +69,9 @@ struct process_fd : public fd_t {
 	// Read an ELF from this fd, map it, and prepare it for execution. This
 	// function will not remove previous process contents, use unexec() for
 	// that.
-	error_t exec(fd_t *, size_t fdslen, fd_mapping_t **new_fds, void const *argdata, size_t argdatalen);
+	cloudabi_errno_t exec(fd_t *, size_t fdslen, fd_mapping_t **new_fds, void const *argdata, size_t argdatalen);
 	// TODO: make this private
-	error_t exec(uint8_t *elf_buffer, size_t size, uint8_t *argdata, size_t argdatalen);
+	cloudabi_errno_t exec(uint8_t *elf_buffer, size_t size, uint8_t *argdata, size_t argdatalen);
 
 	// create a main thread from the given calling thread, belonging to
 	// another process (this function assumes its own page directory is
@@ -89,7 +89,7 @@ struct process_fd : public fd_t {
 	// Add the given mem_mapping_t to the page directory and tables, and add
 	// it to the list of mappings. If overwrite is false, will kernel_panic()
 	// on existing mappings.
-	error_t add_mem_mapping(mem_mapping_t *mapping, bool overwrite = false);
+	cloudabi_errno_t add_mem_mapping(mem_mapping_t *mapping, bool overwrite = false);
 	// Unmap the given address range
 	void mem_unmap(void *addr, size_t len);
 

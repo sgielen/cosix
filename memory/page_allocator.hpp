@@ -55,7 +55,7 @@ struct page_allocator {
 	// for userland and kernel data
 	void *to_physical_address(process_fd*, const void*);
 
-	error_t allocate(page_allocation*);
+	cloudabi_errno_t allocate(page_allocation*);
 	void fill_kernel_pages(uint32_t *page_directory);
 
 	// TODO: produce some statistics
@@ -67,7 +67,7 @@ private:
 	// never allocate_phys outside of the page allocator -- such pages will not be
 	// accessible, not even if you add _kernel_virtual_base. Instead, you should use
 	// the allocate function, and use to_physical_adress() if you need it
-	error_t allocate_phys(page_allocation*);
+	cloudabi_errno_t allocate_phys(page_allocation*);
 
 	page_list *used_pages;
 	page_list *free_pages;

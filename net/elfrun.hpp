@@ -28,7 +28,7 @@ struct elfrun_implementation : public udp_listener {
 	error_t received_udp4(interface *iface, uint8_t *payload, size_t length, ipv4addr_t source, uint16_t sourceport, ipv4addr_t destination, uint16_t destport) override;
 
 private:
-	error_t run_binary();
+	cloudabi_errno_t run_binary();
 
 	size_t buffer_size;
 	uint8_t *buffer;

@@ -311,10 +311,10 @@ void thread::handle_syscall() {
 			new_fds[i] = old_mapping;
 		}
 
-		auto eres = process->exec(mapping->fd, args->fdslen, new_fds, args->data, args->datalen);
-		if(eres != error_t::no_error) {
+		res = process->exec(mapping->fd, args->fdslen, new_fds, args->data, args->datalen);
+		if(res != 0) {
 			get_vga_stream() << "exec() failed because of " << res << "\n";
-			state.eax = EINVAL;
+			state.eax = res;
 			return;
 		}
 	} else if(syscall == 7) {
