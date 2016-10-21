@@ -38,6 +38,4 @@ vga_stream &operator<<(vga_stream &, char);
 vga_stream &operator<<(vga_stream &, const char*);
 vga_stream &operator<<(vga_stream &, void*);
 
-vga_stream &operator<<(vga_stream &, error_t);
-
 }

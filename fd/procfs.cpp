@@ -13,7 +13,7 @@ namespace cloudos {
 struct procfs_directory_fd : fd_t {
 	procfs_directory_fd(const char (*)[PROCFS_FILE_MAX], const char *n);
 
-	error_t to_string(char *buf, size_t length);
+	bool to_string(char *buf, size_t length);
 
 	fd_t *openat(const char * /*path */, size_t /*pathlen*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) override;
 
@@ -48,14 +48,14 @@ procfs_directory_fd::procfs_directory_fd(const char (*p)[PROCFS_FILE_MAX], const
 	}
 
 	char pathbuf[PROCFS_DEPTH_MAX * (PROCFS_FILE_MAX + 1)];
-	if(to_string(pathbuf, sizeof(pathbuf)) == error_t::no_error) {
+	if(to_string(pathbuf, sizeof(pathbuf))) {
 		get_vga_stream() << "A procfs_directory_fd was created with path: " << pathbuf << "\n";
 	} else {
 		get_vga_stream() << "A procfs_directory_fd was created but path didn't fit?\n";
 	}
 }
 
-error_t procfs_directory_fd::to_string(char *buf, size_t length) {
+bool procfs_directory_fd::to_string(char *buf, size_t length) {
 	size_t bytes_written = 0;
 	buf[0] = 0;
 	for(size_t i = 0; i < depth; ++i) {
@@ -65,7 +65,7 @@ error_t procfs_directory_fd::to_string(char *buf, size_t length) {
 			// no memory to store this or the next path item
 			strncpy(&buf[bytes_written], path[i], length_left - 1);
 			buf[length] = 0;
-			return error_t::no_memory;
+			return false;
 		}
 		strncpy(&buf[bytes_written], path[i], elemlen);
 		bytes_written += elemlen;
@@ -76,7 +76,7 @@ error_t procfs_directory_fd::to_string(char *buf, size_t length) {
 		}
 		buf[bytes_written] = 0;
 	}
-	return error_t::no_error;
+	return true;
 }
 
 fd_t *procfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi_oflags_t oflags, const cloudabi_fdstat_t *) {
@@ -86,7 +86,7 @@ fd_t *procfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi
 	}
 
 	char pathbuf[PROCFS_DEPTH_MAX * (PROCFS_FILE_MAX + 1)];
-	if(to_string(pathbuf, sizeof(pathbuf)) != error_t::no_error) {
+	if(!to_string(pathbuf, sizeof(pathbuf))) {
 		kernel_panic("to_string() should always succeed");
 	}
 	size_t pathbuf_length = strlen(pathbuf);
