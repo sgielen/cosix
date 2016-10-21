@@ -22,7 +22,7 @@ cloudabi_errno_t elfrun_implementation::run_binary() {
 	return process->exec(buffer, pos, nullptr, 0);
 }
 
-error_t elfrun_implementation::received_udp4(interface*, uint8_t *payload, size_t length, ipv4addr_t, uint16_t, ipv4addr_t, uint16_t)
+cloudabi_errno_t elfrun_implementation::received_udp4(interface*, uint8_t *payload, size_t length, ipv4addr_t, uint16_t, ipv4addr_t, uint16_t)
 {
 	bool first_packet = payload[0] & 0x01;
 	bool last_packet = payload[0] & 0x02;
@@ -32,13 +32,13 @@ error_t elfrun_implementation::received_udp4(interface*, uint8_t *payload, size_
 		awaiting = true;
 	} else if(!awaiting) {
 		get_vga_stream() << "  elfrun: ignoring out-of-stream packet\n";
-		return error_t::no_error;
+		return 0;
 	}
 
 	if(pos + length - 1 > buffer_size) {
 		get_vga_stream() << "  elfrun: downloading this binary would cause buffer overflow, ignoring\n";
 		awaiting = false;
-		return error_t::no_error;
+		return 0;
 	}
 
 	memcpy(buffer + pos, payload + 1, length - 1);
@@ -53,5 +53,5 @@ error_t elfrun_implementation::received_udp4(interface*, uint8_t *payload, size_
 		awaiting = false;
 	}
 
-	return error_t::no_error;
+	return 0;
 }

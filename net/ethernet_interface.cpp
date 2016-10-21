@@ -11,10 +11,10 @@ using namespace cloudos;
 ethernet_interface::ethernet_interface(ethernet_device *d)
 : device(d) {}
 
-error_t ethernet_interface::send_packet(uint8_t *packet, size_t length) {
+cloudabi_errno_t ethernet_interface::send_packet(uint8_t *packet, size_t length) {
 	char mac[6];
 	auto res = device->get_mac_address(mac);
-	if(res != error_t::no_error) {
+	if(res != 0) {
 		return res;
 	}
 
@@ -36,7 +36,7 @@ error_t ethernet_interface::send_packet(uint8_t *packet, size_t length) {
 	return device->send_ethernet_frame(frame, frame_size);
 }
 
-error_t ethernet_interface::ethernet_frame_received(uint8_t *frame, size_t length)
+cloudabi_errno_t ethernet_interface::ethernet_frame_received(uint8_t *frame, size_t length)
 {
 	size_t frame_length = 14;
 	uint16_t ethertype = ntoh(*reinterpret_cast<uint16_t*>(frame + 12));
@@ -51,7 +51,7 @@ error_t ethernet_interface::ethernet_frame_received(uint8_t *frame, size_t lengt
 		// actually, this is length instead of ethertype; we should support this but
 		// can't detect ethertype ourselves yet, so warn and fail
 		get_vga_stream() << "Refusing to parse ethernet frame without EtherType (length " << ethertype << ")\n";
-		return error_t::invalid_argument;
+		return EINVAL;
 	}
 
 	if(ethertype == 0x0800 || ethertype == 0x86dd) {
@@ -65,5 +65,5 @@ error_t ethernet_interface::ethernet_frame_received(uint8_t *frame, size_t lengt
 	}
 
 	get_vga_stream() << "Ignoring ethernet frame with unknown ethertype " << ethertype << "\n";
-	return error_t::invalid_argument;
+	return EINVAL;
 }

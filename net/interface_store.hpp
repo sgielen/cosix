@@ -19,8 +19,8 @@ struct interface_store
 	interface_store();
 
 	interface *get_interface(const char *name);
-	error_t register_interface(interface *i, const char *prefix);
-	error_t register_interface_fixed_name(interface *i, const char *name);
+	cloudabi_errno_t register_interface(interface *i, const char *prefix);
+	cloudabi_errno_t register_interface_fixed_name(interface *i, const char *name);
 
 	inline interface_list *get_interfaces() {
 		return interfaces_;

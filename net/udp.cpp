@@ -9,7 +9,7 @@
 
 using namespace cloudos;
 
-error_t udp_implementation::received_ipv4(interface *iface, uint8_t *payload, size_t length, ipv4addr_t ip_source, ipv4addr_t ip_destination)
+cloudabi_errno_t udp_implementation::received_ipv4(interface *iface, uint8_t *payload, size_t length, ipv4addr_t ip_source, ipv4addr_t ip_destination)
 {
 	uint16_t *udp_header = reinterpret_cast<uint16_t*>(payload);
 	uint16_t source_port = ntoh(udp_header[0]);
@@ -18,7 +18,7 @@ error_t udp_implementation::received_ipv4(interface *iface, uint8_t *payload, si
 	// TODO: check checksum
 	if(length < udp_length) {
 		get_vga_stream() << "  It's a UDP message that's too large. Dropping.\n";
-		return error_t::invalid_argument;
+		return EINVAL;
 	}
 	if(length != udp_length) {
 		get_vga_stream() << "  It's a UDP message whose size doesn't make sense. Payload length is "
@@ -33,10 +33,10 @@ error_t udp_implementation::received_ipv4(interface *iface, uint8_t *payload, si
 		return get_protocol_store()->elfrun->received_udp4(iface, payload + 8,
 			udp_length - 8, ip_source, source_port, ip_destination, destination_port);
 	}
-	return error_t::no_error;
+	return 0;
 }
 
-error_t udp_implementation::send_ipv4_udp(const uint8_t *payload, size_t length, ipv4addr_t source, uint16_t source_port, ipv4addr_t destination, uint16_t destination_port)
+cloudabi_errno_t udp_implementation::send_ipv4_udp(const uint8_t *payload, size_t length, ipv4addr_t source, uint16_t source_port, ipv4addr_t destination, uint16_t destination_port)
 {
 	// TODO: iovecs would be super-useful here
 	uint16_t pseudo_ip_length = 12;

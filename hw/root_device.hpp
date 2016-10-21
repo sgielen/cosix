@@ -9,7 +9,7 @@ struct root_device : public device {
 
 	const char *description() override;
 
-	error_t init() override;
+	cloudabi_errno_t init() override;
 };
 
 }

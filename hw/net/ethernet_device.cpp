@@ -15,25 +15,21 @@ ethernet_device::ethernet_device(device *p)
 	new(interface) ethernet_interface(this);
 }
 
-error_t ethernet_device::init()
+cloudabi_errno_t ethernet_device::init()
 {
-	error_t res = get_interface_store()->register_interface(interface, "eth");
-	if(res != error_t::no_error) {
+	cloudabi_errno_t res = get_interface_store()->register_interface(interface, "eth");
+	if(res != 0) {
 		return res;
 	}
 
 	return eth_init();
 }
 
-error_t ethernet_device::ethernet_frame_received(uint8_t *frame, size_t length)
+cloudabi_errno_t ethernet_device::ethernet_frame_received(uint8_t *frame, size_t length)
 {
-	if(!interface) {
-		return error_t::not_configured;
-	}
-
 	char my_mac[6];
 	auto res = get_mac_address(my_mac);
-	if(res != error_t::no_error) {
+	if(res != 0) {
 		return res;
 	}
 
@@ -49,7 +45,7 @@ error_t ethernet_device::ethernet_frame_received(uint8_t *frame, size_t length)
 	}
 
 	// drop the packet, not intended for me
-	return error_t::no_error;
+	return 0;
 }
 
 ethernet_interface *ethernet_device::get_interface()

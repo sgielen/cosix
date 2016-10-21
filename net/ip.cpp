@@ -13,7 +13,7 @@
 
 using namespace cloudos;
 
-error_t ip_implementation::received_ip_packet(interface *iface, uint8_t *packet, size_t length)
+cloudabi_errno_t ip_implementation::received_ip_packet(interface *iface, uint8_t *packet, size_t length)
 {
 	uint8_t ip_version = packet[0] >> 4;
 	if(ip_version == 4) {
@@ -22,31 +22,31 @@ error_t ip_implementation::received_ip_packet(interface *iface, uint8_t *packet,
 		return received_ipv6_packet(iface, packet, length);
 	} else {
 		get_vga_stream() << "Packet of unknown IP version " << ip_version << " received on some interface\n";
-		return error_t::invalid_argument;
+		return EINVAL;
 	}
 }
 
-error_t ip_implementation::received_ipv4_packet(interface *iface, uint8_t *packet, size_t length)
+cloudabi_errno_t ip_implementation::received_ipv4_packet(interface *iface, uint8_t *packet, size_t length)
 {
 	if(length < 20) {
 		// shortest IP header does not fit in packet
-		return error_t::invalid_argument;
+		return EINVAL;
 	}
 
 	uint16_t header_length = (packet[0] & 0x0f) * 4;
 	if(header_length < 20 || length < header_length) {
 		// IP header is too short or does not fit in packet
-		return error_t::invalid_argument;
+		return EINVAL;
 	}
 
 	uint16_t total_length = ntoh(*reinterpret_cast<uint16_t*>(&packet[2]));
 	if(total_length < header_length) {
 		// total length does not include header
-		return error_t::invalid_argument;
+		return EINVAL;
 	}
 	if(length < total_length) {
 		// actual IP packet does not fit in packet
-		return error_t::invalid_argument;
+		return EINVAL;
 	}
 
 	if(length != total_length) {
@@ -61,7 +61,7 @@ error_t ip_implementation::received_ipv4_packet(interface *iface, uint8_t *packe
 	if(flags & IPV4_FLAG_MORE_FRAGMENTS || fragment_offset != 0) {
 		// fragmented packets currently unsupported
 		get_vga_stream() << "Fragmented IPv4 packet received, ignoring\n";
-		return error_t::invalid_argument;
+		return EINVAL;
 	}
 
 	// TODO: TTL checking
@@ -90,17 +90,17 @@ error_t ip_implementation::received_ipv4_packet(interface *iface, uint8_t *packe
 			length - header_length, ip_source, ip_dest);
 	} else {
 		get_vga_stream() << "  It has an unknown protocol byte: " << protocol << "\n";
-		return error_t::invalid_argument;
+		return EINVAL;
 	}
 }
 
-error_t ip_implementation::received_ipv6_packet(interface*, uint8_t*, size_t)
+cloudabi_errno_t ip_implementation::received_ipv6_packet(interface*, uint8_t*, size_t)
 {
 	get_vga_stream() << "Received IPv6 packet on some interface, ignoring for now\n";
-	return error_t::invalid_argument;
+	return EINVAL;
 }
 
-error_t ip_implementation::send_ipv4_packet(uint8_t *payload, size_t length, ipv4addr_t source, ipv4addr_t destination, protocol_t inner_protocol)
+cloudabi_errno_t ip_implementation::send_ipv4_packet(uint8_t *payload, size_t length, ipv4addr_t source, ipv4addr_t destination, protocol_t inner_protocol)
 {
 	// TODO: we currently assume we need to send every packet to eth0;
 	// instead, we should check our routing table to find the right
@@ -145,5 +145,5 @@ error_t ip_implementation::send_ipv4_packet(uint8_t *payload, size_t length, ipv
 	}
 
 	get_vga_stream() << "Found no interface to send packet to, dropping\n";
-	return error_t::no_error;
+	return 0;
 }

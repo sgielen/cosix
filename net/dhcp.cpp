@@ -29,11 +29,11 @@ dhcp_client::dhcp_client()
 	active_xid[3] = 0;
 }
 
-error_t dhcp_client::start_dhcp_discover_for(ethernet_interface *iface)
+cloudabi_errno_t dhcp_client::start_dhcp_discover_for(ethernet_interface *iface)
 {
 	uint8_t mac[6];
 	auto res = iface->get_mac_address(reinterpret_cast<char*>(mac));
-	if(res != error_t::no_error) {
+	if(res != 0) {
 		return res;
 	}
 
@@ -98,36 +98,36 @@ error_t dhcp_client::start_dhcp_discover_for(ethernet_interface *iface)
 	return get_protocol_store()->udp->send_ipv4_udp(bootp, sizeof(bootp), source, 68, destination, 67);
 }
 
-error_t dhcp_client::received_udp4(interface *iface, uint8_t *payload, size_t length, ipv4addr_t, uint16_t, ipv4addr_t, uint16_t)
+cloudabi_errno_t dhcp_client::received_udp4(interface *iface, uint8_t *payload, size_t length, ipv4addr_t, uint16_t, ipv4addr_t, uint16_t)
 {
 	/* minimal BOOTP length is 236, and DHCP also describes a 4-byte magic, so 240 */
 	if(length < 240) {
 		get_vga_stream() << "  It's a too small BOOTP message, dropping\n";
-		return error_t::no_error;
+		return 0;
 	}
 
 	uint8_t operation = payload[0];
 	if(operation != 2 /* response */) {
 		get_vga_stream() << "  It's a BOOTP message that's not a response, dropping\n";
-		return error_t::no_error;
+		return 0;
 	}
 
 	uint8_t htype = payload[1];
 	uint8_t hlen = payload[2];
 	if(htype != 0x01 || hlen != 0x06) {
 		get_vga_stream() << "  It's a BOOTP message with an unknown HTYPE, dropping\n";
-		return error_t::no_error;
+		return 0;
 	}
 
 	const uint8_t *xid = payload + 4;
 	if(memcmp(xid, active_xid, 4) != 0) {
 		get_vga_stream() << "  It's a BOOTP message with an incorrect XID, dropping\n";
-		return error_t::no_error;
+		return 0;
 	}
 
 	if(memcmp(payload + 236, dhcpmagic, 4) != 0) {
 		get_vga_stream() << "  It's a BOOTP message without the DHCP magic, dropping\n";
-		return error_t::no_error;
+		return 0;
 	}
 
 	const uint8_t *options = payload + 240;
@@ -145,7 +145,7 @@ error_t dhcp_client::received_udp4(interface *iface, uint8_t *payload, size_t le
 		uint8_t option_length = options[1];
 		if(options_length - 2 < option_length) {
 			get_vga_stream() << "  It's a DHCP message that ends early, dropping\n";
-			return error_t::no_error;
+			return 0;
 		}
 		if(option == 0x35 && option_length == 1) {
 			dhcp_type = options[2];
@@ -157,7 +157,7 @@ error_t dhcp_client::received_udp4(interface *iface, uint8_t *payload, size_t le
 
 	if(dhcp_type == 0) {
 		get_vga_stream() << "  It's a DHCP message without a (valid) message type, dropping\n";
-		return error_t::no_error;
+		return 0;
 	}
 
 	uint8_t *ciaddr = payload + 12;
@@ -171,7 +171,7 @@ error_t dhcp_client::received_udp4(interface *iface, uint8_t *payload, size_t le
 		get_vga_stream() << "  It's a DHCP acknowledgement for the following IPs:\n";
 	} else {
 		get_vga_stream() << "  It's an unexpected DHCP message type " << dhcp_type << ", dropping\n";
-		return error_t::no_error;
+		return 0;
 	}
 
 	get_vga_stream() << "  ciaddr: " << ciaddr[0] << "." << ciaddr[1] << "." << ciaddr[2] << "." << ciaddr[3] << "\n";
@@ -188,7 +188,7 @@ error_t dhcp_client::received_udp4(interface *iface, uint8_t *payload, size_t le
 		return send_dhcp_request(iface, payload);
 	} else if(dhcp_type == DHCPOFFER) {
 		get_vga_stream() << "  ...But I'm not accepting offers anymore, so dropping.\n";
-		return error_t::no_error;
+		return 0;
 	} else if(dhcp_type == DHCPACK && requesting) {
 		// TODO: when receiving DHCPACK, we /should/ send ARP request per rfc
 		// 2131 4.4.1 and verify that the address is not used yet. If it is
@@ -199,24 +199,24 @@ error_t dhcp_client::received_udp4(interface *iface, uint8_t *payload, size_t le
 		// soon as the timer expires.
 		get_vga_stream() << "  DHCP request was accepted! Assigning IP address.\n";
 		requesting = false;
-		error_t res = iface->add_ipv4_addr(yiaddr);
-		if(res != error_t::no_error) {
+		cloudabi_errno_t res = iface->add_ipv4_addr(yiaddr);
+		if(res != 0) {
 			get_vga_stream() << "  Failed to assign IPv4 address to device\n";
 			return res;
 		}
 
 		dump_interfaces(get_vga_stream(), get_interface_store());
-		return error_t::no_error;
+		return 0;
 	} else if(dhcp_type == DHCPACK) {
 		get_vga_stream() << "  ...But I wasn't waiting for an ACK at the moment, so dropping.\n";
-		return error_t::no_error;
+		return 0;
 	}
 
 	// unreachable
-	return error_t::no_error;
+	return 0;
 }
 
-error_t dhcp_client::send_dhcp_request(interface *iface, uint8_t *old_payload)
+cloudabi_errno_t dhcp_client::send_dhcp_request(interface *iface, uint8_t *old_payload)
 {
 	size_t dhcp_length = 250;
 	uint8_t *dhcp = reinterpret_cast<uint8_t*>(get_allocator()->allocate(dhcp_length));
@@ -236,7 +236,7 @@ error_t dhcp_client::send_dhcp_request(interface *iface, uint8_t *old_payload)
 	ethernet_interface *eth = reinterpret_cast<ethernet_interface*>(iface);
 	char mac[6];
 	auto res = eth->get_mac_address(mac);
-	if(res != error_t::no_error) {
+	if(res != 0) {
 		return res;
 	}
 	memcpy(dhcp + 28, mac, 6);
@@ -265,10 +265,10 @@ error_t dhcp_client::send_dhcp_request(interface *iface, uint8_t *old_payload)
 	// this currently fails in error_t virtio_net_device::send_ethernet_frame(uint8_t *frame, size_t length)
 	// because it is only able to send the very first packet ever, and nothing after that!
 	res = get_protocol_store()->udp->send_ipv4_udp(dhcp, dhcp_length, udp_source, 68, udp_dest, 67);
-	if(res != error_t::no_error) {
+	if(res != 0) {
 		get_vga_stream() << "Failed to send UDP response\n";
 		return res;
 	}
 
-	return error_t::no_error;
+	return 0;
 }

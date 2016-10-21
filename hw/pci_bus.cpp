@@ -24,7 +24,7 @@ const char *pci_bus::description()
 	return "Root PCI bus";
 }
 
-error_t pci_bus::init()
+cloudabi_errno_t pci_bus::init()
 {
 	auto *list = get_driver_store()->get_drivers();
 	for(uint8_t device_nr = 0; device_nr < 32; ++device_nr) {
@@ -36,12 +36,12 @@ error_t pci_bus::init()
 
 		if(dev != nullptr) {
 			auto res = dev->init();
-			if(res != error_t::no_error) {
+			if(res != 0) {
 				return res;
 			}
 		}
 	}
-	return error_t::no_error;
+	return 0;
 }
 
 uint16_t pci_bus::get_device_id(uint8_t device)

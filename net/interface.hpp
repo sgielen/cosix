@@ -62,15 +62,15 @@ struct interface {
 	/**
 	 * This method is used to send an IP packet to this interface.
 	 */
-	virtual error_t send_packet(uint8_t *packet, size_t length) = 0;
+	virtual cloudabi_errno_t send_packet(uint8_t *packet, size_t length) = 0;
 
-	error_t add_ipv4_addr(uint8_t const ip[4]);
+	cloudabi_errno_t add_ipv4_addr(uint8_t const ip[4]);
 
 protected:
 	/**
 	 * This method can be called when an IP packet is received on this interface.
 	 */
-	error_t received_ip_packet(uint8_t *frame, size_t frame_length, protocol_t frame_type, size_t ip_hdr_offset);
+	cloudabi_errno_t received_ip_packet(uint8_t *frame, size_t frame_length, protocol_t frame_type, size_t ip_hdr_offset);
 
 private:
 	void set_name(const char *name);

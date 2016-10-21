@@ -31,7 +31,7 @@ interface *interface_store::get_interface(const char *name)
 	return found == nullptr ? nullptr : found->data;
 }
 
-error_t interface_store::register_interface(interface *i, const char *prefix)
+cloudabi_errno_t interface_store::register_interface(interface *i, const char *prefix)
 {
 	// TODO: do this using printf
 	char name[8];
@@ -50,13 +50,13 @@ error_t interface_store::register_interface(interface *i, const char *prefix)
 		}
 		suffix++;
 	}
-	return error_t::file_exists;
+	return EEXIST;
 }
 
-error_t interface_store::register_interface_fixed_name(interface *i, const char *name)
+cloudabi_errno_t interface_store::register_interface_fixed_name(interface *i, const char *name)
 {
 	if(get_interface(name) != nullptr) {
-		return error_t::file_exists;
+		return EEXIST;
 	}
 
 	i->set_name(name);
@@ -66,5 +66,5 @@ error_t interface_store::register_interface_fixed_name(interface *i, const char 
 	next_entry->next = nullptr;
 
 	append(&interfaces_, next_entry);
-	return error_t::no_error;
+	return 0;
 }

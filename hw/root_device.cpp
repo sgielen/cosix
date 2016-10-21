@@ -12,14 +12,14 @@ const char *root_device::description() {
 	return "Root device";
 }
 
-error_t root_device::init() {
+cloudabi_errno_t root_device::init() {
 	auto *list = get_driver_store()->get_drivers();
-	error_t res = error_t::no_error;
+	cloudabi_errno_t res = 0;
 	find(list, [this, &res](driver_list *item) {
 		auto *dev = item->data->probe_root_device(this);
 		if(dev != nullptr) {
 			res = dev->init();
-			return res != error_t::no_error;
+			return res != 0;
 		}
 		return false;
 	});

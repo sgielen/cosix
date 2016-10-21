@@ -36,7 +36,7 @@ struct device {
 	 * methods. It is legal for this function to change the return value of
 	 * description() or to free the memory description() returned earlier.
 	 */
-	virtual error_t init() = 0;
+	virtual cloudabi_errno_t init() = 0;
 
 	/**
 	 * This method returns the parent of this device. This returns a null

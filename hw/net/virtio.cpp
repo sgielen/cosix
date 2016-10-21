@@ -165,7 +165,7 @@ virtio_net_device::virtio_net_device(pci_bus *parent, int d)
 {
 }
 
-error_t virtio_net_device::add_buffer_to_avail(virtq *queue, int buffer_id) {
+cloudabi_errno_t virtio_net_device::add_buffer_to_avail(virtq *queue, int buffer_id) {
 	auto *avail = queue->get_virtq_avail();
 	avail->ring[avail->idx % queue->get_queue_size()] = buffer_id;
 
@@ -180,22 +180,22 @@ error_t virtio_net_device::add_buffer_to_avail(virtq *queue, int buffer_id) {
 	uint32_t bar0 = bus->get_bar0(bus_device);
 	if((bar0 & 0x01) != 1) {
 		get_vga_stream() << "Not I/O space BAR type, skipping.\n";
-		return error_t::dev_not_supported;
+		return ENOTSUP;
 	}
 	bar0 = bar0 & 0xfffffffc;
 
 	uint32_t const queue_notify = bar0 + 0x10;
 	outw(queue_notify, queue->get_queue_select());
 
-	return error_t::no_error;
+	return 0;
 }
 
-error_t virtio_net_device::eth_init()
+cloudabi_errno_t virtio_net_device::eth_init()
 {
 	uint32_t bar0 = bus->get_bar0(bus_device);
 	if((bar0 & 0x01) != 1) {
 		get_vga_stream() << "Not I/O space BAR type, skipping.\n";
-		return error_t::dev_not_supported;
+		return ENOTSUP;
 	}
 	bar0 = bar0 & 0xfffffffc;
 	//uint8_t int_info = read_pci_config(bus, device, 0, 0x3c) & 0xff;
@@ -222,25 +222,25 @@ error_t virtio_net_device::eth_init()
 		// device_features, we must randomly generate our own MAC
 		get_vga_stream() << "MAC setting not supported. Skipping device.\n";
 		outb(device_status, 128); /* driver failed */
-		return error_t::dev_not_supported;
+		return ENOTSUP;
 	}
 
 	if((sup_features & VIRTIO_NET_F_STATUS) == 0) {
 		get_vga_stream() << "Device status bit not supported. Skipping device.\n";
 		outb(device_status, 128); /* driver failed */
-		return error_t::dev_not_supported;
+		return ENOTSUP;
 	}
 
 	if((sup_features & VIRTIO_NET_F_MRG_RXBUF) == 0) {
 		get_vga_stream() << "Merging received buffers not supported. Skipping device.\n";
 		outb(device_status, 128); /* driver failed */
-		return error_t::dev_not_supported;
+		return ENOTSUP;
 	}
 
 	if((sup_features & VIRTIO_F_NOTIFY_ON_EMPTY) == 0) {
 		get_vga_stream() << "Notify on empty not supported. Skipping device.\n";
 		outb(device_status, 128); /* driver failed */
-		return error_t::dev_not_supported;
+		return ENOTSUP;
 	}
 
 	uint64_t drv_features = sup_features & (VIRTIO_NET_F_MAC
@@ -271,7 +271,7 @@ error_t virtio_net_device::eth_init()
 		uint64_t virtq_addr_phys = reinterpret_cast<uint64_t>(q->get_virtq_addr_phys());
 		if((virtq_addr_phys % 4096) != 0) {
 			get_vga_stream() << "Failed to allocate descriptor table aligned to 4096 bytes\n";
-			return error_t::no_memory;
+			return ENOMEM;
 		}
 		outl(queue_address, virtq_addr_phys >> 12);
 		(queue == 0 ? readq : writeq) = q;
@@ -301,7 +301,7 @@ error_t virtio_net_device::eth_init()
 		append(&mappings, mappingl);
 
 		auto res = add_buffer_to_avail(readq, i);
-		if(res != error_t::no_error) {
+		if(res != 0) {
 			kernel_panic("Failed to add initial buffers to virtio NIC");
 		}
 	}
@@ -313,9 +313,9 @@ error_t virtio_net_device::eth_init()
 	return get_protocol_store()->dhcp->start_dhcp_discover_for(get_interface());
 }
 
-error_t virtio_net_device::check_new_packets() {
+cloudabi_errno_t virtio_net_device::check_new_packets() {
 	if(readq == nullptr) {
-		return error_t::invalid_argument;
+		return EINVAL;
 	}
 
 	auto *virtq_used = readq->get_virtq_used();
@@ -341,27 +341,27 @@ error_t virtio_net_device::check_new_packets() {
 		last_readq_used_idx++;
 		auto res2 = add_buffer_to_avail(readq, buffer_id);
 
-		if(res != error_t::no_error) {
+		if(res != 0) {
 			return res;
 		}
-		if(res2 != error_t::no_error) {
+		if(res2 != 0) {
 			return res2;
 		}
 	}
 
-	return error_t::no_error;
+	return 0;
 }
 
-error_t virtio_net_device::get_mac_address(char m[6]) {
+cloudabi_errno_t virtio_net_device::get_mac_address(char m[6]) {
 	if(readq == nullptr) {
-		return error_t::invalid_argument;
+		return EINVAL;
 	}
 
 	memcpy(m, mac, 6);
-	return error_t::no_error;
+	return 0;
 }
 
-error_t virtio_net_device::send_ethernet_frame(uint8_t *frame, size_t length) {
+cloudabi_errno_t virtio_net_device::send_ethernet_frame(uint8_t *frame, size_t length) {
 	uint8_t net_hdr[] = {
 		0x01, /* needs checksum */
 		0x00, /* no segmentation */
@@ -421,7 +421,7 @@ void virtio_net_device::timer_event() {
 	// TODO: do this when the correct interrupt arrives, instead of
 	// when the timer fires
 	auto res = check_new_packets();
-	if(res != error_t::no_error) {
+	if(res != 0) {
 		get_vga_stream() << "check_new_packets failed: " << res << "\n";
 	}
 }

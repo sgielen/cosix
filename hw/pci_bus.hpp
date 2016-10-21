@@ -18,7 +18,7 @@ struct pci_bus : public device {
 	pci_bus(device *parent);
 
 	const char *description() override;
-	error_t init() override;
+	cloudabi_errno_t init() override;
 
 	uint16_t get_device_id(uint8_t device);
 	uint16_t get_vendor_id(uint8_t device);

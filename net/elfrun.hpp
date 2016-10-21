@@ -25,7 +25,7 @@ T elf_endian(T value, uint8_t elf_data) {
 struct elfrun_implementation : public udp_listener {
 	elfrun_implementation();
 
-	error_t received_udp4(interface *iface, uint8_t *payload, size_t length, ipv4addr_t source, uint16_t sourceport, ipv4addr_t destination, uint16_t destport) override;
+	cloudabi_errno_t received_udp4(interface *iface, uint8_t *payload, size_t length, ipv4addr_t source, uint16_t sourceport, ipv4addr_t destination, uint16_t destport) override;
 
 private:
 	cloudabi_errno_t run_binary();

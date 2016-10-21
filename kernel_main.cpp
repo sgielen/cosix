@@ -59,9 +59,9 @@ static void send_udp_test_packet() {
 	destination[0] = destination[1] = destination[2] = destination[3] = 0x08;
 
 	const char *payload = "Hello world!";
-	error_t res = get_protocol_store()->udp->send_ipv4_udp(
+	cloudabi_errno_t res = get_protocol_store()->udp->send_ipv4_udp(
 		reinterpret_cast<const uint8_t*>(payload), strlen(payload), source, 53, destination, 53);
-	if(res == error_t::no_error) {
+	if(res == 0) {
 		get_vga_stream() << "Sent a packet!\n";
 	} else {
 		get_vga_stream() << "Failed to send a packet: " << res << "\n";
@@ -97,9 +97,9 @@ static void request_process_binary() {
 	destination[2] = 2;
 	destination[3] = 106;*/
 	const char *payload = "process.bin";
-	error_t res = get_protocol_store()->udp->send_ipv4_udp(
+	cloudabi_errno_t res = get_protocol_store()->udp->send_ipv4_udp(
 		reinterpret_cast<const uint8_t*>(payload), strlen(payload), source, 4445, destination, 4444);
-	if(res == error_t::no_error) {
+	if(res == 0) {
 		get_vga_stream() << "Requested a binary!\n";
 	} else {
 		get_vga_stream() << "Failed to send a packet: " << res << "\n";
@@ -403,7 +403,7 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 
 	loopback_interface *loopback = get_allocator()->allocate<loopback_interface>();
 	new(loopback) loopback_interface();
-	if(global.interface_store->register_interface_fixed_name(loopback, "lo") != error_t::no_error) {
+	if(global.interface_store->register_interface_fixed_name(loopback, "lo") != 0) {
 		kernel_panic("Failed to register loopback interface");
 	}
 
