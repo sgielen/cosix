@@ -29,7 +29,7 @@ struct socket_fd : fd_t {
 	void putstring(const char * /*str*/, size_t /*count*/) override;
 
 	/** Creates two socket_fd's that form a connected pair. */
-	static error_t socketpair(socket_fd **a, socket_fd **b, size_t capacity);
+	static void socketpair(socket_fd **a, socket_fd **b, size_t capacity);
 
 private:
 	pipe_fd *readfd;

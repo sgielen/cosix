@@ -21,7 +21,7 @@ void socket_fd::putstring(const char *str, size_t count)
 	return writefd->putstring(str, count);
 }
 
-error_t socket_fd::socketpair(socket_fd **a, socket_fd **b, size_t capacity)
+void socket_fd::socketpair(socket_fd **a, socket_fd **b, size_t capacity)
 {
 	pipe_fd *tx = get_allocator()->allocate<pipe_fd>();
 	pipe_fd *rx = get_allocator()->allocate<pipe_fd>();
@@ -32,6 +32,4 @@ error_t socket_fd::socketpair(socket_fd **a, socket_fd **b, size_t capacity)
 	*b = get_allocator()->allocate<socket_fd>();
 	new (*a) socket_fd(tx, rx, "socketpair tx socket");
 	new (*b) socket_fd(rx, tx, "socketpair rx socket");
-
-	return error_t::no_error;
 }
