@@ -88,7 +88,7 @@ reverse_response_t *handle_request(reverse_request_t *request) {
 		}
 		return response;
 	} catch(filesystem_error &e) {
-		dprintf(stdout, "<tmpfs> request failed, error %d\n", e.error);
+		//dprintf(stdout, "<tmpfs> request failed, error %d\n", e.error);
 		response->result = -e.error;
 		response->flags = 0;
 		response->length = 0;
