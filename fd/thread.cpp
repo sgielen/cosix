@@ -665,6 +665,28 @@ void thread::handle_syscall() {
 		}
 		signal_userspace_cv(condvar, nwaiters);
 		state.eax = 0;
+	} else if(syscall == 24) {
+		// sys_fd_stat_put(ebx=fd, ecx=fdstat_t, edx=fsflags)
+		int fdnum = state.ebx;
+		fd_mapping_t *mapping;
+		auto res = process->get_fd(&mapping, fdnum, 0);
+		if(res != 0) {
+			state.eax = res;
+			return;
+		}
+
+		const cloudabi_fdstat_t *stat = reinterpret_cast<const cloudabi_fdstat_t*>(state.ecx);
+		cloudabi_fdsflags_t flags = state.edx;
+
+		if(flags & CLOUDABI_FDSTAT_FLAGS) {
+			mapping->fd->flags = stat->fs_flags;
+		}
+		if(flags & CLOUDABI_FDSTAT_RIGHTS) {
+			mapping->rights_base = mapping->rights_base & stat->fs_rights_base;
+			mapping->rights_inheriting = mapping->rights_inheriting & stat->fs_rights_inheriting;
+		}
+
+		state.eax = 0;
 	} else {
 		get_vga_stream() << "Syscall " << state.eax << " unknown, signalling process\n";
 		process->signal(CLOUDABI_SIGSYS);

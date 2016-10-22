@@ -212,8 +212,15 @@ cloudabi_sys_fd_stat_put(
 	const cloudabi_fdstat_t *buf,
 	cloudabi_fdsflags_t flags
 ) {
-	putstring_l(__PRETTY_FUNCTION__);
-	return CLOUDABI_ENOSYS;
+	// sys_fd_stat_put(ebx=fd, ecx=fdstat_t, edx=fsflags)
+	register int32_t reg_eax asm("eax") = 24;
+	register uint32_t reg_ebx asm("ebx") = fd;
+	register const void *reg_ecx asm("ecx") = buf;
+	register cloudabi_fdsflags_t reg_edx asm("edx") = flags;
+	asm volatile("int $0x80"
+		: "+r"(reg_eax) : "r"(reg_ebx), "r"(reg_ecx), "r"(reg_edx)
+		: "memory", "eax", "ebx", "ecx", "edx");
+	return reg_eax;
 }
 
 cloudabi_errno_t
