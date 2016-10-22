@@ -250,7 +250,13 @@ void thread::handle_syscall() {
 			return;
 		}
 
-		int new_fdnum = process->add_fd(new_fd, args->fds->fs_rights_base, args->fds->fs_rights_inheriting);
+		// Depending on filetype, drop inheriting rights if they don't make sense
+		auto inheriting = args->fds->fs_rights_inheriting;
+		if(new_fd->type == CLOUDABI_FILETYPE_REGULAR_FILE) {
+			inheriting = 0;
+		}
+
+		int new_fdnum = process->add_fd(new_fd, args->fds->fs_rights_base, inheriting);
 		*(args->fd) = new_fdnum;
 		state.eax = 0;
 	} else if(syscall == 5) {
