@@ -127,7 +127,7 @@ void program_main(const argdata_t *ad) {
 	dprintf(stdout, "tmpfs spawned -- awaiting requests on reverse FD %d\n", reversefd);
 	while(running) {
 		size_t received = 0;
-		char buf[sizeof(reverse_request_t)];
+		alignas(reverse_request_t) char buf[sizeof(reverse_request_t)];
 		while(received < sizeof(reverse_request_t)) {
 			size_t remaining = sizeof(reverse_request_t) - received;
 			ssize_t count = read(reversefd, buf + received, remaining);
