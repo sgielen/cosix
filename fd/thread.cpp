@@ -211,7 +211,7 @@ void thread::handle_syscall() {
 		// TODO: store offset in fd
 		void *buf = reinterpret_cast<void*>(state.ecx);
 		size_t len = state.edx;
-		size_t r = mapping->fd->read(0, buf, len);
+		size_t r = mapping->fd->read(buf, len);
 		state.eax = mapping->fd->error;
 		state.edx = r;
 	} else if(syscall == 4) {
@@ -687,6 +687,25 @@ void thread::handle_syscall() {
 		}
 
 		state.eax = 0;
+	} else if(syscall == 25) {
+		// sys_fd_seek(ebx=fd, ecx=offset, edx=whence), returns newoffset as ecx
+		cloudabi_fd_t fdnum = state.ebx;
+		cloudabi_filedelta_t offset = state.ecx;
+		cloudabi_whence_t whence = state.edx;
+
+		cloudabi_rights_t rights_needed = CLOUDABI_RIGHT_FD_TELL;
+		if(whence != CLOUDABI_WHENCE_CUR || offset != 0) {
+			rights_needed |= CLOUDABI_RIGHT_FD_SEEK;
+		}
+		fd_mapping_t *mapping;
+		auto res = process->get_fd(&mapping, fdnum, rights_needed);
+		if(res != 0) {
+			state.eax = res;
+			return;
+		}
+
+		state.ecx = mapping->fd->seek(offset, whence);
+		state.eax = mapping->fd->error;
 	} else {
 		get_vga_stream() << "Syscall " << state.eax << " unknown, signalling process\n";
 		process->signal(CLOUDABI_SIGSYS);

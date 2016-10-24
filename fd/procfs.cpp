@@ -22,10 +22,10 @@ private:
 	size_t depth;
 };
 
-struct procfs_uptime_fd : fd_t {
-	procfs_uptime_fd(const char *n) : fd_t(CLOUDABI_FILETYPE_REGULAR_FILE, n) {}
+struct procfs_uptime_fd : seekable_fd_t {
+	procfs_uptime_fd(const char *n) : seekable_fd_t(CLOUDABI_FILETYPE_REGULAR_FILE, n) {}
 
-	size_t read(size_t offset, void *dest, size_t count) override;
+	size_t read(void *dest, size_t count) override;
 };
 
 }
@@ -126,7 +126,7 @@ fd_t *procfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi
 	}
 }
 
-size_t procfs_uptime_fd::read(size_t offset, void *dest, size_t count) {
+size_t procfs_uptime_fd::read(void *dest, size_t count) {
 	error = 0;
 	// TODO compute uptime
 	int uptime = 12345;
@@ -136,14 +136,15 @@ size_t procfs_uptime_fd::read(size_t offset, void *dest, size_t count) {
 	// already have all contents in memory, so unify this
 	char *addr = ui64toa_s(uptime, buf, sizeof(buf), 10);
 	size_t length = strlen(addr);
-	if(offset + count > length) {
+	if(pos + count > length) {
 		reinterpret_cast<char*>(dest)[0] = 0;
 		return 0;
 	}
 
-	size_t bytes_left = length - offset;
+	size_t bytes_left = length - pos;
 	size_t copied = count < bytes_left ? count : bytes_left;
-	memcpy(reinterpret_cast<char*>(dest), addr + offset, copied);
+	memcpy(reinterpret_cast<char*>(dest), addr + pos, copied);
+	pos += copied;
 	return copied;
 }
 

@@ -48,8 +48,15 @@ struct fd_t {
 	char name[64]; /* for debugging */
 	cloudabi_errno_t error;
 
+	virtual cloudabi_filesize_t seek(cloudabi_filedelta_t /*offset*/, cloudabi_whence_t /*whence*/) {
+		// this is not a seekable fd. Inherit from seekable_fd_t to have
+		// a seekable fd.
+		error = EBADF;
+		return 0;
+	}
+
 	/* For memory, pipes and files */
-	virtual size_t read(size_t /*offset*/, void * /*dest*/, size_t /*count*/) {
+	virtual size_t read(void * /*dest*/, size_t /*count*/) {
 		error = EINVAL;
 		return 0;
 	}
@@ -69,6 +76,7 @@ struct fd_t {
 		error = EINVAL;
 		return nullptr;
 	}
+
 	/** Write directory entries to the given buffer, until it is filled. Each entry consists of a
 	 * cloudabi_dirent_t object, follwed by cloudabi_dirent_t::d_namlen bytes holding the name of the
 	 * entry. As much of the output buffer as possible is filled, potentially truncating the last entry.
@@ -95,6 +103,56 @@ protected:
 
 	virtual ~fd_t() {}
 };
+
+struct seekable_fd_t : public fd_t {
+	cloudabi_filesize_t pos;
+
+	virtual cloudabi_filesize_t seek(cloudabi_filedelta_t offset, cloudabi_whence_t whence) override {
+		if(whence == CLOUDABI_WHENCE_CUR) {
+			if(offset > 0 && static_cast<uint64_t>(offset) > (UINT64_MAX - pos)) {
+				// prevent overflow
+				error = EOVERFLOW;
+			} else if(offset < 0 && static_cast<uint64_t>(-offset) > pos) {
+				// prevent underflow
+				error = EINVAL;
+			} else {
+				// note that pos > size is allowed
+				error = 0;
+				pos = pos + offset;
+			}
+		} else if(whence == CLOUDABI_WHENCE_END) {
+			// TODO: this needs to obtain the filesize, so it needs file_stat
+			error = ENOSYS;
+			get_vga_stream() << "CLOUDABI_WHENCE_END not supported yet in seek\n";
+			/*
+			cloudabi_filesize_t size = stat(...);
+			if(offset > (UINT64_MAX - size)) {
+				error = EOVERFLOW;
+			} else if(offset < 0 && -offset > size) {
+				error = EINVAL;
+			} else {
+				pos = size + offset;
+			}
+			*/
+		} else if(whence == CLOUDABI_WHENCE_SET) {
+			if(offset < 0) {
+				error = EINVAL;
+			} else {
+				error = 0;
+				pos = offset;
+			}
+		} else {
+			// invalid whence
+			error = EINVAL;
+		}
+		return pos;
+	}
+
+protected:
+	inline seekable_fd_t(cloudabi_filetype_t t, const char *n) : fd_t(t, n), pos(0) {
+	}
+};
+
 
 };
 

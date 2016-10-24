@@ -21,7 +21,7 @@ struct socket_fd : fd_t {
 	 * then, it returns up to count bytes of data in the dest buffer.
 	 * It sets invalid_argument as the error if offset is not 0.
 	 */
-	size_t read(size_t offset, void *dest, size_t count) override;
+	size_t read(void *dest, size_t count) override;
 
 	/** putstring() blocks until there is capacity for at least count
 	 * bytes, then, it appends the given buffer to the stored one.

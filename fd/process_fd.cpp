@@ -309,7 +309,7 @@ cloudabi_errno_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fd
 	uint8_t *elf_buffer = get_allocator()->allocate<uint8_t>(10 * 1024 * 1024);
 	size_t buffer_size = 0;
 	do {
-		size_t read = fd->read(buffer_size, &elf_buffer[buffer_size], 1024);
+		size_t read = fd->read(&elf_buffer[buffer_size], 1024);
 		buffer_size += read;
 		if(read == 0) {
 			break;

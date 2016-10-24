@@ -187,8 +187,18 @@ cloudabi_sys_fd_seek(
 	cloudabi_whence_t whence,
 	cloudabi_filesize_t *newoffset
 ) {
-	putstring_l(__PRETTY_FUNCTION__);
-	return CLOUDABI_ENOSYS;
+	// sys_fd_seek(ebx=fd, ecx=offset, edx=whence), returns newoffset as ecx
+	// TODO: these are 64-bits types in 32-bits registers; should transport
+	// using the stack
+	register int32_t reg_eax asm("eax") = 25;
+	register uint32_t reg_ebx asm("ebx") = fd;
+	register uint32_t reg_ecx asm("ecx") = offset;
+	register uint32_t reg_edx asm("edx") = whence;
+	asm volatile("int $0x80"
+		: "+r"(reg_eax), "+r"(reg_ecx) : "r"(reg_ebx), "r"(reg_edx)
+		: "memory", "eax", "ebx", "ecx", "edx");
+	*newoffset = reg_ecx;
+	return reg_eax;
 }
 
 cloudabi_errno_t

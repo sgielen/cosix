@@ -19,11 +19,11 @@ using reverse_proto::pseudofd_t;
  * The other side of the reverse FD will create a new pseudo FDs in the open
  * call.
  */
-struct pseudo_fd : public fd_t {
+struct pseudo_fd : public seekable_fd_t {
 	pseudo_fd(pseudofd_t id, fd_t *reverse_fd, cloudabi_filetype_t t, const char *n);
 
 	/* For memory, pipes and files */
-	size_t read(size_t offset, void *dest, size_t count) override;
+	size_t read(void *dest, size_t count) override;
 	void putstring(const char *str, size_t count) override;
 
 	/* For directories */

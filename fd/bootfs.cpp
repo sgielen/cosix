@@ -15,14 +15,14 @@ struct bootfs_directory_fd : fd_t {
 	fd_t *openat(const char * /*path */, size_t /*pathlen*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) override;
 };
 
-struct bootfs_file_fd : fd_t {
+struct bootfs_file_fd : seekable_fd_t {
 	bootfs_file_fd(external_binary_t const &file, const char *n)
-	: fd_t(CLOUDABI_FILETYPE_REGULAR_FILE, n)
+	: seekable_fd_t(CLOUDABI_FILETYPE_REGULAR_FILE, n)
 	, addr(file.start)
 	, length(file.end - file.start)
 	{}
 
-	size_t read(size_t offset, void *dest, size_t count) override;
+	size_t read(void *dest, size_t count) override;
 
 private:
 	uint8_t *addr;
@@ -58,18 +58,19 @@ fd_t *bootfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi
 	return nullptr;
 }
 
-size_t bootfs_file_fd::read(size_t offset, void *dest, size_t count) {
+size_t bootfs_file_fd::read(void *dest, size_t count) {
 	error = 0;
 
 	// TODO this is the same code for every file for which we
 	// already have all contents in memory, so unify this
-	if(offset + count > length) {
+	if(pos + count > length) {
 		return 0;
 	}
 
-	size_t bytes_left = length - offset;
+	size_t bytes_left = length - pos;
 	size_t copied = count < bytes_left ? count : bytes_left;
-	memcpy(reinterpret_cast<char*>(dest), addr + offset, copied);
+	memcpy(reinterpret_cast<char*>(dest), addr + pos, copied);
+	pos += copied;
 	return copied;
 }
 

@@ -5,7 +5,7 @@
 using namespace cloudos;
 
 pseudo_fd::pseudo_fd(pseudofd_t id, fd_t *r, cloudabi_filetype_t t, const char *n)
-: fd_t(t, n)
+: seekable_fd_t(t, n)
 , pseudo_id(id)
 , reverse_fd(r)
 {
@@ -34,7 +34,7 @@ reverse_response_t *pseudo_fd::send_request(reverse_request_t *request) {
 	while(received < sizeof(reverse_response_t)) {
 		// TODO: error checking on the reverse_fd, in case it closed
 		size_t remaining = sizeof(reverse_response_t) - received;
-		received += reverse_fd->read(0, resp + received, remaining);
+		received += reverse_fd->read(resp + received, remaining);
 	}
 	reverse_fd->refcount = 1;
 	return resp;
@@ -70,7 +70,7 @@ reverse_response_t *pseudo_fd::lookup_inode(const char *path, size_t length, clo
 	return send_request(&request);
 }
 
-size_t pseudo_fd::read(size_t offset, void *dest, size_t count)
+size_t pseudo_fd::read(void *dest, size_t count)
 {
 	if(count > UINT8_MAX) {
 		count = UINT8_MAX;
@@ -80,7 +80,7 @@ size_t pseudo_fd::read(size_t offset, void *dest, size_t count)
 	request.op = reverse_request_t::operation::pread;
 	request.inode = 0;
 	request.flags = 0;
-	request.offset = offset;
+	request.offset = pos;
 	request.length = count;
 	reverse_response_t *response = send_request(&request);
 	if(!response || response->result < 0) {
@@ -90,8 +90,16 @@ size_t pseudo_fd::read(size_t offset, void *dest, size_t count)
 	}
 
 	error = 0;
-	memcpy(dest, response->buffer, response->length < count ? response->length : count);
-	return response->length;
+	if(response->length < count) {
+		count = response->length;
+	}
+	else if(response->length > count) {
+		get_vga_stream() << "pseudo-fd filesystem returned more data than requested, dropping";
+	}
+
+	memcpy(dest, response->buffer, count);
+	pos += count;
+	return count;
 }
 
 void pseudo_fd::putstring(const char *str, size_t remaining)

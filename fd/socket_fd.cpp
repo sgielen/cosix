@@ -11,14 +11,17 @@ socket_fd::socket_fd(pipe_fd *r, pipe_fd *w, const char *n)
 {
 }
 
-size_t socket_fd::read(size_t offset, void *dest, size_t count)
+size_t socket_fd::read(void *dest, size_t count)
 {
-	return readfd->read(offset, dest, count);
+	auto res = readfd->read(dest, count);
+	error = readfd->error;
+	return res;
 }
 
 void socket_fd::putstring(const char *str, size_t count)
 {
-	return writefd->putstring(str, count);
+	writefd->putstring(str, count);
+	error = writefd->error;
 }
 
 void socket_fd::socketpair(socket_fd **a, socket_fd **b, size_t capacity)

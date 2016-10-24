@@ -12,14 +12,9 @@ pipe_fd::pipe_fd(size_t c, const char *n)
 	buffer = get_allocator()->allocate<char>(capacity);
 }
 
-size_t pipe_fd::read(size_t offset, void *dest, size_t count)
+size_t pipe_fd::read(void *dest, size_t count)
 {
 	// count > capacity is no problem, we limit to the used size
-
-	if(offset != 0) {
-		error = EINVAL;
-		return 0;
-	}
 	error = 0;
 
 	while(used == 0) {
