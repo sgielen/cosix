@@ -1,6 +1,7 @@
 #pragma once
 
 #include <fd/thread.hpp>
+#include "condition.hpp"
 
 namespace cloudos {
 
@@ -25,14 +26,16 @@ namespace cloudos {
  * can never occur.
  */
 struct cv_t {
-	cv_t();
+	inline thread_condition_signaler &get_signaler() {
+		return signaler;
+	}
 
 	void wait();
 	void notify();
 	void broadcast();
 
 private:
-	thread_list *waiting_threads;
+	thread_condition_signaler signaler;
 };
 
 }
