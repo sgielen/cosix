@@ -1,3 +1,4 @@
+#pragma once
 #include <stdint.h>
 #include <stddef.h>
 #include <oslibc/list.hpp>
@@ -23,6 +24,8 @@ struct thread_condition_waiter;
 struct thread_condition {
 	thread_condition(thread_condition_signaler *signaler);
 	void satisfy();
+
+	void *userdata;
 
 private:
 	//thread_condition_type type;

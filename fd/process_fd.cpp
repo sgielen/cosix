@@ -656,6 +656,8 @@ void process_fd::exit(cloudabi_exitcode_t c, cloudabi_signal_t s)
 
 	get_vga_stream() << "Process \"" << name << "\" exited with signal " << exitsignal << ", code " << exitcode << ".\n";
 
+	termination_signaler.condition_broadcast();
+
 	// TODO: close all file descriptors (this also kills sub-processes)
 	// TODO: clean up all memory maps
 	// TODO: free all allocations

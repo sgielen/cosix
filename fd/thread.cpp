@@ -577,6 +577,18 @@ void thread::handle_syscall() {
 				state.eax = EINVAL;
 				return;
 			}
+		} else {
+			// none of the events may be LOCK_RDLOCK/LOCK_WRLOCK/CONDVAR
+			for(size_t i = 0; i < nsubscriptions; ++i) {
+				auto type = in[i].type;
+				if(type == CLOUDABI_EVENTTYPE_LOCK_RDLOCK
+				|| type == CLOUDABI_EVENTTYPE_LOCK_WRLOCK
+				|| type == CLOUDABI_EVENTTYPE_CONDVAR) {
+					state.edx = 0;
+					state.eax = EINVAL;
+					return;
+				}
+			}
 		}
 
 		if(first_event == CLOUDABI_EVENTTYPE_LOCK_RDLOCK
@@ -635,10 +647,92 @@ void thread::handle_syscall() {
 			state.edx = 1;
 			state.eax = 0;
 		} else {
-			// return an event when any of these subscriptions happen.
-			get_vga_stream() << "Wait for a normal eventtype\n";
 			state.edx = 0;
-			state.eax = ENOSYS;
+
+			// return an event when any of these subscriptions happen.
+			thread_condition_waiter w;
+			thread_condition *conditions = get_allocator()->allocate<thread_condition>(
+				sizeof(thread_condition) * nsubscriptions);
+			for(size_t subi = 0; subi < nsubscriptions; ++subi) {
+				cloudabi_subscription_t const &i = in[subi];
+				thread_condition &condition = conditions[subi];
+
+				thread_condition_signaler *signaler = nullptr;
+				switch(i.type) {
+				case CLOUDABI_EVENTTYPE_CONDVAR:
+				case CLOUDABI_EVENTTYPE_LOCK_RDLOCK:
+				case CLOUDABI_EVENTTYPE_LOCK_WRLOCK:
+					kernel_panic("Eventtype cannot exist here");
+				case CLOUDABI_EVENTTYPE_CLOCK:
+					get_vga_stream() << "Unimplemented clock eventtype, failing\n";
+					state.eax = EINVAL;
+					return;
+				case CLOUDABI_EVENTTYPE_FD_READ:
+					get_vga_stream() << "Unimplemented fd-read eventtype, failing\n";
+					state.eax = EINVAL;
+					return;
+				case CLOUDABI_EVENTTYPE_FD_WRITE:
+					get_vga_stream() << "Unimplemented fd-write eventtype, failing\n";
+					state.eax = EINVAL;
+					return;
+				case CLOUDABI_EVENTTYPE_PROC_TERMINATE: {
+					cloudabi_fd_t proc_fdnum = i.proc_terminate.fd;
+					fd_mapping_t *proc_mapping;
+					auto res = process->get_fd(&proc_mapping, proc_fdnum, CLOUDABI_RIGHT_POLL_PROC_TERMINATE);
+					if(res != 0) {
+						// Should we set out.error?
+						state.eax = res;
+						return;
+					}
+					fd_t *proc_fd = proc_mapping->fd;
+					if(proc_fd->type != CLOUDABI_FILETYPE_PROCESS) {
+						// Should we set out.error?
+						state.eax = EINVAL;
+						return;
+					}
+					process_fd *proc = reinterpret_cast<process_fd*>(proc_fd);
+					signaler = proc->get_termination_signaler();
+				}
+				}
+				new (&condition) thread_condition(signaler);
+				condition.userdata = const_cast<void*>(reinterpret_cast<const void*>(&i));
+				w.add_condition(&condition);
+			}
+
+			w.wait();
+			thread_condition_list *satisfied = w.finish();
+			state.eax = 0;
+			iterate(satisfied, [&](thread_condition_list *item) {
+				cloudabi_event_t &o = out[state.edx++];
+				if(state.edx > nsubscriptions) {
+					kernel_panic("Too many out events");
+				}
+				auto *i = reinterpret_cast<cloudabi_subscription_t const*>(item->data->userdata);
+				o.userdata = i->userdata;
+				o.type = i->type;
+				o.error = 0;
+				if(i->type == CLOUDABI_EVENTTYPE_PROC_TERMINATE) {
+					cloudabi_fd_t proc_fdnum = o.proc_terminate.fd = i->proc_terminate.fd;
+					// TODO: store signal and exitcode in the thread_condition when the process dies,
+					// so that if we closed the fd in the meantime, we don't error out here
+					fd_mapping_t *proc_mapping;
+					auto res = process->get_fd(&proc_mapping, proc_fdnum, 0);
+					if(res != 0) {
+						o.error = res;
+						return;
+					}
+					fd_t *proc_fd = proc_mapping->fd;
+					if(proc_fd->type != CLOUDABI_FILETYPE_PROCESS) {
+						o.error = EINVAL;
+						return;
+					}
+					process_fd *proc = reinterpret_cast<process_fd*>(proc_fd);
+					if(!proc->is_terminated(o.proc_terminate.exitcode, o.proc_terminate.signal)) {
+						o.error = EINVAL;
+						return;
+					}
+				}
+			});
 		}
 	} else if(syscall == 22) {
 		// lock_unlock(ebx=lock, ecx=scope)

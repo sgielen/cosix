@@ -5,6 +5,9 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <string.h>
+#include <sched.h>
+#include <sys/procdesc.h>
+#include <signal.h>
 
 int stdout;
 int bootfs;
@@ -73,10 +76,10 @@ int start_binary(const char *name) {
 		dprintf(stdout, "%s failed to spawn: %s\n", name, strerror(errno));
 	} else {
 		dprintf(stdout, "%s spawned, fd: %d\n", name, pfd);
+		siginfo_t si;
+		pdwait(pfd, &si, 0);
+		dprintf(stdout, "%s exited, exit status %d\n", name, si.si_status);
 	}
-
-	// wait a while until the process is probably done
-	for(int i = 0; i < 500000000; ++i) {}
 
 	return pfd;
 }

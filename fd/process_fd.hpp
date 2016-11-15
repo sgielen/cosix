@@ -5,6 +5,7 @@
 #include "thread.hpp"
 #include <oslibc/list.hpp>
 #include <cloudabi/headers/cloudabi_types.h>
+#include <concur/condition.hpp>
 
 namespace cloudos {
 
@@ -117,6 +118,20 @@ struct process_fd : public fd_t {
 	userland_condvar_waiters_t *get_or_create_userland_condvar_cv(_Atomic(cloudabi_condvar_t) *condvar);
 	void forget_userland_condvar_cv(_Atomic(cloudabi_condvar_t) *condvar);
 
+	inline thread_condition_signaler *get_termination_signaler() {
+		return &termination_signaler;
+	}
+
+	inline bool is_terminated(cloudabi_exitcode_t &c, cloudabi_signal_t &s) {
+		if(running) {
+			return false;
+		} else {
+			c = exitcode;
+			s = exitsignal;
+			return true;
+		}
+	}
+
 private:
 	thread_list *threads;
 	void add_thread(thread *thr);
@@ -145,6 +160,8 @@ private:
 	bool running = false;
 	cloudabi_exitcode_t exitcode = 0;
 	cloudabi_signal_t exitsignal = 0;
+
+	thread_condition_signaler termination_signaler;
 };
 
 }
