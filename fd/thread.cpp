@@ -19,6 +19,10 @@ static inline T *allocate_on_stack(uint32_t &useresp) {
 	return reinterpret_cast<T*>(useresp);
 }
 
+static bool return_true(void*, thread_condition*) {
+	return true;
+}
+
 thread::thread(process_fd *p, void *stack_location, void *auxv_address, void *entrypoint, cloudabi_tid_t t)
 : process(p)
 , thread_id(t)
@@ -653,9 +657,24 @@ void thread::handle_syscall() {
 			thread_condition_waiter w;
 			thread_condition *conditions = get_allocator()->allocate<thread_condition>(
 				sizeof(thread_condition) * nsubscriptions);
+
+			struct thread_condition_userdata {
+				const cloudabi_subscription_t *subscription;
+				cloudabi_errno_t error;
+			};
+
+			// This signaler is always 'already satisfied', so if it is used, it will inhibit
+			// the actual wait(). Therefore, it can be used when poll() should immediately
+			// return, e.g. because of an error in the parameters.
+			thread_condition_signaler null_signaler;
+			null_signaler.set_already_satisfied_function(return_true, nullptr);
+
 			for(size_t subi = 0; subi < nsubscriptions; ++subi) {
 				cloudabi_subscription_t const &i = in[subi];
 				thread_condition &condition = conditions[subi];
+				thread_condition_userdata *userdata = get_allocator()->allocate<thread_condition_userdata>();
+				userdata->subscription = &i;
+				userdata->error = 0;
 
 				thread_condition_signaler *signaler = nullptr;
 				switch(i.type) {
@@ -665,41 +684,45 @@ void thread::handle_syscall() {
 					kernel_panic("Eventtype cannot exist here");
 				case CLOUDABI_EVENTTYPE_CLOCK:
 					get_vga_stream() << "Unimplemented clock eventtype, failing\n";
-					state.eax = EINVAL;
-					return;
+					userdata->error = ENOSYS;
+					signaler = &null_signaler;
+					break;
 				case CLOUDABI_EVENTTYPE_FD_READ:
 					get_vga_stream() << "Unimplemented fd-read eventtype, failing\n";
-					state.eax = EINVAL;
-					return;
+					userdata->error = ENOSYS;
+					signaler = &null_signaler;
+					break;
 				case CLOUDABI_EVENTTYPE_FD_WRITE:
 					get_vga_stream() << "Unimplemented fd-write eventtype, failing\n";
-					state.eax = EINVAL;
-					return;
+					userdata->error = ENOSYS;
+					signaler = &null_signaler;
+					break;
 				case CLOUDABI_EVENTTYPE_PROC_TERMINATE: {
 					cloudabi_fd_t proc_fdnum = i.proc_terminate.fd;
 					fd_mapping_t *proc_mapping;
 					auto res = process->get_fd(&proc_mapping, proc_fdnum, CLOUDABI_RIGHT_POLL_PROC_TERMINATE);
 					if(res != 0) {
-						// Should we set out.error?
-						state.eax = res;
-						return;
+						userdata->error = res;
+						signaler = &null_signaler;
+					} else {
+						fd_t *proc_fd = proc_mapping->fd;
+						if(proc_fd->type != CLOUDABI_FILETYPE_PROCESS) {
+							userdata->error = EBADF;
+							signaler = &null_signaler;
+						} else {
+							process_fd *proc = reinterpret_cast<process_fd*>(proc_fd);
+							signaler = proc->get_termination_signaler();
+						}
 					}
-					fd_t *proc_fd = proc_mapping->fd;
-					if(proc_fd->type != CLOUDABI_FILETYPE_PROCESS) {
-						// Should we set out.error?
-						state.eax = EINVAL;
-						return;
-					}
-					process_fd *proc = reinterpret_cast<process_fd*>(proc_fd);
-					signaler = proc->get_termination_signaler();
 				}
 				}
 				new (&condition) thread_condition(signaler);
-				condition.userdata = const_cast<void*>(reinterpret_cast<const void*>(&i));
+				condition.userdata = reinterpret_cast<void*>(userdata);
 				w.add_condition(&condition);
 			}
 
 			w.wait();
+
 			thread_condition_list *satisfied = w.finish();
 			state.eax = 0;
 			iterate(satisfied, [&](thread_condition_list *item) {
@@ -707,11 +730,12 @@ void thread::handle_syscall() {
 				if(state.edx > nsubscriptions) {
 					kernel_panic("Too many out events");
 				}
-				auto *i = reinterpret_cast<cloudabi_subscription_t const*>(item->data->userdata);
+				thread_condition_userdata *userdata = reinterpret_cast<thread_condition_userdata*>(item->data->userdata);
+				auto *i = userdata->subscription;
 				o.userdata = i->userdata;
 				o.type = i->type;
-				o.error = 0;
-				if(i->type == CLOUDABI_EVENTTYPE_PROC_TERMINATE) {
+				o.error = userdata->error;
+				if(i->type == CLOUDABI_EVENTTYPE_PROC_TERMINATE && o.error == 0) {
 					cloudabi_fd_t proc_fdnum = o.proc_terminate.fd = i->proc_terminate.fd;
 					// TODO: store signal and exitcode in the thread_condition when the process dies,
 					// so that if we closed the fd in the meantime, we don't error out here
