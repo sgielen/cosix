@@ -7,11 +7,13 @@ switch_thread:
 	push %ebx
 	push %edi
 	push %esi
+	push %ebp
 	/* store my stack ptr in *eax */
 	mov %esp, (%eax)
 	/* load stack ptr from ecx */
 	mov %ecx, %esp
 	/* load callee saved registers */
+	pop %ebp
 	pop %esi
 	pop %edi
 	pop %ebx
@@ -20,6 +22,7 @@ switch_thread:
 
 .global initial_kernel_stack
 initial_kernel_stack:
+	.long 0
 	.long 0
 	.long 0
 	.long 0
