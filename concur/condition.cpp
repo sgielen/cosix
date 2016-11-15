@@ -22,8 +22,19 @@ void thread_condition::satisfy()
 }
 
 thread_condition_signaler::thread_condition_signaler()
-: conditions(nullptr)
+: satisfied_function(nullptr)
+, satisfied_function_userdata(nullptr)
+, conditions(nullptr)
 {}
+
+void thread_condition_signaler::set_already_satisfied_function(thread_condition_satisfied_function_t function, void *userdata) {
+	satisfied_function = function;
+	satisfied_function_userdata = userdata;
+}
+
+bool thread_condition_signaler::already_satisfied(thread_condition *c) {
+	return satisfied_function ? satisfied_function(satisfied_function_userdata, c) : false;
+}
 
 void thread_condition_signaler::subscribe_condition(thread_condition *c)
 {
@@ -80,27 +91,48 @@ void thread_condition_waiter::add_condition(thread_condition *c) {
 
 void thread_condition_waiter::wait() {
 	auto *thr = get_scheduler()->get_running_thread();
-
-	// TODO: check if any of these conditions is already satisfied, if
-	// possible
+	bool initially_satisfied = false;
 
 	// Subscribe on all conditions
 	iterate(conditions, [&](thread_condition_list *item) {
 		thread_condition *c = item->data;
-		c->thread = thr;
-		c->satisfied = false;
-		c->signaler->subscribe_condition(c);
+		if(!initially_satisfied) {
+			c->thread = thr;
+			c->signaler->subscribe_condition(c);
+		}
+
+		if(c->signaler->already_satisfied(c)) {
+			c->satisfied = true;
+			initially_satisfied = true;
+		} else {
+			c->satisfied = false;
+		}
 	});
 
-	// Block ourselves
-	thr->thread_block();
+	// TODO: there is a race condition here, where a condition is not
+	// satisfied when we check it, but it becomes satisfied before our
+	// thread blocks. Then, the thread would never be unblocked because the
+	// condition would not be re-satisfied.
+	// I can think of two fixes:
+	// - Spinlocking a subscribed signaler, so that it won't signal conditions
+	//   before we're done blocking our thread
+	// - Marking our thread blocked without actually yielding, before checking
+	//   whether conditions are already satisfied; then, if a condition becomes
+	//   satisfied during that period, the thread will be unblocked and will
+	//   automatically be scheduled again sometime after the yield
 
-	// Cancel all non-satisfied conditions (the rest will be already
-	// removed by the signaler)
+	if(!initially_satisfied) {
+		// Block ourselves waiting on a satisfaction
+		thr->thread_block();
+	}
+
+	// Cancel all subscribed, non-satisfied conditions (satisfied
+	// conditions will be already removed by the signaler)
 	iterate(conditions, [&](thread_condition_list *item) {
 		thread_condition *c = item->data;
-		if(!c->satisfied) {
+		if(c->thread != nullptr && !c->satisfied) {
 			c->signaler->cancel_condition(c);
+			c->thread = nullptr;
 		}
 	});
 }

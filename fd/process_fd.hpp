@@ -122,6 +122,10 @@ struct process_fd : public fd_t {
 		return &termination_signaler;
 	}
 
+	inline bool is_terminated() {
+		return !running;
+	}
+
 	inline bool is_terminated(cloudabi_exitcode_t &c, cloudabi_signal_t &s) {
 		if(running) {
 			return false;

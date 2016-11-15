@@ -18,6 +18,10 @@
 
 using namespace cloudos;
 
+static bool process_already_terminated(void *userdata, thread_condition*) {
+	return reinterpret_cast<process_fd*>(userdata)->is_terminated();
+}
+
 process_fd::process_fd(const char *n)
 : fd_t(CLOUDABI_FILETYPE_PROCESS, n)
 , threads(nullptr)
@@ -39,6 +43,8 @@ process_fd::process_fd(const char *n)
 	for(size_t i = 0; i < 0x300; ++i) {
 		page_tables[i] = nullptr;
 	}
+
+	termination_signaler.set_already_satisfied_function(process_already_terminated, this);
 }
 
 void process_fd::add_initial_fds() {

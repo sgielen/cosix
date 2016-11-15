@@ -50,6 +50,11 @@ private:
 struct thread_condition_signaler {
 	thread_condition_signaler();
 
+	typedef bool (*thread_condition_satisfied_function_t)(void*, thread_condition*);
+
+	void set_already_satisfied_function(thread_condition_satisfied_function_t function, void *userdata);
+
+	bool already_satisfied(thread_condition *c);
 	void subscribe_condition(thread_condition *c);
 	void cancel_condition(thread_condition *c);
 
@@ -57,6 +62,8 @@ struct thread_condition_signaler {
 	void condition_broadcast();
 
 private:
+	thread_condition_satisfied_function_t satisfied_function;
+	void *satisfied_function_userdata;
 	thread_condition_list *conditions;
 };
 
