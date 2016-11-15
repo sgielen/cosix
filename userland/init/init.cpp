@@ -91,6 +91,10 @@ void program_main(const argdata_t *) {
 	pseudofd = 5;
 	dprintf(stdout, "Init starting up.\n");
 
+	// reconfigure stderr
+	FILE *out = fdopen(stdout, "w");
+	fswap(stderr, out);
+
 	/*start_binary("exec_test");
 	start_binary("thread_test");
 	start_binary("pipe_test");

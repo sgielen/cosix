@@ -121,6 +121,10 @@ void program_main(const argdata_t *ad) {
 		}
 	}
 
+	// reconfigure stderr
+	FILE *out = fdopen(stdout, "w");
+	fswap(stderr, out);
+
 	running = true;
 	fs = new tmpfs(device);
 
