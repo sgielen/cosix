@@ -613,12 +613,6 @@ void process_fd::fork(thread *otherthread) {
 		new (mapping) mem_mapping_t(this, item->data);
 		add_mem_mapping(mapping);
 
-		mem_mapping_list *ml = get_allocator()->allocate<mem_mapping_list>();
-		ml->data = mapping;
-		ml->next = nullptr;
-
-		append(&mappings, ml);
-
 		// TODO: implement copy-on-write
 		mapping->copy_from(item->data);
 	});
