@@ -218,7 +218,11 @@ struct interrupt_handler : public interrupt_functor {
 			int irq = int_no - 0x20;
 			if(irq == 0 /* system timer */) {
 				get_root_device()->timer_event_recursive();
-				get_scheduler()->thread_yield();
+				if(!get_scheduler()->is_waiting_for_ready_task()) {
+					// this timer event occurred while already waiting for something
+					// to do, so just return immediately to prevent stack overflow
+					get_scheduler()->thread_yield();
+				}
 			} else if(irq == 1 /* keyboard */) {
 				// keyboard input!
 				// wait for the ready bit to turn on
