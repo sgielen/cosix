@@ -21,7 +21,9 @@ isr_common:
 	/* clear DF flag */
 	cld
 	/* call into C */
+	push %esp /* ptr to interrupt_state_t */
 	call isr_handler
+	add $4, %esp
 	jmp do_iret
 
 .global do_iret

@@ -27,9 +27,9 @@ ISR_NUM(128);
 #undef ISR_NUM
 
 extern "C"
-void isr_handler(interrupt_state_t regs) {
+void isr_handler(interrupt_state_t *regs) {
 	if(global_interrupt != 0) {
-		global_interrupt->call(&regs);
+		global_interrupt->call(regs);
 	}
 }
 
