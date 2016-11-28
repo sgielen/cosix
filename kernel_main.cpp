@@ -319,14 +319,14 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 
 	sse_enable();
 
-	allocator alloc_;
-	global.alloc = &alloc_;
-
 	// end_of_kernel points at the end of any usable code, stack, BSS, etc
 	// in physical memory, so everything after that is free for use by the
 	// allocator
 	page_allocator paging(end_of_kernel, mmap, memory_map_bytes);
 	global.page_allocator = &paging;
+
+	allocator alloc_;
+	global.alloc = &alloc_;
 
 	// Set up segment table
 	segment_table gdt;

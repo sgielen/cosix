@@ -1,6 +1,10 @@
 add_library(memory
+	allocation.cpp allocation.hpp
 	allocator.cpp allocator.hpp
 	page_allocator.cpp page_allocator.hpp
+	bucketizer.hpp
+	multiple_page_allocator.hpp
+	segregator.hpp
 )
 list(APPEND memory_tests
 )

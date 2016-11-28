@@ -165,16 +165,20 @@ cloudabi_errno_t page_allocator::allocate(page_allocation *a) {
 		return res;
 	}
 
+	static int last_table_checked = 0;
+
 	// TODO: find a better way of finding the next virtual address entry
-	for(int table = 0; table < NUM_KERNEL_PAGES; ++table) {
-		uint32_t *page_table = kernel_page_tables[table];
-		for(size_t entry = 0; entry < PAGING_TABLE_SIZE; ++entry) {
-			if(page_table[entry] == 0) {
-				page_table[entry] = reinterpret_cast<uint64_t>(a->address) | 0x03;
-				a->address = reinterpret_cast<void*>((0x300 + table) * PAGE_SIZE * PAGING_TABLE_SIZE + entry * PAGE_SIZE);
+	for(; last_table_checked < NUM_KERNEL_PAGES; ++last_table_checked) {
+		uint32_t *page_table = kernel_page_tables[last_table_checked];
+		static int last_entry_checked = 0;
+		for(; last_entry_checked < PAGING_TABLE_SIZE; ++last_entry_checked) {
+			if(page_table[last_entry_checked] == 0) {
+				page_table[last_entry_checked] = reinterpret_cast<uint64_t>(a->address) | 0x03;
+				a->address = reinterpret_cast<void*>((0x300 + last_table_checked) * PAGE_SIZE * PAGING_TABLE_SIZE + last_entry_checked * PAGE_SIZE);
 				return 0;
 			}
 		}
+		last_entry_checked = 0;
 	}
 
 	get_vga_stream() << "allocate() called, but there is no virtual address space left\n";

@@ -312,7 +312,8 @@ cloudabi_errno_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fd
 	// then seek to the phdr offset, then read() phdrs, then for every LOAD
 	// phdr, seek() to the binary data and read() only that into the
 	// process address space
-	uint8_t *elf_buffer = get_allocator()->allocate<uint8_t>(10 * 1024 * 1024);
+	Blk elf_buffer_blk = allocate(10 * 1024 * 1024);
+	uint8_t *elf_buffer = reinterpret_cast<uint8_t*>(elf_buffer_blk.ptr);
 	size_t buffer_size = 0;
 	do {
 		size_t read = fd->read(&elf_buffer[buffer_size], 1024);
@@ -323,6 +324,7 @@ cloudabi_errno_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fd
 	} while(fd->error == 0);
 
 	if(fd->error != 0) {
+		deallocate(elf_buffer_blk);
 		return EINVAL;
 	}
 
@@ -366,6 +368,7 @@ cloudabi_errno_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fd
 	memcpy(argdata_address, argdata_buffer, argdatalen);
 
 	res = exec(elf_buffer, buffer_size, argdata_address, argdatalen);
+	deallocate(elf_buffer_blk);
 	if(res != 0) {
 		page_directory = old_page_directory;
 		page_tables = old_page_tables;

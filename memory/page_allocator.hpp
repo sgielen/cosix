@@ -63,6 +63,8 @@ struct page_allocator {
 	// from used_pages, unmap it from the virtual address space and put it
 	// back in free_pages
 
+	static const int PAGE_SIZE = 4096 /* bytes */;
+
 private:
 	// never allocate_phys outside of the page allocator -- such pages will not be
 	// accessible, not even if you add _kernel_virtual_base. Instead, you should use
@@ -72,7 +74,6 @@ private:
 	page_list *used_pages;
 	page_list *free_pages;
 
-	static const int PAGE_SIZE = 4096 /* bytes */;
 	static const int PAGING_TABLE_SIZE = 1024 /* entries */;
 	static const int PAGING_ALIGNMENT = 4096 /* bytes for entry alignment */;
 	static const int NUM_KERNEL_PAGES = 0x100 /* number of pages for the kernel */;
