@@ -23,6 +23,7 @@
 #include "memory/page_allocator.hpp"
 #include "global.hpp"
 #include "rng/rng.hpp"
+#include "oslibc/assert.hpp"
 
 extern uint32_t _kernel_virtual_base;
 
@@ -255,6 +256,7 @@ struct interrupt_handler : public interrupt_functor {
 		}
 
 		if(running_thread) {
+			assert(running_thread->is_running());
 			running_thread->get_return_state(regs);
 		}
 	}

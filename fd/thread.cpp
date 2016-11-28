@@ -6,6 +6,7 @@
 #include <memory/allocator.hpp>
 #include "global.hpp"
 #include <rng/rng.hpp>
+#include <oslibc/assert.hpp>
 
 using namespace cloudos;
 
@@ -290,7 +291,7 @@ void thread::handle_syscall() {
 		stat->fs_rights_inheriting = mapping->rights_inheriting;
 		state.eax = 0;
 	} else if(syscall == 6) {
-		// sys_fd_proc_exec(ecx=parameters)
+		// sys_proc_exec(ecx=parameters)
 		struct args_t {
 			cloudabi_fd_t fd;
 			const void *data;
@@ -327,6 +328,8 @@ void thread::handle_syscall() {
 			state.eax = res;
 			return;
 		}
+		assert(!running);
+		get_scheduler()->thread_yield();
 	} else if(syscall == 7) {
 		// sys_mem_map
 		struct args_t {
