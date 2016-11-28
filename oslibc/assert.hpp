@@ -1,6 +1,9 @@
 #pragma once
 
-#include <global.hpp>
+namespace cloudos {
+__attribute__((noreturn)) void kernel_panic(const char *message);
+inline vga_stream &get_vga_stream();
+}
 
 #ifdef NDEBUG
 #define assert(x)

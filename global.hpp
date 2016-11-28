@@ -1,6 +1,7 @@
 #pragma once
 
 #include "hw/vga_stream.hpp"
+#include "oslibc/assert.hpp"
 
 namespace cloudos {
 
@@ -35,91 +36,32 @@ struct global_state {
 };
 
 __attribute__((noreturn)) inline void kernel_panic(const char *message) {
-	if(global_state_) {
+	if(global_state_ && global_state_->vga) {
 		*(global_state_->vga) << "!!! KERNEL PANIC - HALTING !!!\n" << message << "\n\n\n";
 	}
 	asm volatile("cli; halted: hlt; jmp halted;");
 	while(1) {}
 }
 
-inline allocator *get_allocator() {
-	if(!global_state_ || !global_state_->alloc) {
-		kernel_panic("No allocator is set");
-	}
-
-	return global_state_->alloc;
+#define GET_GLOBAL(NAME, TYPE, MEMBER) \
+inline TYPE *get_##NAME() { \
+	assert(global_state_ && global_state_->MEMBER); \
+	return global_state_->MEMBER; \
 }
 
-inline page_allocator *get_page_allocator() {
-	if(!global_state_ || !global_state_->page_allocator) {
-		kernel_panic("No page allocator is set");
-	}
-
-	return global_state_->page_allocator;
-}
-
-inline segment_table *get_gdt() {
-	if(!global_state_ || !global_state_->gdt) {
-		kernel_panic("No gdt is set");
-	}
-
-	return global_state_->gdt;
-}
-
-inline driver_store *get_driver_store() {
-	if(!global_state_ || !global_state_->driver_store) {
-		kernel_panic("No driver store is set");
-	}
-
-	return global_state_->driver_store;
-}
-
-inline protocol_store *get_protocol_store() {
-	if(!global_state_ || !global_state_->protocol_store) {
-		kernel_panic("No protocol store is set");
-	}
-
-	return global_state_->protocol_store;
-}
-
-inline interface_store *get_interface_store() {
-	if(!global_state_ || !global_state_->interface_store) {
-		kernel_panic("No interface store is set");
-	}
-
-	return global_state_->interface_store;
-}
+GET_GLOBAL(allocator, allocator, alloc)
+GET_GLOBAL(page_allocator, page_allocator, page_allocator)
+GET_GLOBAL(gdt, segment_table, gdt)
+GET_GLOBAL(driver_store, driver_store, driver_store)
+GET_GLOBAL(protocol_store, protocol_store, protocol_store)
+GET_GLOBAL(interface_store, interface_store, interface_store)
+GET_GLOBAL(root_device, device, root_device)
+GET_GLOBAL(scheduler, scheduler, scheduler)
+GET_GLOBAL(random, rng, random)
 
 inline vga_stream &get_vga_stream() {
-	if(!global_state_ || !global_state_->vga) {
-		kernel_panic("No VGA stream is set");
-	}
-
+	assert(global_state_ && global_state_->vga);
 	return *global_state_->vga;
-}
-
-inline device *get_root_device() {
-	if(!global_state_ || !global_state_->root_device) {
-		kernel_panic("No root device is set");
-	}
-
-	return global_state_->root_device;
-}
-
-inline scheduler *get_scheduler() {
-	if(!global_state_ || !global_state_->scheduler) {
-		kernel_panic("No scheduler is set");
-	}
-
-	return global_state_->scheduler;
-}
-
-inline rng *get_random() {
-	if(!global_state_ || !global_state_->random) {
-		kernel_panic("No RNG is set");
-	}
-
-	return global_state_->random;
 }
 
 }
