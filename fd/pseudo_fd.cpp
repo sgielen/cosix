@@ -4,7 +4,7 @@
 
 using namespace cloudos;
 
-pseudo_fd::pseudo_fd(pseudofd_t id, fd_t *r, cloudabi_filetype_t t, const char *n)
+pseudo_fd::pseudo_fd(pseudofd_t id, shared_ptr<fd_t> r, cloudabi_filetype_t t, const char *n)
 : seekable_fd_t(t, n)
 , pseudo_id(id)
 , reverse_fd(r)
@@ -131,7 +131,7 @@ void pseudo_fd::putstring(const char *str, size_t remaining)
 	error = 0;
 }
 
-fd_t *pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_oflags_t oflags, const cloudabi_fdstat_t * fdstat)
+shared_ptr<fd_t> pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_oflags_t oflags, const cloudabi_fdstat_t * fdstat)
 {
 	int64_t inode;
 	int filetype;
@@ -182,14 +182,14 @@ fd_t *pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_oflags_t ofla
 
 	pseudofd_t new_pseudo_id = response->result;
 
-	pseudo_fd *new_fd = get_allocator()->allocate<pseudo_fd>();
 	char new_name[sizeof(name)];
 	strncpy(new_name, name, sizeof(new_name));
 	strncat(new_name, "->", sizeof(new_name) - strlen(new_name) - 1);
 	size_t copy = sizeof(new_name) - strlen(new_name) - 1;
 	if(copy > pathlen) copy = pathlen;
 	strncat(new_name, path, copy);
-	new (new_fd) pseudo_fd(new_pseudo_id, reverse_fd, filetype, new_name);
+
+	auto new_fd = make_shared<pseudo_fd>(new_pseudo_id, reverse_fd, filetype, new_name);
 	// TODO: check if the rights are actually obtainable before opening the file;
 	// ignore those that don't apply to this filetype, return ENOTCAPABLE if not
 	new_fd->flags = fdstat->fs_flags;

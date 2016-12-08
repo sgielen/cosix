@@ -3,6 +3,7 @@
 #include <cloudabi_types_common.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <memory/smart_ptr.hpp>
 #include "../oslibc/error.h"
 #include "../oslibc/string.h"
 #include "global.hpp"
@@ -72,7 +73,7 @@ struct fd_t {
 	 * filesystem) must generate ENOTCAPABLE. fs_flags specifies the initial flags of the fd; the
 	 * filetype is ignored.
 	 */
-	virtual fd_t *openat(const char * /*path */, size_t /*pathlen*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) {
+	virtual shared_ptr<fd_t> openat(const char * /*path */, size_t /*pathlen*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) {
 		error = EINVAL;
 		return nullptr;
 	}
@@ -95,13 +96,13 @@ struct fd_t {
 		error = EINVAL;
 	}
 
+	virtual ~fd_t() {}
+
 protected:
 	inline fd_t(cloudabi_filetype_t t, const char *n) : type(t), flags(0), refcount(1), invalid(false), error(0) {
 		strncpy(name, n, sizeof(name));
 		name[sizeof(name)-1] = 0;
 	}
-
-	virtual ~fd_t() {}
 };
 
 struct seekable_fd_t : public fd_t {

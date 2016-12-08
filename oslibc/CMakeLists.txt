@@ -6,6 +6,7 @@ add_library(oslibc
 	in.h
 	list.hpp
 	assert.cpp assert.hpp
+	utility.hpp
 )
 target_link_libraries(oslibc hw)
 list(APPEND oslibc_tests test/test_string.cpp test/test_numeric.cpp test/test_list.cpp)

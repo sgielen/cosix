@@ -15,7 +15,7 @@ struct procfs_directory_fd : fd_t {
 
 	bool to_string(char *buf, size_t length);
 
-	fd_t *openat(const char * /*path */, size_t /*pathlen*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) override;
+	shared_ptr<fd_t> openat(const char * /*path */, size_t /*pathlen*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) override;
 
 private:
 	char path[PROCFS_DEPTH_MAX][PROCFS_FILE_MAX];
@@ -79,7 +79,7 @@ bool procfs_directory_fd::to_string(char *buf, size_t length) {
 	return true;
 }
 
-fd_t *procfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi_oflags_t oflags, const cloudabi_fdstat_t *) {
+shared_ptr<fd_t> procfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi_oflags_t oflags, const cloudabi_fdstat_t *) {
 	if(pathname == 0 || pathlen == 0 || pathname[0] == 0 || pathname[0] == '/') {
 		error = EINVAL;
 		return nullptr;
@@ -108,18 +108,14 @@ fd_t *procfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi
 			return nullptr;
 		} else {
 			error = 0;
-			procfs_uptime_fd *fd = get_allocator()->allocate<procfs_uptime_fd>();
-			new (fd) procfs_uptime_fd(pathbuf);
-			return fd;
+			return make_shared<procfs_uptime_fd>(pathbuf);
 		}
 	} else if(strcmp(pathbuf, "kernel") == 0 || strcmp(pathbuf, "kernel/") == 0) {
 		error = 0;
 		char pb[2][PROCFS_FILE_MAX];
 		strncpy(pb[0], "kernel", PROCFS_FILE_MAX);
 		pb[1][0] = 0;
-		procfs_directory_fd *fd = get_allocator()->allocate<procfs_directory_fd>();
-		new (fd) procfs_directory_fd(pb, "procfs_kernel_dir");
-		return fd;
+		return make_shared<procfs_directory_fd>(pb, "procfs_kernel_dir");
 	} else {
 		error = ENOENT;
 		return nullptr;
@@ -148,8 +144,8 @@ size_t procfs_uptime_fd::read(void *dest, size_t count) {
 	return copied;
 }
 
-fd_t *procfs::get_root_fd() {
-	procfs_directory_fd *fd = get_allocator()->allocate<procfs_directory_fd>();
-	new (fd) procfs_directory_fd(NULL, "procfs_root");
-	return fd;
+shared_ptr<fd_t> procfs::get_root_fd() {
+	char pb[1][PROCFS_FILE_MAX];
+	pb[0][0] = 0;
+	return make_shared<procfs_directory_fd>(pb, "procfs_root");
 }

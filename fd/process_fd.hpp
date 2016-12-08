@@ -16,7 +16,7 @@ struct vga_stream;
 struct cv_t;
 
 struct fd_mapping_t {
-	fd_t *fd; /* can be 0, in this case, the mapping is unused and can be reused for another fd */
+	shared_ptr<fd_t> fd; /* can be empty, in this case, the mapping is unused and can be reused for another fd */
 	cloudabi_rights_t rights_base;
 	cloudabi_rights_t rights_inheriting;
 };
@@ -70,7 +70,7 @@ struct process_fd : public fd_t {
 	// Read an ELF from this fd, map it, and prepare it for execution. This
 	// function will not remove previous process contents, use unexec() for
 	// that.
-	cloudabi_errno_t exec(fd_t *, size_t fdslen, fd_mapping_t **new_fds, void const *argdata, size_t argdatalen);
+	cloudabi_errno_t exec(shared_ptr<fd_t>, size_t fdslen, fd_mapping_t **new_fds, void const *argdata, size_t argdatalen);
 	// TODO: make this private
 	cloudabi_errno_t exec(uint8_t *elf_buffer, size_t size, uint8_t *argdata, size_t argdatalen);
 
@@ -79,7 +79,7 @@ struct process_fd : public fd_t {
 	// loaded)
 	void fork(thread *t);
 
-	cloudabi_fd_t add_fd(fd_t*, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting = 0);
+	cloudabi_fd_t add_fd(shared_ptr<fd_t>, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting = 0);
 	cloudabi_errno_t get_fd(fd_mapping_t **mapping, cloudabi_fd_t num, cloudabi_rights_t has_rights);
 	cloudabi_errno_t close_fd(cloudabi_fd_t num);
 

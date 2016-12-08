@@ -248,7 +248,7 @@ void thread::handle_syscall() {
 			state.eax = ENOTCAPABLE;
 		}
 
-		fd_t *new_fd = mapping->fd->openat(args->path, args->pathlen, args->oflags, args->fds);
+		auto new_fd = mapping->fd->openat(args->path, args->pathlen, args->oflags, args->fds);
 		if(!new_fd || mapping->fd->error != 0) {
 			get_vga_stream() << "failed to openat()\n";
 			state.eax = mapping->fd->error;
@@ -409,8 +409,7 @@ void thread::handle_syscall() {
 		// cloudabi_sys_proc_fork() takes no arguments, creates a new process, and:
 		// * in the parent, returns ebx=child_fd, ecx=thread_id
 		// * in the child, returns ebx=CLOUDABI_PROCESS_CHILD, ecx=MAIN_THREAD
-		process_fd *newprocess = get_allocator()->allocate<process_fd>();
-		new(newprocess) process_fd("initializing process");
+		auto newprocess = make_shared<process_fd>("initializing process");
 
 		// Change child state before fork(), as it inherits the state
 		// and puts it into the interrupt frame on the kernel stack
@@ -468,8 +467,7 @@ void thread::handle_syscall() {
 		if(state.ecx == CLOUDABI_FILETYPE_FIFO) {
 			cloudabi_fd_t *fd1 = reinterpret_cast<cloudabi_fd_t*>(state.ebx);
 			cloudabi_fd_t *fd2 = reinterpret_cast<cloudabi_fd_t*>(state.edx);
-			fd_t *pfd = get_allocator()->allocate<pipe_fd>();
-			new (pfd) pipe_fd(1024, "pipe_fd");
+			auto pfd = make_shared<pipe_fd>(1024, "pipe_fd");
 
 			auto pipe_rights = CLOUDABI_RIGHT_POLL_FD_READWRITE
 			                 | CLOUDABI_RIGHT_FD_STAT_PUT_FLAGS
@@ -708,12 +706,12 @@ void thread::handle_syscall() {
 						userdata->error = res;
 						signaler = &null_signaler;
 					} else {
-						fd_t *proc_fd = proc_mapping->fd;
+						auto proc_fd = proc_mapping->fd;
 						if(proc_fd->type != CLOUDABI_FILETYPE_PROCESS) {
 							userdata->error = EBADF;
 							signaler = &null_signaler;
 						} else {
-							process_fd *proc = reinterpret_cast<process_fd*>(proc_fd);
+							auto proc = proc_fd.reinterpret_as<process_fd>();
 							signaler = proc->get_termination_signaler();
 						}
 					}
@@ -748,12 +746,12 @@ void thread::handle_syscall() {
 						o.error = res;
 						return;
 					}
-					fd_t *proc_fd = proc_mapping->fd;
+					shared_ptr<fd_t> proc_fd = proc_mapping->fd;
 					if(proc_fd->type != CLOUDABI_FILETYPE_PROCESS) {
 						o.error = EINVAL;
 						return;
 					}
-					process_fd *proc = reinterpret_cast<process_fd*>(proc_fd);
+					auto proc = proc_fd.reinterpret_as<process_fd>();
 					if(!proc->is_terminated(o.proc_terminate.exitcode, o.proc_terminate.signal)) {
 						o.error = EINVAL;
 						return;

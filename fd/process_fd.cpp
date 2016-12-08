@@ -48,27 +48,24 @@ process_fd::process_fd(const char *n)
 }
 
 void process_fd::add_initial_fds() {
-	vga_fd *fd = get_allocator()->allocate<vga_fd>();
-	new (fd) vga_fd("vga_fd");
-	add_fd(fd, CLOUDABI_RIGHT_FD_WRITE);
+	auto vga = make_shared<vga_fd>("vga_fd");
+	add_fd(vga, CLOUDABI_RIGHT_FD_WRITE);
 
 	char *fd_buf = get_allocator()->allocate<char>(200);
 	strncpy(fd_buf, "These are the contents of my buffer!\n", 200);
 
-	memory_fd *fd2 = get_allocator()->allocate<memory_fd>();
-	new (fd2) memory_fd(fd_buf, strlen(fd_buf) + 1, "memory_fd");
-	add_fd(fd2, CLOUDABI_RIGHT_FD_READ);
+	auto memory = make_shared<memory_fd>(fd_buf, strlen(fd_buf) + 1, "memory_fd");
+	add_fd(memory, CLOUDABI_RIGHT_FD_READ);
 
 	add_fd(procfs::get_root_fd(), CLOUDABI_RIGHT_FILE_OPEN, CLOUDABI_RIGHT_FD_READ | CLOUDABI_RIGHT_FILE_OPEN);
 
 	add_fd(bootfs::get_root_fd(), CLOUDABI_RIGHT_FILE_OPEN, CLOUDABI_RIGHT_FD_READ | CLOUDABI_RIGHT_FILE_OPEN | CLOUDABI_RIGHT_PROC_EXEC);
 
-	socket_fd *my_reverse, *their_reverse;
-	socket_fd::socketpair(&my_reverse, &their_reverse, 1024);
+	shared_ptr<socket_fd> my_reverse, their_reverse;
+	socket_fd::socketpair(my_reverse, their_reverse, 1024);
 	add_fd(their_reverse, CLOUDABI_RIGHT_FD_READ | CLOUDABI_RIGHT_FD_WRITE);
 
-	pseudo_fd *pseudo = get_allocator()->allocate<pseudo_fd>();
-	new (pseudo) pseudo_fd(0, my_reverse, CLOUDABI_FILETYPE_DIRECTORY, "pseudo_root");
+	auto pseudo = make_shared<pseudo_fd>(0, my_reverse, CLOUDABI_FILETYPE_DIRECTORY, "pseudo_root");
 	add_fd(pseudo,
 		/* base rights */
 		CLOUDABI_RIGHT_FILE_CREATE_DIRECTORY |
@@ -105,7 +102,7 @@ void process_fd::add_initial_fds() {
 	);
 }
 
-cloudabi_fd_t process_fd::add_fd(fd_t *fd, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting) {
+cloudabi_fd_t process_fd::add_fd(shared_ptr<fd_t> fd, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting) {
 	cloudabi_fd_t fdnum;
 	bool found = false;
 	// TODO: this doesn't scale, make this search nonlinear
@@ -144,7 +141,7 @@ cloudabi_errno_t process_fd::get_fd(fd_mapping_t **r_mapping, cloudabi_fd_t num,
 		return EBADF;
 	}
 	fd_mapping_t *mapping = fds[num];
-	if(mapping == 0 || mapping->fd == 0) {
+	if(mapping == 0 || !mapping->fd) {
 		return EBADF;
 	}
 	if((mapping->rights_base & has_rights) != has_rights) {
@@ -159,7 +156,7 @@ cloudabi_errno_t process_fd::close_fd(cloudabi_fd_t num) {
 	fd_mapping_t *mapping;
 	auto res = get_fd(&mapping, num, 0);
 	if(res == 0) {
-		mapping->fd = 0;
+		mapping->fd.reset();
 		fds[num] = 0;
 	}
 	return res;
@@ -306,7 +303,7 @@ void *process_fd::find_free_virtual_range(size_t num_pages)
 	return nullptr;
 }
 
-cloudabi_errno_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fds, void const *argdata, size_t argdatalen) {
+cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping_t **new_fds, void const *argdata, size_t argdatalen) {
 	// read from this fd until it gives EOF, then exec(buf, buf_size)
 	// TODO: once all fds implement seek(), we can read() only the header,
 	// then seek to the phdr offset, then read() phdrs, then for every LOAD
@@ -380,7 +377,7 @@ cloudabi_errno_t process_fd::exec(fd_t *fd, size_t fdslen, fd_mapping_t **new_fd
 
 	// Close all unused FDs
 	for(cloudabi_fd_t i = 0; i < fd_capacity; ++i) {
-		if(fds[i] == nullptr || fds[i]->fd == nullptr) {
+		if(fds[i] == nullptr || !fds[i]->fd) {
 			continue;
 		}
 

@@ -5,7 +5,7 @@
 namespace cloudos {
 
 struct bootfs {
-	static fd_t *get_root_fd();
+	static shared_ptr<fd_t> get_root_fd();
 };
 
 }

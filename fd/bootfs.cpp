@@ -12,7 +12,7 @@ struct bootfs_directory_fd : fd_t {
 	bootfs_directory_fd(const char *n)
 	: fd_t(CLOUDABI_FILETYPE_DIRECTORY, n) {}
 
-	fd_t *openat(const char * /*path */, size_t /*pathlen*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) override;
+	shared_ptr<fd_t> openat(const char * /*path */, size_t /*pathlen*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) override;
 };
 
 struct bootfs_file_fd : seekable_fd_t {
@@ -31,7 +31,7 @@ private:
 
 }
 
-fd_t *bootfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi_oflags_t, const cloudabi_fdstat_t *) {
+shared_ptr<fd_t> bootfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi_oflags_t, const cloudabi_fdstat_t *) {
 	if(pathname == 0 || pathname[0] == 0 || pathname[0] == '/') {
 		error = EINVAL;
 		return nullptr;
@@ -48,9 +48,7 @@ fd_t *bootfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi
 			char name[64];
 			strncpy(name, "bootfs/", sizeof(name));
 			strncat(name, external_binaries_table[i].name, sizeof(name) - strlen(name) - 1);
-			bootfs_file_fd *fd = get_allocator()->allocate<bootfs_file_fd>();
-			new (fd) bootfs_file_fd(external_binaries_table[i], name);
-			return fd;
+			return make_shared<bootfs_file_fd>(external_binaries_table[i], name);
 		}
 	}
 
@@ -74,8 +72,6 @@ size_t bootfs_file_fd::read(void *dest, size_t count) {
 	return copied;
 }
 
-fd_t *bootfs::get_root_fd() {
-	bootfs_directory_fd *fd = get_allocator()->allocate<bootfs_directory_fd>();
-	new (fd) bootfs_directory_fd("bootfs_root");
-	return fd;
+shared_ptr<fd_t> bootfs::get_root_fd() {
+	return make_shared<bootfs_directory_fd>("bootfs_root");
 }

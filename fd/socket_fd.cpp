@@ -4,7 +4,7 @@
 
 using namespace cloudos;
 
-socket_fd::socket_fd(pipe_fd *r, pipe_fd *w, const char *n)
+socket_fd::socket_fd(shared_ptr<pipe_fd> r, shared_ptr<pipe_fd> w, const char *n)
 : fd_t(CLOUDABI_FILETYPE_SOCKET_STREAM, n)
 , readfd(r)
 , writefd(w)
@@ -24,15 +24,11 @@ void socket_fd::putstring(const char *str, size_t count)
 	error = writefd->error;
 }
 
-void socket_fd::socketpair(socket_fd **a, socket_fd **b, size_t capacity)
+void socket_fd::socketpair(shared_ptr<socket_fd> &a, shared_ptr<socket_fd> &b, size_t capacity)
 {
-	pipe_fd *tx = get_allocator()->allocate<pipe_fd>();
-	pipe_fd *rx = get_allocator()->allocate<pipe_fd>();
-	new (tx) pipe_fd(capacity, "tx for socket");
-	new (rx) pipe_fd(capacity, "rx for socket");
+	auto tx = make_shared<pipe_fd>(capacity, "tx for socket");
+	auto rx = make_shared<pipe_fd>(capacity, "rx for socket");
 
-	*a = get_allocator()->allocate<socket_fd>();
-	*b = get_allocator()->allocate<socket_fd>();
-	new (*a) socket_fd(tx, rx, "socketpair tx socket");
-	new (*b) socket_fd(rx, tx, "socketpair rx socket");
+	a = make_shared<socket_fd>(tx, rx, "socketpair tx socket");
+	b = make_shared<socket_fd>(rx, tx, "socketpair rx socket");
 }

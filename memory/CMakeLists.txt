@@ -5,6 +5,7 @@ add_library(memory
 	bucketizer.hpp
 	multiple_page_allocator.hpp
 	segregator.hpp
+	smart_ptr.hpp
 )
 list(APPEND memory_tests
 )

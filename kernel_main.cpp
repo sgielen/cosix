@@ -372,16 +372,21 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	global.init->install_page_directory();
 	stream << "Paging directory loaded, paging is in effect\n";
 
-	fd_t *bootfs_fd = bootfs::get_root_fd();
-	fd_t *init_exec_fd = bootfs_fd->openat("init", 4, 0, 0);
-	if(init_exec_fd == nullptr) {
-		kernel_panic("Failed to open init");
+	{
+		auto bootfs_fd = bootfs::get_root_fd();
+		if(!bootfs_fd) {
+			kernel_panic("Failed to get bootfs fd");
+		}
+		auto init_exec_fd = bootfs_fd->openat("init", 4, 0, 0);
+		if(!init_exec_fd) {
+			kernel_panic("Failed to open init");
+		}
+		auto res = global.init->exec(init_exec_fd, 0, nullptr, nullptr, 0);
+		if(res != 0) {
+			kernel_panic("Failed to start init");
+		}
+		global.init->add_initial_fds();
 	}
-	auto res = global.init->exec(init_exec_fd, 0, nullptr, nullptr, 0);
-	if(res != 0) {
-		kernel_panic("Failed to start init");
-	}
-	global.init->add_initial_fds();
 
 	interrupt_table interrupts;
 	interrupt_global interrupts_global(&handler);

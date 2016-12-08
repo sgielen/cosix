@@ -1,10 +1,9 @@
 #pragma once
 
 #include "fd.hpp"
+#include "pipe_fd.hpp"
 
 namespace cloudos {
-
-struct pipe_fd;
 
 /**
  * A socket FD.
@@ -15,7 +14,7 @@ struct pipe_fd;
  * pair from scratch.
  */
 struct socket_fd : fd_t {
-	socket_fd(pipe_fd *read, pipe_fd *write, const char *n);
+	socket_fd(shared_ptr<pipe_fd> read, shared_ptr<pipe_fd> write, const char *n);
 
 	/** read() blocks until at least 1 byte of data is available;
 	 * then, it returns up to count bytes of data in the dest buffer.
@@ -29,11 +28,11 @@ struct socket_fd : fd_t {
 	void putstring(const char * /*str*/, size_t /*count*/) override;
 
 	/** Creates two socket_fd's that form a connected pair. */
-	static void socketpair(socket_fd **a, socket_fd **b, size_t capacity);
+	static void socketpair(shared_ptr<socket_fd> &a, shared_ptr<socket_fd> &b, size_t capacity);
 
 private:
-	pipe_fd *readfd;
-	pipe_fd *writefd;
+	shared_ptr<pipe_fd> readfd;
+	shared_ptr<pipe_fd> writefd;
 };
 
 }
