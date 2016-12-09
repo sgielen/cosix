@@ -27,7 +27,7 @@ static bool return_true(void*, thread_condition*) {
 thread::thread(process_fd *p, void *stack_location, void *auxv_address, void *entrypoint, cloudabi_tid_t t)
 : process(p)
 , thread_id(t)
-, running(true)
+, exited(false)
 , userland_stack_top(stack_location)
 {
 	if((thread_id & 0x80000000) != 0) {
@@ -90,7 +90,7 @@ thread::thread(process_fd *p, void *stack_location, void *auxv_address, void *en
 thread::thread(process_fd *p, thread *otherthread)
 : process(p)
 , thread_id(MAIN_THREAD)
-, running(true)
+, exited(false)
 , userland_stack_top(otherthread->userland_stack_top)
 {
 	kernel_stack_size = otherthread->kernel_stack_size;
@@ -328,7 +328,7 @@ void thread::handle_syscall() {
 			state.eax = res;
 			return;
 		}
-		assert(!running);
+		assert(exited);
 		get_scheduler()->thread_yield();
 	} else if(syscall == 7) {
 		// sys_mem_map
@@ -430,13 +430,13 @@ void thread::handle_syscall() {
 	} else if(syscall == 10) {
 		// sys_proc_exit(ecx=rval). Doesn't return.
 		process->exit(state.ecx);
-		// running will be false after this, so we won't be rescheduled.
+		// exited will be true after this, so we won't be rescheduled.
 		// we'll be cleaned up when the last file descriptor to this process closes.
 	} else if(syscall == 11) {
 		// sys_proc_raise(ecx=signal). Returns only if signal is not fatal.
 		process->signal(state.ecx);
 		state.eax = 0;
-		// like with exit, if signal is fatal running will be false, we'll be cleaned up later
+		// like with exit, if signal is fatal exited will be true, we'll be cleaned up later
 	} else if(syscall == 12) {
 		// sys_thread_create(ecx=threadattr, ebx=tid_t).
 		cloudabi_threadattr_t *attr = reinterpret_cast<cloudabi_threadattr_t*>(state.ecx);
@@ -871,7 +871,7 @@ void thread::thread_unblock() {
 }
 
 bool thread::is_ready() {
-	return running && process->is_running() && !blocked;
+	return !exited && process->is_running() && !blocked;
 }
 
 void thread::acquire_userspace_lock(_Atomic(cloudabi_lock_t) *lock, cloudabi_eventtype_t locktype)

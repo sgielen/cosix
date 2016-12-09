@@ -65,7 +65,7 @@ void scheduler::schedule_next()
 		// Immediately unschedule processes that are blocked or have exited
 		if(running->data->is_blocked()) {
 			running->data->unscheduled = true;
-		} else if(running->data->is_running() && running->data->get_process()->is_running()) {
+		} else if(!running->data->is_exited() && running->data->get_process()->is_running()) {
 			append(&ready, running);
 		}
 	}
@@ -84,7 +84,7 @@ void scheduler::schedule_next()
 		ready = running->next;
 		running->next = nullptr;
 
-		if(running->data->is_blocked() || !running->data->is_running() || !running->data->get_process()->is_running()) {
+		if(running->data->is_blocked() || running->data->is_exited() || !running->data->get_process()->is_running()) {
 			get_vga_stream() << "Thread: " << running->data << ", process: " << running->data->get_process() << ", " << running->data->get_process()->name << "\n";
 			kernel_panic("A thread in the ready list was blocked or had already exited");
 		}

@@ -256,7 +256,7 @@ struct interrupt_handler : public interrupt_functor {
 		}
 
 		if(running_thread) {
-			assert(running_thread->is_running());
+			assert(!running_thread->is_exited());
 			running_thread->get_return_state(regs);
 		}
 	}

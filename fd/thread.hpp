@@ -50,12 +50,12 @@ struct thread {
 
 	inline process_fd *get_process() { return process; }
 
-	inline bool is_running() { return running; }
+	inline bool is_exited() { return exited; }
 	bool is_ready();
 	inline bool is_blocked() { return blocked; }
 	inline bool is_unscheduled() { return unscheduled; }
 
-	inline void thread_exit() { running = false; }
+	inline void thread_exit() { exited = true; }
 	void thread_block();
 	void thread_unblock();
 
@@ -69,7 +69,7 @@ private:
 	process_fd *process;
 	// note: only the bottom 30 bits may be used
 	cloudabi_tid_t thread_id;
-	bool running;
+	bool exited;
 
 	friend struct cloudos::scheduler;
 	void *esp = 0;
