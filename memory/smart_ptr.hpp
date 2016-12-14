@@ -227,6 +227,10 @@ struct shared_ptr {
 		return ptr == o.ptr;
 	}
 
+	bool operator!=(shared_ptr const &o) const {
+		return !(*this == o);
+	}
+
 private:
 	template <typename U>
 	friend struct weak_ptr;
