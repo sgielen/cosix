@@ -22,15 +22,7 @@ public:
 
 	void *allocate(size_t x);
 
-	void *allocate_aligned(size_t x, size_t alignment) {
-		uint32_t addr = reinterpret_cast<uint64_t>(allocate(x + alignment));
-		uint32_t misalignment = addr % alignment;
-		if(misalignment != 0) {
-			// align it
-			addr += alignment - misalignment;
-		}
-		return reinterpret_cast<void*>(addr);
-	}
+	void *allocate_aligned(size_t x, size_t alignment);
 
 	template <typename T>
 	T *allocate(size_t x = sizeof(T)) {

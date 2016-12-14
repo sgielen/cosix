@@ -14,6 +14,7 @@ struct Blk {
 };
 
 Blk allocate(size_t n);
+Blk allocate_aligned(size_t n, size_t alignment);
 void deallocate(Blk b);
 
 }

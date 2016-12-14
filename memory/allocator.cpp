@@ -17,3 +17,9 @@ void *allocator::allocate(size_t n) {
 	//get_vga_stream() << "Warning: " << allocation.size << " bytes leaking because of old allocator usage\n";
 	return allocation.ptr;
 }
+
+void *allocator::allocate_aligned(size_t n, size_t alignment) {
+	Blk allocation = small_segregator.allocate_aligned(n, alignment);
+	//get_vga_stream() << "Warning: " << allocation.size << " bytes leaking because of old allocator usage\n";
+	return allocation.ptr;
+}

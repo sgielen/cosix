@@ -46,13 +46,46 @@ struct BucketizerBin {
 	Blk allocate() {
 		if(empty()) {
 			// no blocks available
-			return {nullptr, 0, 0};
+			return {};
 		} else {
 			// replace tail with *tail, return old tail
 			void *ptr = tail;
 			tail = *reinterpret_cast<void**>(tail);
 			return {ptr, allocsize, 0 /* filled in by Bucketizer */};
 		}
+	}
+
+	Blk allocate_aligned(size_t alignment) {
+		if(empty()) {
+			// no blocks available
+			return {};
+		}
+
+		if(reinterpret_cast<uintptr_t>(tail) % alignment == 0) {
+			// tail itself is already aligned, so just return it
+			void *ptr = tail;
+			tail = *reinterpret_cast<void**>(tail);
+			return {ptr, allocsize, 0 /* filled in by Bucketizer */};
+		}
+
+		// search for an aligned block in the chain
+		void *prev = tail;
+		while(*reinterpret_cast<uintptr_t*>(prev) % alignment != 0) {
+			prev = *reinterpret_cast<void**>(prev);
+			assert(prev != nullptr);
+		}
+
+		// prev contains a pointer to an aligned block or nullptr
+		void *block = *reinterpret_cast<void**>(prev);
+		if(block == nullptr) {
+			// no aligned blocks available
+			return {};
+		}
+
+		// take the aligned block out of the chain
+		void *next = *reinterpret_cast<void**>(block);
+		*reinterpret_cast<void**>(prev) = next;
+		return {block, allocsize, 0 /* filled in by Bucketizer */};
 	}
 
 	void deallocate(Blk b) {
@@ -111,6 +144,34 @@ struct Bucketizer {
 		}
 	}
 
+	Blk allocate_aligned(size_t s, size_t alignment) {
+		// See if we can find an already-aligned block
+		auto &bin = get_bin_sized(s);
+		if(bin.empty()) {
+			bin.fill();
+		}
+		auto allocation = bin.allocate_aligned(alignment);
+		if(allocation.ptr == 0) {
+			// didn't find one. Try to fill the bin once more and try again
+			// TODO: if we don't use any elements of the new page, the page
+			// may not be correctly returned as this only happens when such
+			// an element is returned
+			bin.fill();
+			allocation = bin.allocate_aligned(alignment);
+			if(allocation.ptr == 0) {
+				// TODO: write code for this case, e.g. try using another bin
+				// size or returning {}
+				kernel_panic("Bucketizer failed to return an aligned allocation");
+			}
+		}
+
+		// found one!
+		allocation.requested_size = s;
+		assert(allocation.size >= s);
+		assert(reinterpret_cast<uintptr_t>(allocation.ptr) % alignment == 0);
+		return allocation;
+	}
+
 	Blk allocate(size_t s) {
 		auto &bin = get_bin_sized(s);
 		if(bin.empty()) {
@@ -118,7 +179,7 @@ struct Bucketizer {
 		}
 		auto allocation = bin.allocate();
 		allocation.requested_size = s;
-		assert(allocation.size >= s);
+		assert(allocation.ptr == 0 || allocation.size >= s);
 		return allocation;
 	}
 

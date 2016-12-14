@@ -342,6 +342,11 @@ shared_ptr<T> make_shared(Args&&... args) {
 	return shared_ptr<T>(allocate(sizeof(T)), args...);
 }
 
+template <typename T, class... Args>
+shared_ptr<T> make_shared_aligned(size_t alignment, Args&&... args) {
+	return shared_ptr<T>(allocate_aligned(sizeof(T), alignment), args...);
+}
+
 template <typename T>
 struct enable_shared_from_this
 {
