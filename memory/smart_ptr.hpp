@@ -216,7 +216,8 @@ struct shared_ptr {
 	}
 
 private:
-	friend struct weak_ptr<T>;
+	template <typename U>
+	friend struct weak_ptr;
 	template <typename U>
 	friend struct shared_ptr;
 
@@ -240,10 +241,9 @@ struct weak_ptr {
 		*this = move(r);
 	}
 
-	weak_ptr(shared_ptr<T> &r) : control_block(r.control_block), ptr(r.ptr) {
-		if(control()) {
-			control()->weak_increment();
-		}
+	template <typename U>
+	weak_ptr(shared_ptr<U> &r) : weak_ptr() {
+		*this = r;
 	}
 
 	~weak_ptr() {
@@ -268,6 +268,15 @@ struct weak_ptr {
 
 		control_block = c;
 		ptr = p;
+	}
+
+	template <typename U>
+	void operator=(shared_ptr<U> &r) {
+		control_block = r.control_block;
+		ptr = r.ptr;
+		if(control()) {
+			control()->weak_increment();
+		}
 	}
 
 	void reset() {
