@@ -65,6 +65,12 @@ template <typename T>
 struct weak_ptr;
 
 template <typename T>
+struct shared_ptr;
+
+template <typename T>
+void initialize_enable_shared_ptr(shared_ptr<T>&);
+
+template <typename T>
 struct shared_ptr {
 	shared_ptr() : ptr(nullptr) {}
 	shared_ptr(nullptr_t) : shared_ptr() {}
@@ -90,6 +96,7 @@ struct shared_ptr {
 
 	template <class... Args>
 	shared_ptr(Blk b, Args&&... args) : shared_ptr() {
+		assert(b.ptr != nullptr);
 		assert(b.size >= sizeof(T));
 		new (b.ptr) T(args...);
 
@@ -99,6 +106,8 @@ struct shared_ptr {
 		ptr = reinterpret_cast<T*>(b.ptr);
 		assert(control()->use_count() == 1);
 		assert(control()->weak_use_count() == 0);
+
+		initialize_enable_shared_ptr(*this);
 	}
 
 	template <typename U>
@@ -331,6 +340,43 @@ private:
 template <typename T, class... Args>
 shared_ptr<T> make_shared(Args&&... args) {
 	return shared_ptr<T>(allocate(sizeof(T)), args...);
+}
+
+template <typename T>
+struct enable_shared_from_this
+{
+	shared_ptr<T> shared_from_this() {
+		assert(!weak_this.expired());
+		auto res = weak_this.lock();
+		assert(res);
+		return res;
+	}
+
+	weak_ptr<T> weak_from_this() {
+		assert(!weak_this.expired());
+		return weak_this;
+	}
+
+private:
+	weak_ptr<T> weak_this;
+
+	template <typename U, typename V>
+	friend void initialize_enable_shared_ptr(shared_ptr<U> &ptr, enable_shared_from_this<V> *f);
+};
+
+template <typename U, typename V>
+void initialize_enable_shared_ptr(shared_ptr<U> &ptr, enable_shared_from_this<V> *f) {
+	assert(&ptr->weak_this == &f->weak_this);
+	f->weak_this = ptr;
+}
+
+template <typename U>
+void initialize_enable_shared_ptr(shared_ptr<U> const &, ...) {}
+
+template <typename T>
+void initialize_enable_shared_ptr(shared_ptr<T> &ptr) {
+	assert(ptr.is_initialized());
+	initialize_enable_shared_ptr(ptr, ptr.get());
 }
 
 }
