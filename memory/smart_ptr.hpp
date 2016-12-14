@@ -40,6 +40,19 @@ struct shared_control_block {
 		return shared_count == 0 && weak_count == 0;
 	}
 
+	void deallocate() {
+		::cloudos::deallocate(block);
+	}
+
+	uint64_t use_count() {
+		return shared_count;
+	}
+
+	uint64_t weak_use_count() {
+		return weak_count;
+	}
+
+private:
 	uint64_t shared_count;
 	uint64_t weak_count;
 	// allocation whose lifetime is controlled by this control block;
@@ -84,8 +97,8 @@ struct shared_ptr {
 		new (control_block.ptr) shared_control_block(b);
 
 		ptr = reinterpret_cast<T*>(b.ptr);
-		assert(control()->shared_count == 1);
-		assert(control()->weak_count == 0);
+		assert(control()->use_count() == 1);
+		assert(control()->weak_use_count() == 0);
 	}
 
 	template <typename U>
@@ -98,6 +111,14 @@ struct shared_ptr {
 
 	~shared_ptr() {
 		reset();
+	}
+
+	uint64_t use_count() {
+		return control() ? control()->use_count() : 0;
+	}
+
+	uint64_t weak_use_count() {
+		return control() ? control()->weak_use_count() : 0;
 	}
 
 	void operator=(shared_ptr &r) {
@@ -141,7 +162,7 @@ struct shared_ptr {
 		if(c) {
 			if(c->shared_decrement()) {
 				ptr->~T();
-				deallocate(c->block);
+				c->deallocate();
 			}
 			if(c->unreferenced()) {
 				deallocate(control_block);
@@ -179,8 +200,12 @@ struct shared_ptr {
 		return get();
 	}
 
-	explicit operator bool() const {
+	bool is_initialized() const {
 		return get() != nullptr;
+	}
+
+	explicit operator bool() const {
+		return is_initialized();
 	}
 
 	bool operator==(shared_ptr const &o) const {
@@ -271,6 +296,18 @@ struct weak_ptr {
 			res.ptr = ptr;
 		}
 		return res;
+	}
+
+	uint64_t use_count() {
+		return control() ? control()->use_count() : 0;
+	}
+
+	uint64_t weak_use_count() {
+		return control() ? control()->weak_use_count() : 0;
+	}
+
+	bool expired() {
+		return use_count() == 0;
 	}
 
 private:
