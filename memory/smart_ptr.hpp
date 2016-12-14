@@ -391,4 +391,10 @@ void initialize_enable_shared_ptr(shared_ptr<T> &ptr) {
 	initialize_enable_shared_ptr(ptr, ptr.get());
 }
 
+template <typename T>
+vga_stream &operator<<(vga_stream &os, shared_ptr<T> ptr) {
+	os << ptr.get();
+	return os;
+}
+
 }
