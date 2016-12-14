@@ -113,8 +113,11 @@ struct shared_ptr {
 	template <typename U>
 	shared_ptr<U> reinterpret_as() {
 		shared_ptr<U> res;
-		res.control_block = control_block;
-		res.ptr = reinterpret_cast<U*>(ptr);
+		if(control()) {
+			res.control_block = control_block;
+			res.ptr = reinterpret_cast<U*>(ptr);
+			res.control()->shared_increment();
+		}
 		return res;
 	}
 
