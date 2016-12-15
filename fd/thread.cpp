@@ -36,7 +36,7 @@ thread::thread(process_fd *p, void *stack_location, void *auxv_address, void *en
 
 	// initialize the stack
 	kernel_stack_size = 0x10000 /* 64 kb */;
-	kernel_stack_bottom   = reinterpret_cast<uint8_t*>(get_allocator()->allocate_aligned(kernel_stack_size, process_fd::PAGE_SIZE));
+	kernel_stack_alloc = allocate_aligned(kernel_stack_size, process_fd::PAGE_SIZE);
 
 	// initialize all registers and return state to zero
 	memset(&state, 0, sizeof(state));
@@ -87,14 +87,14 @@ thread::thread(process_fd *p, void *stack_location, void *auxv_address, void *en
 	esp = kernel_stack;
 }
 
-thread::thread(process_fd *p, thread *otherthread)
+thread::thread(process_fd *p, shared_ptr<thread> otherthread)
 : process(p)
 , thread_id(MAIN_THREAD)
 , exited(false)
 , userland_stack_top(otherthread->userland_stack_top)
 {
 	kernel_stack_size = otherthread->kernel_stack_size;
-	kernel_stack_bottom = reinterpret_cast<uint8_t*>(get_allocator()->allocate_aligned(kernel_stack_size, process_fd::PAGE_SIZE));
+	kernel_stack_alloc = allocate_aligned(kernel_stack_size, process_fd::PAGE_SIZE);
 
 	// copy execution state
 	state = otherthread->state;
@@ -112,6 +112,14 @@ thread::thread(process_fd *p, thread *otherthread)
 	esp = kernel_stack;
 }
 
+thread::~thread() {
+	assert(exited);
+	assert(get_scheduler()->get_running_thread().get() != this);
+	bool on_stack;
+	assert(reinterpret_cast<uintptr_t>(&on_stack) < reinterpret_cast<uintptr_t>(kernel_stack_alloc.ptr)
+	    || reinterpret_cast<uintptr_t>(&on_stack) >= reinterpret_cast<uintptr_t>(kernel_stack_alloc.ptr) + kernel_stack_alloc.size);
+	deallocate(kernel_stack_alloc);
+}
 
 void thread::set_return_state(interrupt_state_t *new_state) {
 	state = *new_state;
@@ -419,7 +427,7 @@ void thread::handle_syscall() {
 		state.ecx = MAIN_THREAD;
 
 		newprocess->install_page_directory();
-		newprocess->fork(this);
+		newprocess->fork(shared_from_this());
 		process->install_page_directory();
 
 		// set return values for parent
@@ -432,17 +440,19 @@ void thread::handle_syscall() {
 		process->exit(state.ecx);
 		// exited will be true after this, so we won't be rescheduled.
 		// we'll be cleaned up when the last file descriptor to this process closes.
+		get_scheduler()->thread_yield();
 	} else if(syscall == 11) {
 		// sys_proc_raise(ecx=signal). Returns only if signal is not fatal.
 		process->signal(state.ecx);
 		state.eax = 0;
 		// like with exit, if signal is fatal exited will be true, we'll be cleaned up later
+		get_scheduler()->thread_yield();
 	} else if(syscall == 12) {
 		// sys_thread_create(ecx=threadattr, ebx=tid_t).
 		cloudabi_threadattr_t *attr = reinterpret_cast<cloudabi_threadattr_t*>(state.ecx);
 		cloudabi_tid_t *tid = reinterpret_cast<cloudabi_tid_t*>(state.ebx);
 		/* TODO: do something with attr->stack_size? */
-		thread *thr = process->add_thread(attr->stack, attr->argument, reinterpret_cast<void*>(attr->entry_point));
+		shared_ptr<thread> thr = process->add_thread(attr->stack, attr->argument, reinterpret_cast<void*>(attr->entry_point));
 		*tid = thr->thread_id;
 		state.eax = 0;
 	} else if(syscall == 13) {
@@ -706,12 +716,12 @@ void thread::handle_syscall() {
 						userdata->error = res;
 						signaler = &null_signaler;
 					} else {
-						auto proc_fd = proc_mapping->fd;
+						shared_ptr<fd_t> proc_fd = proc_mapping->fd;
 						if(proc_fd->type != CLOUDABI_FILETYPE_PROCESS) {
 							userdata->error = EBADF;
 							signaler = &null_signaler;
 						} else {
-							auto proc = proc_fd.reinterpret_as<process_fd>();
+							shared_ptr<process_fd> proc = proc_fd.reinterpret_as<process_fd>();
 							signaler = proc->get_termination_signaler();
 						}
 					}
@@ -832,7 +842,7 @@ void thread::handle_syscall() {
 }
 
 void *thread::get_kernel_stack_top() {
-	return reinterpret_cast<char*>(kernel_stack_bottom) + kernel_stack_size;
+	return reinterpret_cast<char*>(kernel_stack_alloc.ptr) + kernel_stack_size;
 }
 
 void *thread::get_fsbase() {
@@ -847,13 +857,18 @@ void thread::restore_sse_state() {
 	asm volatile("fxrstor %0" : "=m" (sse_state));
 }
 
+void thread::thread_exit() {
+	assert(!exited);
+	exited = true;
+	process->remove_thread(shared_from_this());
+	get_scheduler()->thread_exiting(shared_from_this());
+}
+
 void thread::thread_block() {
-	if(blocked) {
-		kernel_panic("Trying to block a blocked thread");
-	}
+	assert(!blocked && !exited);
 	blocked = true;
 	unscheduled = false;
-	get_scheduler()->thread_blocked(this);
+	get_scheduler()->thread_blocked(shared_from_this());
 	get_scheduler()->thread_yield();
 }
 
@@ -865,7 +880,7 @@ void thread::thread_unblock() {
 	blocked = false;
 	if(unscheduled) {
 		// re-schedule
-		get_scheduler()->thread_ready(this);
+		get_scheduler()->thread_ready(shared_from_this());
 		unscheduled = false;
 	}
 }
@@ -916,8 +931,9 @@ void thread::acquire_userspace_lock(_Atomic(cloudabi_lock_t) *lock, cloudabi_eve
 	}
 
 	if(want_write_lock) {
-		thread_list *t = get_allocator()->allocate<thread_list>();
-		t->data = this;
+		thread_weaklist *t = get_allocator()->allocate<thread_weaklist>();
+		new (t) thread_weaklist();
+		t->data = weak_from_this();
 		t->next = nullptr;
 		append(&(lock_info->waiting_writers), t);
 		thread_block();
@@ -958,9 +974,11 @@ void thread::drop_userspace_lock(_Atomic(cloudabi_lock_t) *lock)
 	// are there any write-waiters for this lock?
 	userland_lock_waiters_t *lock_info = process->get_userland_lock_info(lock);
 	if(lock_info != nullptr && lock_info->waiting_writers != nullptr) {
-		thread_list *first_thread = lock_info->waiting_writers;
+		thread_weaklist *first_thread = lock_info->waiting_writers;
 		lock_info->waiting_writers = first_thread->next;
-		thread *new_owner = first_thread->data;
+		shared_ptr<thread> new_owner = first_thread->data.lock();
+		// TODO: is this assertion correct, or should we continue to the next one if unset?
+		assert(new_owner);
 		*lock = CLOUDABI_LOCK_WRLOCKED | (new_owner->thread_id & 0x3fffffff);
 		// delete(first_thread);
 

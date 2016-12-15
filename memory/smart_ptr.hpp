@@ -108,6 +108,9 @@ struct shared_ptr {
 		assert(control()->weak_use_count() == 0);
 
 		initialize_enable_shared_ptr(*this);
+
+		assert(control()->use_count() == 1);
+		assert(control()->weak_use_count() <= 1);
 	}
 
 	template <typename U>

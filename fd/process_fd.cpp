@@ -123,10 +123,13 @@ cloudabi_fd_t process_fd::add_fd(shared_ptr<fd_t> fd, cloudabi_rights_t rights_b
 		fds = get_allocator()->allocate<fd_mapping_t*>(fd_capacity * sizeof(fd_mapping_t*));
 
 		memcpy(fds, old_fds, old_capacity * sizeof(fd_mapping_t*));
+		memset(fds + old_capacity * sizeof(fd_mapping_t*), 0, (fd_capacity - old_capacity) * sizeof(fd_mapping_t*));
 		fdnum = old_capacity;
 	}
 
 	fd_mapping_t *mapping = get_allocator()->allocate<fd_mapping_t>();
+	new (mapping) fd_mapping_t();
+	assert(fd);
 	mapping->fd = fd;
 	mapping->rights_base = rights_base;
 	mapping->rights_inheriting = rights_inheriting;
@@ -544,13 +547,17 @@ cloudabi_errno_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *
 	auxv++;
 	auxv->a_type = CLOUDABI_AT_NULL;
 
-	// remove all existing threads
-	auto scheduler = get_scheduler();
+	// detach all existing threads from the process
+	// (note that one of them will be currently running to do this exec(),
+	// so we can't deallocate them; this will be done in the scheduler once
+	// the threads are no longer scheduled)
 	iterate(threads, [&](thread_list *item) {
-		scheduler->thread_exiting(item->data);
+		assert(!item->data->is_exited());
 		item->data->thread_exit();
 	});
-	threads = nullptr;
+
+	// all threads were removed
+	assert(threads == nullptr);
 	last_thread = MAIN_THREAD - 1;
 
 	// set running state
@@ -573,23 +580,18 @@ cloudabi_errno_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *
 	return 0;
 }
 
-void process_fd::fork(thread *otherthread) {
+void process_fd::fork(shared_ptr<thread> otherthread) {
 	process_fd *otherprocess = otherthread->get_process();
-
-	if(threads != nullptr) {
-		kernel_panic("Cannot call fork() on a process_fd that already has threads");
-	}
+	assert(otherprocess->running);
+	assert(otherprocess->threads);
+	assert(!threads);
 
 	strncpy(name, otherprocess->name, sizeof(name));
 	strncat(name, "->forked", sizeof(name) - strlen(name) - 1);
 
-	thread *mainthread = reinterpret_cast<thread*>(get_allocator()->allocate_aligned(sizeof(thread), 16));
-	new (mainthread) thread(this, otherthread);
+	auto mainthread = make_shared_aligned<thread>(16, this, otherthread);
 
 	running = true;
-	if(!otherprocess->running) {
-		kernel_panic("Forked from a process that wasn't running");
-	}
 
 	// dup all fd's
 	fd_capacity = otherprocess->fd_capacity;
@@ -600,6 +602,7 @@ void process_fd::fork(thread *otherthread) {
 
 		if(old_mapping != nullptr) {
 			mapping = get_allocator()->allocate<fd_mapping_t>();
+			new (mapping) fd_mapping_t();
 			mapping->fd = old_mapping->fd;
 			mapping->rights_base = old_mapping->rights_base;
 			mapping->rights_inheriting = old_mapping->rights_inheriting;
@@ -620,7 +623,7 @@ void process_fd::fork(thread *otherthread) {
 	add_thread(mainthread);
 }
 
-void process_fd::add_thread(thread *thr)
+void process_fd::add_thread(shared_ptr<thread> thr)
 {
 	auto item = get_allocator()->allocate<thread_list>();
 	item->data = thr;
@@ -629,13 +632,11 @@ void process_fd::add_thread(thread *thr)
 	get_scheduler()->thread_ready(thr);
 }
 
-thread *process_fd::add_thread(void *stack_address, void *auxv_address, void *entrypoint)
+shared_ptr<thread> process_fd::add_thread(void *stack_address, void *auxv_address, void *entrypoint)
 {
-	if(!running) {
-		kernel_panic("add_thread on a process that is dead");
-	}
-	thread *thr = reinterpret_cast<thread*>(get_allocator()->allocate_aligned(sizeof(thread), 16));
-	new (thr) thread(this, stack_address, auxv_address, entrypoint, ++last_thread);
+	assert(running);
+
+	auto thr = make_shared_aligned<thread>(16, this, stack_address, auxv_address, entrypoint, ++last_thread);
 	add_thread(thr);
 	return thr;
 }
@@ -663,15 +664,14 @@ void process_fd::exit(cloudabi_exitcode_t c, cloudabi_signal_t s)
 	// TODO: free all allocations
 
 	// unschedule all threads
-	auto scheduler = get_scheduler();
 	iterate(threads, [&](thread_list *item) {
-		scheduler->thread_exiting(item->data);
+		assert(!item->data->is_exited());
 		item->data->thread_exit();
 	});
-	threads = nullptr;
+	assert(threads == nullptr);
 
 	// now yield, so we can schedule a ready thread
-	scheduler->thread_yield();
+	get_scheduler()->thread_yield();
 }
 
 void process_fd::signal(cloudabi_signal_t s)
@@ -773,4 +773,14 @@ void process_fd::forget_userland_condvar_cv(_Atomic(cloudabi_condvar_t) *condvar
 	remove_one(&userland_condvars, [&](userland_condvar_waiters_list *item) {
 		return item->data->condvar == condvar;
 	}, [&](userland_condvar_waiters_t *) { /* deallocate */});
+}
+
+void process_fd::remove_thread(shared_ptr<thread> t)
+{
+	bool removed = remove_one(&threads, [&t](thread_list *item) {
+		return item->data == t;
+	}, [](shared_ptr<thread> &p) { p.reset(); });
+
+	(void)removed;
+	assert(removed);
 }

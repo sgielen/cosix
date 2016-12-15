@@ -28,9 +28,8 @@ struct thread_condition {
 	void *userdata;
 
 private:
-	//thread_condition_type type;
 	thread_condition_signaler *signaler;
-	thread *thread;
+	weak_ptr<thread> thread;
 	bool satisfied;
 
 	friend thread_condition_signaler;

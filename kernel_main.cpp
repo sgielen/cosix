@@ -151,7 +151,7 @@ __attribute__((noreturn)) static void fatal_exception(int int_no, int err_code, 
 		stream << "Error Code: 0x" << hex << err_code << dec << "\n";
 	}
 
-	thread *thread = get_scheduler()->get_running_thread();
+	auto thread = get_scheduler()->get_running_thread();
 	if(thread) {
 		stream << "Active process: " << thread->get_process() << " (\"" << thread->get_process()->name << "\")\n";
 	}
@@ -208,7 +208,17 @@ struct interrupt_handler : public interrupt_functor {
 
 		// Any exceptions in the userland are handled by the thread
 		if(!in_kernel && (int_no < 0x20 || int_no >= 0x30)) {
-			running_thread->interrupt(int_no, err_code);
+			// During the handling of this interrupt, we might exit this thread and
+			// switch to another, then clean the thread. To ensure this is possible,
+			// ensure we don't have a shared ptr to the thread on the stack.
+			assert(running_thread.use_count() > 1);
+			thread *thr = running_thread.get();
+			weak_ptr<thread> weak_thread = running_thread;
+			running_thread.reset();
+			thr->interrupt(int_no, err_code);
+			// interrupt returned, so this thread survived
+			running_thread = weak_thread.lock();
+			assert(running_thread);
 		}
 		// Any exceptions in the kernel lead to immediate kernel_panic
 		else if(int_no < 0x20 || int_no >= 0x30) {

@@ -3,6 +3,8 @@
 #include <oslibc/list.hpp>
 #include <hw/interrupt.hpp>
 #include <cloudabi/headers/cloudabi_types.h>
+#include <memory/allocation.hpp>
+#include <memory/smart_ptr.hpp>
 
 namespace cloudos {
 
@@ -10,7 +12,8 @@ struct process_fd;
 struct scheduler;
 
 struct thread;
-typedef linked_list<thread*> thread_list;
+typedef linked_list<shared_ptr<thread>> thread_list;
+typedef linked_list<weak_ptr<thread>> thread_weaklist;
 
 // MAIN_THREAD should be set to a value higher than 0, so that locks that are
 // acquired by a thread always have a nonzero value. This is assumed in the
@@ -25,7 +28,7 @@ typedef uint8_t sse_state_t [512] __attribute__ ((aligned (16)));
  * another kernel stack to this one, and an interrupt frame for switching
  * from this kernel stack to the userland stack.
  */
-struct thread {
+struct thread : enable_shared_from_this<thread> {
 	/** Create a thread. auxv and entrypoint must already point to valid
 	 * memory, while stack_location will be the initial stack pointer, so it must
 	 * point just beyond a block of valid stack memory. The thread will start
@@ -35,7 +38,9 @@ struct thread {
 	thread(process_fd *process, void *stack_location, void *auxv, void *entrypoint, cloudabi_tid_t thread_id);
 
 	/** Create a thread, forked off of another thread from another process. */
-	thread(process_fd *process, thread *other_thread);
+	thread(process_fd *process, shared_ptr<thread> other_thread);
+
+	~thread();
 
 	void interrupt(int int_no, int err_code);
 	void handle_syscall();
@@ -55,7 +60,7 @@ struct thread {
 	inline bool is_blocked() { return blocked; }
 	inline bool is_unscheduled() { return unscheduled; }
 
-	inline void thread_exit() { exited = true; }
+	void thread_exit();
 	void thread_block();
 	void thread_unblock();
 
@@ -80,7 +85,7 @@ private:
 	interrupt_state_t state;
 	sse_state_t sse_state;
 	void *userland_stack_top = 0;
-	void *kernel_stack_bottom = 0;
+	Blk kernel_stack_alloc;
 	size_t kernel_stack_size = 0;
 };
 

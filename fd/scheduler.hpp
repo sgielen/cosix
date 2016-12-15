@@ -17,17 +17,18 @@ struct scheduler {
 	void thread_yield();
 	void resume_running(interrupt_state_t *);
 
-	void thread_ready(thread *thr);
-	void thread_exiting(thread *thr);
-	void thread_blocked(thread *thr);
+	void thread_ready(shared_ptr<thread> thr);
+	void thread_exiting(shared_ptr<thread> thr);
+	void thread_blocked(shared_ptr<thread> thr);
 
-	thread *get_running_thread();
+	shared_ptr<thread> get_running_thread();
 
 private:
 	void schedule_next();
 
 	thread_list *running;
 	thread_list *ready;
+	thread_list *dealloc;
 	bool waiting_for_ready_task;
 };
 

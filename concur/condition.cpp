@@ -7,18 +7,16 @@ using namespace cloudos;
 
 thread_condition::thread_condition(thread_condition_signaler *s)
 : signaler(s)
-, thread(nullptr)
 , satisfied(false)
 {}
 
 void thread_condition::satisfy()
 {
-	if(thread == nullptr) {
-		kernel_panic("Thread condition is satisfied, but has no thread");
-	}
+	auto thr = thread.lock();
+	assert(thr);
 	satisfied = true;
 	// unblock if it was blocked
-	thread->thread_unblock();
+	thr->thread_unblock();
 }
 
 thread_condition_signaler::thread_condition_signaler()
@@ -90,7 +88,7 @@ void thread_condition_waiter::add_condition(thread_condition *c) {
 }
 
 void thread_condition_waiter::wait() {
-	auto *thr = get_scheduler()->get_running_thread();
+	auto thr = get_scheduler()->get_running_thread();
 	bool initially_satisfied = false;
 
 	// Subscribe on all conditions
@@ -130,9 +128,9 @@ void thread_condition_waiter::wait() {
 	// conditions will be already removed by the signaler)
 	iterate(conditions, [&](thread_condition_list *item) {
 		thread_condition *c = item->data;
-		if(c->thread != nullptr && !c->satisfied) {
+		if(!c->thread.expired() && !c->satisfied) {
 			c->signaler->cancel_condition(c);
-			c->thread = nullptr;
+			c->thread.reset();
 		}
 	});
 }

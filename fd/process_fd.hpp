@@ -25,7 +25,7 @@ struct userland_lock_waiters_t {
 	_Atomic(cloudabi_lock_t) *lock;
 	cv_t *readers_cv;
 	size_t number_of_readers;
-	thread_list *waiting_writers;
+	thread_weaklist *waiting_writers;
 };
 
 typedef linked_list<userland_lock_waiters_t*> userland_lock_waiters_list;
@@ -77,7 +77,7 @@ struct process_fd : public fd_t {
 	// create a main thread from the given calling thread, belonging to
 	// another process (this function assumes its own page directory is
 	// loaded)
-	void fork(thread *t);
+	void fork(shared_ptr<thread> t);
 
 	cloudabi_fd_t add_fd(shared_ptr<fd_t>, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting = 0);
 	cloudabi_errno_t get_fd(fd_mapping_t **mapping, cloudabi_fd_t num, cloudabi_rights_t has_rights);
@@ -101,7 +101,7 @@ struct process_fd : public fd_t {
 	 * auxv_address and entrypoint must already point to valid memory in
 	 * this process; stack_address must point just beyond a valid memory region.
 	 */
-	thread *add_thread(void *stack_address, void *auxv_address, void *entrypoint);
+	shared_ptr<thread> add_thread(void *stack_address, void *auxv_address, void *entrypoint);
 
 	static const int PAGE_SIZE = 4096 /* bytes */;
 
@@ -136,9 +136,12 @@ struct process_fd : public fd_t {
 		}
 	}
 
+	// Called by a thread when it is exiting.
+	void remove_thread(shared_ptr<thread> t);
+
 private:
 	thread_list *threads;
-	void add_thread(thread *thr);
+	void add_thread(shared_ptr<thread> thr);
 	// TODO: for shared mutexes, all cloudabi_tid_t's should be globally
 	// unique; we don't have shared mutexes yet
 	cloudabi_tid_t last_thread = MAIN_THREAD - 1;
