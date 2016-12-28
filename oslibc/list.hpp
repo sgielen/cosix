@@ -3,10 +3,18 @@
 #include <stdint.h>
 #include <stddef.h>
 
+/* A linked list item. Holds a copy of the input data, so use raw, shared
+ * or weak pointers if you need to. When destructed, will only destruct its
+ * copy, it won't dereference.
+ */
 template <typename T>
 struct linked_list {
+	linked_list() : data() {}
+	linked_list(T &d) : data(d) {}
+	linked_list(T &&d) : data(move(d)) {}
+
 	T data;
-	linked_list<T> *next;
+	linked_list<T> *next = nullptr;
 };
 
 template <typename T>
@@ -75,8 +83,20 @@ inline void append(linked_list<T> **list, linked_list<T> *entry) {
 	}
 }
 
-template <typename T, typename Functor, typename Deallocator>
-inline bool remove_one(linked_list<T> **list, Functor f, Deallocator d) {
+/**
+ * NOTE: Only use the default_list_deallocator if all linked_list<T> items are
+ * allocated with allocate()! It will only deallocate the outer item, not the
+ * inner one.
+ */
+template <typename T>
+struct default_list_deallocator {
+	void operator()(linked_list<T> *item) {
+		deallocate(item);
+	}
+};
+
+template <typename T, typename Functor, typename Deallocator = default_list_deallocator<T>>
+inline bool remove_one(linked_list<T> **list, Functor f, Deallocator d = {}) {
 	if(*list == nullptr) {
 		return false;
 	}
@@ -89,7 +109,7 @@ inline bool remove_one(linked_list<T> **list, Functor f, Deallocator d) {
 			} else {
 				prev->next = i->next;
 			}
-			d(i->data);
+			d(i);
 			return true;
 		}
 	}
@@ -97,15 +117,15 @@ inline bool remove_one(linked_list<T> **list, Functor f, Deallocator d) {
 	return false;
 }
 
-template <typename T, typename Deallocator>
-inline bool remove_object(linked_list<T*> **list, T const *data, Deallocator d) {
-	return remove_one(list, [data](linked_list<T*> const *item) {
+template <typename T, typename Deallocator = default_list_deallocator<T>>
+inline bool remove_object(linked_list<T> **list, T const &data, Deallocator d = {}) {
+	return remove_one(list, [data](linked_list<T> const *item) {
 		return item->data == data;
 	}, d);
 }
 
-template <typename T, typename Functor, typename Deallocator>
-inline size_t remove_all(linked_list<T> **list, Functor f, Deallocator d) {
+template <typename T, typename Functor, typename Deallocator = default_list_deallocator<T>>
+inline size_t remove_all(linked_list<T> **list, Functor f, Deallocator d = {}) {
 	if(*list == nullptr) {
 		return 0;
 	}

@@ -36,9 +36,7 @@ bool thread_condition_signaler::already_satisfied(thread_condition *c) {
 
 void thread_condition_signaler::subscribe_condition(thread_condition *c)
 {
-	auto item = get_allocator()->allocate<thread_condition_list>();
-	item->data = c;
-	item->next = nullptr;
+	auto item = allocate<thread_condition_list>(c);
 	// append myself, don't prepend, to prevent starvation
 	append(&conditions, item);
 }
@@ -51,7 +49,7 @@ void thread_condition_signaler::cancel_condition(thread_condition *c)
 
 	remove_one(&conditions, [&](thread_condition_list *item){
 		return item->data == c;
-	}, [&](thread_condition*){});
+	});
 }
 
 void thread_condition_signaler::condition_notify() {
@@ -81,9 +79,7 @@ thread_condition_waiter::~thread_condition_waiter()
 }
 
 void thread_condition_waiter::add_condition(thread_condition *c) {
-	auto item = get_allocator()->allocate<thread_condition_list>();
-	item->data = c;
-	item->next = nullptr;
+	auto item = allocate<thread_condition_list>(c);
 	append(&conditions, item);
 }
 

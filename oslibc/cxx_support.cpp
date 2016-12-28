@@ -1,9 +1,9 @@
 #include "global.hpp"
 
-void operator delete (void*) noexcept {
-	// TODO(sjors): implement as soon as we have allocations
-	// C++ destructors need this operator to be around, even if
-	// it won't be used
+void operator delete (void *ptr) noexcept {
+	if(ptr != nullptr) {
+		cloudos::kernel_panic("operator delete called, but you should use deallocate() instead of delete.");
+	}
 }
 
 extern "C"

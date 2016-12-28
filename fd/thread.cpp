@@ -931,10 +931,7 @@ void thread::acquire_userspace_lock(_Atomic(cloudabi_lock_t) *lock, cloudabi_eve
 	}
 
 	if(want_write_lock) {
-		thread_weaklist *t = get_allocator()->allocate<thread_weaklist>();
-		new (t) thread_weaklist();
-		t->data = weak_from_this();
-		t->next = nullptr;
+		thread_weaklist *t = allocate<thread_weaklist>(weak_from_this());
 		append(&(lock_info->waiting_writers), t);
 		thread_block();
 	} else {
@@ -980,7 +977,7 @@ void thread::drop_userspace_lock(_Atomic(cloudabi_lock_t) *lock)
 		// TODO: is this assertion correct, or should we continue to the next one if unset?
 		assert(new_owner);
 		*lock = CLOUDABI_LOCK_WRLOCKED | (new_owner->thread_id & 0x3fffffff);
-		// delete(first_thread);
+		deallocate(first_thread);
 
 		// no more readers and writers?
 		if(lock_info->waiting_writers == nullptr && lock_info->number_of_readers == 0) {

@@ -142,6 +142,8 @@ struct process_fd : public fd_t {
 private:
 	thread_list *threads;
 	void add_thread(shared_ptr<thread> thr);
+	void exit_all_threads();
+
 	// TODO: for shared mutexes, all cloudabi_tid_t's should be globally
 	// unique; we don't have shared mutexes yet
 	cloudabi_tid_t last_thread = MAIN_THREAD - 1;

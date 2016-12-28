@@ -40,10 +40,7 @@ void device::add_child(device *child) {
 	}
 #endif
 
-	device_list *new_entry = get_allocator()->allocate<device_list>();
-	new_entry->data = child;
-	new_entry->next = nullptr;
-
+	device_list *new_entry = allocate<device_list>(child);
 	append(&children_, new_entry);
 }
 
@@ -54,7 +51,7 @@ void device::remove_child(device *child) {
 	}
 #endif
 
-	if(!remove_object(&children_, child, [](device*){})) {
+	if(!remove_object(&children_, child)) {
 		kernel_panic("device to remove as child was not in my children list");
 	}
 }

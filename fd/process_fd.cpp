@@ -551,14 +551,7 @@ cloudabi_errno_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *
 	// (note that one of them will be currently running to do this exec(),
 	// so we can't deallocate them; this will be done in the scheduler once
 	// the threads are no longer scheduled)
-	iterate(threads, [&](thread_list *item) {
-		assert(!item->data->is_exited());
-		item->data->thread_exit();
-	});
-
-	// all threads were removed
-	assert(threads == nullptr);
-	last_thread = MAIN_THREAD - 1;
+	exit_all_threads();
 
 	// set running state
 	running = true;
@@ -625,9 +618,7 @@ void process_fd::fork(shared_ptr<thread> otherthread) {
 
 void process_fd::add_thread(shared_ptr<thread> thr)
 {
-	auto item = get_allocator()->allocate<thread_list>();
-	item->data = thr;
-	item->next = nullptr;
+	auto item = allocate<thread_list>(thr);
 	append(&threads, item);
 	get_scheduler()->thread_ready(thr);
 }
@@ -664,11 +655,7 @@ void process_fd::exit(cloudabi_exitcode_t c, cloudabi_signal_t s)
 	// TODO: free all allocations
 
 	// unschedule all threads
-	iterate(threads, [&](thread_list *item) {
-		assert(!item->data->is_exited());
-		item->data->thread_exit();
-	});
-	assert(threads == nullptr);
+	exit_all_threads();
 
 	// now yield, so we can schedule a ready thread
 	get_scheduler()->thread_yield();
@@ -726,9 +713,7 @@ userland_lock_waiters_t *process_fd::get_or_create_userland_lock_info(_Atomic(cl
 	new_info->number_of_readers = 0;
 	new_info->waiting_writers = nullptr;
 
-	userland_lock_waiters_list *new_list = get_allocator()->allocate<userland_lock_waiters_list>();
-	new_list->data = new_info;
-	new_list->next = nullptr;
+	userland_lock_waiters_list *new_list = allocate<userland_lock_waiters_list>(new_info);
 	append(&userland_locks, new_list);
 	return new_info;
 }
@@ -737,7 +722,7 @@ void process_fd::forget_userland_lock_info(_Atomic(cloudabi_lock_t) *lock)
 {
 	remove_one(&userland_locks, [&](userland_lock_waiters_list *item) {
 		return item->data->lock == lock;
-	}, [&](userland_lock_waiters_t *) { /* deallocate */});
+	});
 }
 
 userland_condvar_waiters_t *process_fd::get_userland_condvar_cv(_Atomic(cloudabi_condvar_t) *condvar)
@@ -761,9 +746,7 @@ userland_condvar_waiters_t *process_fd::get_or_create_userland_condvar_cv(_Atomi
 	new_info->cv = get_allocator()->allocate<cv_t>();
 	new (new_info->cv) cv_t();
 
-	userland_condvar_waiters_list *new_list = get_allocator()->allocate<userland_condvar_waiters_list>();
-	new_list->data = new_info;
-	new_list->next = nullptr;
+	userland_condvar_waiters_list *new_list = allocate<userland_condvar_waiters_list>(new_info);
 	append(&userland_condvars, new_list);
 	return new_info;
 }
@@ -772,15 +755,30 @@ void process_fd::forget_userland_condvar_cv(_Atomic(cloudabi_condvar_t) *condvar
 {
 	remove_one(&userland_condvars, [&](userland_condvar_waiters_list *item) {
 		return item->data->condvar == condvar;
-	}, [&](userland_condvar_waiters_t *) { /* deallocate */});
+	});
 }
 
 void process_fd::remove_thread(shared_ptr<thread> t)
 {
 	bool removed = remove_one(&threads, [&t](thread_list *item) {
 		return item->data == t;
-	}, [](shared_ptr<thread> &p) { p.reset(); });
+	});
 
 	(void)removed;
 	assert(removed);
+}
+
+void process_fd::exit_all_threads() {
+	auto thr_list = threads;
+	while(thr_list) {
+		auto thread_it = thr_list->data;
+		thr_list = thr_list->next;
+		assert(!thread_it->is_exited());
+		// this call will destruct the thr_list this thread_it
+		// came from, which is why we already take the ->next a bit
+		// earlier
+		thread_it->thread_exit();
+	}
+	assert(threads == nullptr);
+	last_thread = MAIN_THREAD - 1;
 }

@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <oslibc/assert.hpp>
 
 namespace cloudos {
 
@@ -15,5 +16,21 @@ struct Blk {
 Blk allocate(size_t n);
 Blk allocate_aligned(size_t n, size_t alignment);
 void deallocate(Blk b);
+
+template <typename T, class... Args>
+T *allocate(Args&&... args) {
+	Blk b = allocate(sizeof(T));
+	if(b.ptr != 0) {
+		assert(b.size == sizeof(T));
+		new (b.ptr) T(args...);
+	}
+	return reinterpret_cast<T*>(b.ptr);
+}
+
+template <typename T>
+void deallocate(T *ptr) {
+	ptr->~T();
+	deallocate({ptr, sizeof(*ptr)});
+}
 
 }
