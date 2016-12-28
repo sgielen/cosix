@@ -20,20 +20,24 @@ struct Segregator {
 		} else {
 			res = large->allocate_aligned(s, alignment);
 		}
+		assert(res.ptr == 0 || res.size == s);
 		assert(res.ptr == 0 || reinterpret_cast<uintptr_t>(res.ptr) % alignment == 0);
 		return res;
 	}
 
 	Blk allocate(size_t s) {
+		Blk res;
 		if(s < threshold) {
-			return small->allocate(s);
+			res = small->allocate(s);
 		} else {
-			return large->allocate(s);
+			res = large->allocate(s);
 		}
+		assert(res.ptr == 0 || res.size == s);
+		return res;
 	}
 
 	void deallocate(Blk &s) {
-		if(s.requested_size < threshold) {
+		if(s.size < threshold) {
 			return small->deallocate(s);
 		} else {
 			return large->deallocate(s);

@@ -53,7 +53,7 @@ struct MultiplePageAllocator
 			}
 		}
 
-		return {address_first, pages_allocated * PageAllocator::PAGE_SIZE, s};
+		return {address_first, s};
 	}
 
 	void deallocate(Blk &) {

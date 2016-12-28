@@ -51,7 +51,7 @@ struct BucketizerBin {
 			// replace tail with *tail, return old tail
 			void *ptr = tail;
 			tail = *reinterpret_cast<void**>(tail);
-			return {ptr, allocsize, 0 /* filled in by Bucketizer */};
+			return {ptr, allocsize};
 		}
 	}
 
@@ -65,7 +65,7 @@ struct BucketizerBin {
 			// tail itself is already aligned, so just return it
 			void *ptr = tail;
 			tail = *reinterpret_cast<void**>(tail);
-			return {ptr, allocsize, 0 /* filled in by Bucketizer */};
+			return {ptr, allocsize};
 		}
 
 		// search for an aligned block in the chain
@@ -85,11 +85,10 @@ struct BucketizerBin {
 		// take the aligned block out of the chain
 		void *next = *reinterpret_cast<void**>(block);
 		*reinterpret_cast<void**>(prev) = next;
-		return {block, allocsize, 0 /* filled in by Bucketizer */};
+		return {block, allocsize};
 	}
 
 	void deallocate(Blk b) {
-		assert(b.size == allocsize);
 		*reinterpret_cast<void**>(b.ptr) = tail;
 		tail = b.ptr;
 
@@ -166,8 +165,8 @@ struct Bucketizer {
 		}
 
 		// found one!
-		allocation.requested_size = s;
 		assert(allocation.size >= s);
+		allocation.size = s;
 		assert(reinterpret_cast<uintptr_t>(allocation.ptr) % alignment == 0);
 		return allocation;
 	}
@@ -178,8 +177,10 @@ struct Bucketizer {
 			bin.fill();
 		}
 		auto allocation = bin.allocate();
-		allocation.requested_size = s;
 		assert(allocation.ptr == 0 || allocation.size >= s);
+		if(allocation.ptr != 0) {
+			allocation.size = s;
+		}
 		return allocation;
 	}
 
