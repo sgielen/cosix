@@ -21,11 +21,10 @@
 #include "fd/bootfs.hpp"
 #include "memory/allocator.hpp"
 #include "memory/page_allocator.hpp"
+#include "memory/map_virtual.hpp"
 #include "global.hpp"
 #include "rng/rng.hpp"
 #include "oslibc/assert.hpp"
-
-extern uint32_t _kernel_virtual_base;
 
 using namespace cloudos;
 
@@ -334,6 +333,9 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	// allocator
 	page_allocator paging(end_of_kernel, mmap, memory_map_bytes);
 	global.page_allocator = &paging;
+	map_virtual vmap(&paging);
+	global.map_virtual = &vmap;
+	vmap.load_paging_stage2();
 
 	allocator alloc_;
 	global.alloc = &alloc_;
@@ -381,6 +383,7 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 
 	global.init->install_page_directory();
 	stream << "Paging directory loaded, paging is in effect\n";
+	vmap.free_paging_stage2();
 
 	{
 		auto bootfs_fd = bootfs::get_root_fd();

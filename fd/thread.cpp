@@ -203,7 +203,7 @@ void thread::handle_syscall() {
 		if(reinterpret_cast<uint32_t>(str) >= _kernel_virtual_base
 		|| reinterpret_cast<uint32_t>(str) + size >= _kernel_virtual_base
 		|| size >= 0x40000000
-		|| get_page_allocator()->to_physical_address(process, reinterpret_cast<const void*>(str)) == nullptr) {
+		|| get_map_virtual()->to_physical_address(process, reinterpret_cast<const void*>(str)) == nullptr) {
 			get_vga_stream() << "putstring() of a non-userland-accessible string\n";
 			state.eax = EFAULT;
 			return;
@@ -287,7 +287,7 @@ void thread::handle_syscall() {
 		// TODO: check if ecx until ecx+sizeof(fdstat_t) is valid *writable* process memory
 		if(reinterpret_cast<uint32_t>(stat) >= _kernel_virtual_base
 		|| reinterpret_cast<uint32_t>(stat) + sizeof(cloudabi_fdstat_t) >= _kernel_virtual_base
-		|| get_page_allocator()->to_physical_address(process, reinterpret_cast<const void*>(stat)) == nullptr) {
+		|| get_map_virtual()->to_physical_address(process, reinterpret_cast<const void*>(stat)) == nullptr) {
 			get_vga_stream() << "sys_fd_stat_get() of a non-userland-accessible string\n";
 			state.eax = EFAULT;
 			return;

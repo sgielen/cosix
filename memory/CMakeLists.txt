@@ -2,8 +2,8 @@ add_library(memory
 	allocation.cpp allocation.hpp
 	allocator.cpp allocator.hpp
 	page_allocator.cpp page_allocator.hpp
+	map_virtual.cpp map_virtual.hpp
 	bucketizer.hpp
-	multiple_page_allocator.hpp
 	segregator.hpp
 	smart_ptr.hpp
 )

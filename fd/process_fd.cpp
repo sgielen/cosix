@@ -26,25 +26,44 @@ process_fd::process_fd(const char *n)
 : fd_t(CLOUDABI_FILETYPE_PROCESS, n)
 , threads(nullptr)
 {
-	page_allocation p;
-	auto res = get_page_allocator()->allocate(&p);
-	if(res != 0) {
-		kernel_panic("Failed to allocate process paging directory");
+	Blk page_directory_alloc = allocate_aligned(PAGE_SIZE, PAGE_SIZE);
+	if(page_directory_alloc.ptr == 0) {
+		kernel_panic("Couldn't allocate page directory for new process");
 	}
-	page_directory = reinterpret_cast<uint32_t*>(p.address);
+	page_directory = reinterpret_cast<uint32_t*>(page_directory_alloc.ptr);
 	memset(page_directory, 0, PAGE_DIRECTORY_SIZE * sizeof(uint32_t));
-	get_page_allocator()->fill_kernel_pages(page_directory);
 
-	res = get_page_allocator()->allocate(&p);
-	if(res != 0) {
-		kernel_panic("Failed to allocate page table list");
+	get_map_virtual()->fill_kernel_pages(page_directory);
+
+	Blk page_tables_alloc = allocate(0x300 * sizeof(uint32_t*));
+	if(page_tables_alloc.ptr == 0) {
+		kernel_panic("Couldn't allocate page tables list for new process");
 	}
-	page_tables = reinterpret_cast<uint32_t**>(p.address);
+	page_tables = reinterpret_cast<uint32_t**>(page_tables_alloc.ptr);
 	for(size_t i = 0; i < 0x300; ++i) {
 		page_tables[i] = nullptr;
 	}
 
 	termination_signaler.set_already_satisfied_function(process_already_terminated, this);
+}
+
+process_fd::~process_fd()
+{
+	assert(!running);
+	assert(threads == nullptr);
+
+	remove_all(&mappings, [&](mem_mapping_list *item) {
+		item->data->unmap_completely();
+		return true;
+	});
+
+	deallocate({page_directory, PAGE_SIZE});
+	for(size_t i = 0; i < 0x300; ++i) {
+		if(page_tables[i] != 0) {
+			deallocate({page_tables[i], PAGE_SIZE});
+		}
+	}
+	deallocate({page_tables, 0x300 * sizeof(uint32_t*)});
 }
 
 void process_fd::add_initial_fds() {
@@ -185,44 +204,30 @@ uint32_t *process_fd::ensure_get_page_table(int i) {
 	}
 
 	// allocate page table
-	page_allocation p;
-	auto res = get_page_allocator()->allocate(&p);
-	if(res != 0) {
-		kernel_panic("Failed to allocate paging table");
+	Blk table_alloc = allocate_aligned(PAGE_SIZE, PAGE_SIZE);
+	if(table_alloc.ptr == 0) {
+		kernel_panic("Failed to allocate page table");
 	}
 
-	auto address = get_page_allocator()->to_physical_address(p.address);
-	if((reinterpret_cast<uint32_t>(address) & 0xfff) != 0) {
-		kernel_panic("physically allocated memory is not page-aligned");
-	}
+	auto address = get_map_virtual()->to_physical_address(table_alloc.ptr);
+	assert((reinterpret_cast<uint32_t>(address) & 0xfff) == 0);
 
 	page_directory[i] = reinterpret_cast<uint64_t>(address) | 0x07;
-	page_tables[i] = reinterpret_cast<uint32_t*>(p.address);
+	page_tables[i] = reinterpret_cast<uint32_t*>(table_alloc.ptr);
 	return page_tables[i];
 }
 
 void process_fd::install_page_directory() {
 	/* some sanity checks to warn early if the page directory looks incorrect */
-	if(get_page_allocator()->to_physical_address(this, reinterpret_cast<void*>(0xc00b8000)) != reinterpret_cast<void*>(0xb8000)) {
-		kernel_panic("Failed to map VGA page, VGA stream will fail later");
-	}
-	if(get_page_allocator()->to_physical_address(this, reinterpret_cast<void*>(0xc01031c6)) != reinterpret_cast<void*>(0x1031c6)) {
-		kernel_panic("Kernel will fail to execute");
-	}
+	assert(get_map_virtual()->to_physical_address(this, reinterpret_cast<void*>(0xc00b8000)) == reinterpret_cast<void*>(0xb8000));
+	assert(get_map_virtual()->to_physical_address(this, reinterpret_cast<void*>(0xc01031c6)) == reinterpret_cast<void*>(0x1031c6));
 
 #ifndef TESTING_ENABLED
-	auto page_phys_address = get_page_allocator()->to_physical_address(&page_directory[0]);
-	if((reinterpret_cast<uint32_t>(page_phys_address) & 0xfff) != 0) {
-		kernel_panic("Physically allocated memory is not page-aligned");
-	}
+	auto page_phys_address = get_map_virtual()->to_physical_address(&page_directory[0]);
+	assert((reinterpret_cast<uint32_t>(page_phys_address) & 0xfff) == 0);
+
 	// Set the paging directory in cr3
 	asm volatile("mov %0, %%cr3" : : "a"(reinterpret_cast<uint32_t>(page_phys_address)) : "memory");
-
-	// Turn on paging in cr0
-	int cr0;
-	asm volatile("mov %%cr0, %0" : "=a"(cr0));
-	cr0 |= 0x80000000;
-	asm volatile("mov %0, %%cr0" : : "a"(cr0) : "memory");
 #endif
 }
 
@@ -328,7 +333,8 @@ cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping
 		return EINVAL;
 	}
 
-	uint8_t *argdata_buffer = get_allocator()->allocate<uint8_t>(argdatalen);
+	Blk argdata_alloc = allocate(argdatalen);
+	uint8_t *argdata_buffer = reinterpret_cast<uint8_t*>(argdata_alloc.ptr);
 	memcpy(argdata_buffer, argdata, argdatalen);
 
 	char old_name[sizeof(name)];
@@ -340,20 +346,20 @@ cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping
 	strncpy(name, "exec<-", sizeof(name));
 	strncat(name, fd->name, sizeof(name) - strlen(name) - 1);
 
-	page_allocation p;
-	auto res = get_page_allocator()->allocate(&p);
-	if(res != 0) {
+	Blk page_directory_alloc = allocate_aligned(PAGE_SIZE, PAGE_SIZE);
+	if(page_directory_alloc.ptr == 0) {
 		kernel_panic("Failed to allocate process paging directory");
 	}
-	page_directory = reinterpret_cast<uint32_t*>(p.address);
+	page_directory = reinterpret_cast<uint32_t*>(page_directory_alloc.ptr);
 	memset(page_directory, 0, PAGE_DIRECTORY_SIZE * sizeof(uint32_t));
 
-	get_page_allocator()->fill_kernel_pages(page_directory);
-	res = get_page_allocator()->allocate(&p);
-	if(res != 0) {
+	get_map_virtual()->fill_kernel_pages(page_directory);
+
+	Blk page_tables_alloc = allocate(0x300 * sizeof(uint32_t*));
+	if(page_tables_alloc.ptr == 0) {
 		kernel_panic("Failed to allocate page table list");
 	}
-	page_tables = reinterpret_cast<uint32_t**>(p.address);
+	page_tables = reinterpret_cast<uint32_t**>(page_tables_alloc.ptr);
 	for(size_t i = 0; i < 0x300; ++i) {
 		page_tables[i] = nullptr;
 	}
@@ -366,8 +372,9 @@ cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping
 	add_mem_mapping(argdata_mapping);
 	argdata_mapping->ensure_completely_backed();
 	memcpy(argdata_address, argdata_buffer, argdatalen);
+	deallocate(argdata_alloc);
 
-	res = exec(elf_buffer, buffer_size, argdata_address, argdatalen);
+	auto res = exec(elf_buffer, buffer_size, argdata_address, argdatalen);
 	deallocate(elf_buffer_blk);
 	if(res != 0) {
 		page_directory = old_page_directory;
@@ -375,6 +382,8 @@ cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping
 		mappings = old_mappings;
 		strncpy(name, old_name, sizeof(name));
 		install_page_directory();
+		deallocate(page_directory_alloc);
+		deallocate(page_tables_alloc);
 		return res;
 	}
 
@@ -401,6 +410,22 @@ cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping
 	for(cloudabi_fd_t i = 0; i < fdslen; ++i) {
 		fds[i] = new_fds[i];
 	}
+
+	remove_all(&old_mappings, [&](mem_mapping_list * /*item*/) {
+		// TODO: free the physical pages behind the old mappings as well, but
+		// don't unmap them in the new page directory, they were mapped in
+		// the old one.
+		//item->data->unmap_completely();
+		return true;
+	});
+
+	deallocate({old_page_directory, PAGE_SIZE});
+	for(size_t i = 0; i < 0x300; ++i) {
+		if(old_page_tables[i] != 0) {
+			deallocate({old_page_tables[i], PAGE_SIZE});
+		}
+	}
+	deallocate({old_page_tables, 0x300 * sizeof(uint32_t*)});
 
 	// now, when process is scheduled again, we will return to the entrypoint of the new binary
 	return 0;

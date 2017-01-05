@@ -83,7 +83,7 @@ struct virtq {
 	}
 
 	void *get_virtq_addr_phys() {
-		return get_page_allocator()->to_physical_address(data);
+		return get_map_virtual()->to_physical_address(data);
 	}
 
 	virtq_buffer *get_virtq_buffer(int i) {
@@ -288,7 +288,7 @@ cloudabi_errno_t virtio_net_device::eth_init()
 		// TODO: use MTU instead of fixed size
 		buffer->len = 2048;
 		void *address = get_allocator()->allocate(buffer->len);
-		buffer->addr = reinterpret_cast<uint64_t>(get_page_allocator()->to_physical_address(address));
+		buffer->addr = reinterpret_cast<uint64_t>(get_map_virtual()->to_physical_address(address));
 		buffer->flags = VIRTQ_DESC_F_WRITE;
 		buffer->next = 0;
 
@@ -393,11 +393,11 @@ cloudabi_errno_t virtio_net_device::send_ethernet_frame(uint8_t *frame, size_t l
 	address_mapping *mapping1 = get_allocator()->allocate<address_mapping>();
 	address_mapping_list *mappingl1 = get_allocator()->allocate<address_mapping_list>();
 	mapping0->logical = net_hdr;
-	mapping0->physical = get_page_allocator()->to_physical_address(mapping0->logical);
+	mapping0->physical = get_map_virtual()->to_physical_address(mapping0->logical);
 	mappingl0->data = mapping0;
 	mappingl0->next = mappingl1;
 	mapping1->logical = frame;
-	mapping1->physical = get_page_allocator()->to_physical_address(mapping1->logical);
+	mapping1->physical = get_map_virtual()->to_physical_address(mapping1->logical);
 	mappingl1->data = mapping1;
 	mappingl1->next = nullptr;
 	append(&mappings, mappingl0);

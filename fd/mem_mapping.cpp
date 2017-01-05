@@ -111,18 +111,13 @@ void mem_mapping_t::ensure_backed(size_t page)
 	uint16_t page_entry_num = reinterpret_cast<uint64_t>(address) >> 12 & 0x03ff;
 	uint32_t &page_entry = page_table[page_entry_num];
 	if(!(page_entry & 0x1)) {
-		page_allocation p;
-		auto res = get_page_allocator()->allocate(&p);
-		if(res != 0) {
+		Blk b = get_page_allocator()->allocate_phys();
+		if(b.ptr == 0) {
 			kernel_panic("Failed to allocate page to back a mapping");
 		}
 
-		auto phys_addr = get_page_allocator()->to_physical_address(p.address);
-		if((reinterpret_cast<uint32_t>(phys_addr) & 0xfff) != 0) {
-			kernel_panic("physically allocated memory is not page-aligned");
-		}
-
-		page_entry = reinterpret_cast<uint32_t>(phys_addr) | 0x07; // TODO: use the correct permission bits
+		assert((reinterpret_cast<uint32_t>(b.ptr) & 0xfff) == 0);
+		page_entry = reinterpret_cast<uint32_t>(b.ptr) | 0x07; // TODO: use the correct permission bits
 	}
 }
 
@@ -146,7 +141,13 @@ void mem_mapping_t::unmap(size_t page)
 	}
 	uint16_t page_entry_num = reinterpret_cast<uint64_t>(address) >> 12 & 0x03ff;
 	uint32_t &page_entry = page_table[page_entry_num];
+	void *phys = reinterpret_cast<void*>(page_entry & 0xfffff000);
+
 	page_entry = 0;
+	asm volatile ( "invlpg (%0)" : : "b"(address) : "memory");
+
+	// TODO: don't deallocate physical page if the page is shared!
+	get_page_allocator()->deallocate_phys({phys, PAGE_SIZE});
 }
 
 void mem_mapping_t::unmap_completely()

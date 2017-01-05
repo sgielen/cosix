@@ -3,8 +3,7 @@
 #include <stddef.h>
 #include "memory/segregator.hpp"
 #include "memory/bucketizer.hpp"
-#include "memory/multiple_page_allocator.hpp"
-#include "memory/page_allocator.hpp"
+#include "memory/map_virtual.hpp"
 
 #ifdef TESTING_ENABLED
 #include <new>
@@ -30,13 +29,12 @@ public:
 	}
 
 private:
-	Bucketizer<page_allocator, 512, 4096, 256> large_bucketizer;
-	MultiplePageAllocator<page_allocator> multiple_page;
-	Bucketizer<page_allocator, 0, 512, 32> small_bucketizer;
+	Bucketizer<map_virtual, 512, 4096, 256> large_bucketizer;
+	Bucketizer<map_virtual, 0, 512, 32> small_bucketizer;
 
 	Segregator<4096,
 		decltype(large_bucketizer),
-		decltype(multiple_page)> large_segregator;
+		map_virtual> large_segregator;
 
 	Segregator<512,
 		decltype(small_bucketizer),

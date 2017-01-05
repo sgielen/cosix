@@ -59,4 +59,8 @@ if(BAREMETAL_ENABLED)
 		COMMAND qemu-system-i386 ${QEMU_ARGS} -watchdog-action debug -S -s
 		DEPENDS cloudkernel
 	)
+
+	add_custom_target(fastboot
+		COMMAND qemu-system-i386 ${QEMU_ARGS}
+	)
 endif()

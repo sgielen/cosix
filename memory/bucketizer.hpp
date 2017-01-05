@@ -17,19 +17,18 @@ struct BucketizerBin {
 	}
 
 	void fill() {
-		page_allocation alloc;
-		auto errno = parent->allocate(&alloc);
-		if(errno != 0) {
+		Blk b = parent->allocate(PageAllocator::PAGE_SIZE);
+		if(b.ptr == 0) {
 			kernel_panic("Failed to allocate a page");
 		}
 
-		char *address = reinterpret_cast<char*>(alloc.address);
-		size_t num_blocks = alloc.capacity / allocsize;
-		/* At least two blocks, otherwise we could've just allocated
-		 * a full page here
-		 */
-		assert(num_blocks >= 2);
-		assert(alloc.capacity == PageAllocator::PAGE_SIZE);
+		char *address = reinterpret_cast<char*>(b.ptr);
+		size_t num_blocks = b.size / allocsize;
+		// TODO: if num_blocks * allocsize != b.size, there is leftover space in this page
+		// causing fragmentation; we could decrease fragmentation by allocating contiguous
+		// pages.
+		assert(b.size >= allocsize);
+		assert(b.size == PageAllocator::PAGE_SIZE);
 
 		for(size_t i = 0; i < num_blocks; ++i) {
 			void *block_address = reinterpret_cast<void*>(address + i * allocsize);
@@ -185,7 +184,6 @@ struct Bucketizer {
 	}
 
 	void deallocate(Blk &s) {
-		assert(s.size >= sizeof(void*));
 		auto &bin = get_bin_sized(s.size);
 		bin.deallocate(s);
 	}

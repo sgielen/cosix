@@ -4,10 +4,9 @@
 using namespace cloudos;
 
 allocator::allocator()
-: large_bucketizer(get_page_allocator())
-, multiple_page(get_page_allocator())
-, small_bucketizer(get_page_allocator())
-, large_segregator(&large_bucketizer, &multiple_page)
+: large_bucketizer(get_map_virtual())
+, small_bucketizer(get_map_virtual())
+, large_segregator(&large_bucketizer, get_map_virtual())
 , small_segregator(&small_bucketizer, &large_segregator)
 {
 }

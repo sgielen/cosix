@@ -96,10 +96,10 @@ void program_main(const argdata_t *) {
 	FILE *out = fdopen(stdout, "w");
 	fswap(stderr, out);
 
-	/*start_binary("exec_test");
+	start_binary("exec_test");
 	start_binary("thread_test");
 	start_binary("pipe_test");
-	start_binary("concur_test");*/
+	start_binary("concur_test");
 
 	start_tmpfs();
 	//start_binary("tmptest");
