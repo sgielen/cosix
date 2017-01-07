@@ -42,70 +42,6 @@ const char scancode_to_key[] = {
 	'2' , '3' , '0' , '.' // 50-53
 };
 
-static void send_udp_test_packet() {
-	auto *eth0 = get_interface_store()->get_interface("eth0");
-	if(!eth0) {
-		return;
-	}
-
-	auto *list = eth0->get_ipv4addr_list();
-	if(!list) {
-		return;
-	}
-
-	ipv4addr_t source, destination;
-	memcpy(source, list->data, 4);
-	// 8.8.8.8
-	destination[0] = destination[1] = destination[2] = destination[3] = 0x08;
-
-	const char *payload = "Hello world!";
-	cloudabi_errno_t res = get_protocol_store()->udp->send_ipv4_udp(
-		reinterpret_cast<const uint8_t*>(payload), strlen(payload), source, 53, destination, 53);
-	if(res == 0) {
-		get_vga_stream() << "Sent a packet!\n";
-	} else {
-		get_vga_stream() << "Failed to send a packet: " << res << "\n";
-	}
-}
-
-static void request_process_binary() {
-	auto *eth0 = get_interface_store()->get_interface("eth0");
-	if(!eth0) {
-		return;
-	}
-
-	auto *list = eth0->get_ipv4addr_list();
-	if(!list) {
-		return;
-	}
-
-	ipv4addr_t source, destination;
-	memcpy(source, list->data, 4);
-	// 192.168.178.27
-	destination[0] = 192;
-	destination[1] = 168;
-	destination[2] = 178;
-	destination[3] = 27;
-	// 192.168.0.133
-	/*destination[0] = 192;
-	destination[1] = 168;
-	destination[2] = 0;
-	destination[3] = 133;*/
-	// 192.168.2.106
-	/*destination[0] = 192;
-	destination[1] = 168;
-	destination[2] = 2;
-	destination[3] = 106;*/
-	const char *payload = "process.bin";
-	cloudabi_errno_t res = get_protocol_store()->udp->send_ipv4_udp(
-		reinterpret_cast<const uint8_t*>(payload), strlen(payload), source, 4445, destination, 4444);
-	if(res == 0) {
-		get_vga_stream() << "Requested a binary!\n";
-	} else {
-		get_vga_stream() << "Failed to send a packet: " << res << "\n";
-	}
-}
-
 const char *int_num_to_name(int int_no, bool *err_code) {
 	bool errcode = false;
 	const char *str = nullptr;
@@ -245,11 +181,6 @@ struct interrupt_handler : public interrupt_functor {
 					uint16_t scancode = inb(0x60);
 					char buf[2];
 					buf[0] = scancode_to_key[scancode];
-					if(buf[0] == 'u') {
-						send_udp_test_packet();
-					} else if(buf[0] == 'p') {
-						request_process_binary();
-					}
 					buf[1] = 0;
 					if(buf[0] == '\n') {
 						get_vga_stream() << hex << "Stack ptr: " << &scancode << "; returning to stack: " << regs->useresp << dec << "\n";
