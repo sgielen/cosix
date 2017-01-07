@@ -15,25 +15,14 @@ struct interrupt_state_t {
 	uint32_t eip, cs, eflags, useresp, ss;
 };
 
-struct interrupt_functor {
-	interrupt_functor() {}
-	virtual ~interrupt_functor() {}
-	virtual void operator()(interrupt_state_t*) = 0;
-};
-
-struct interrupt_global {
-	interrupt_global(interrupt_functor*);
-	~interrupt_global();
-
+struct interrupt_handler {
 	void reprogram_pic();
 	void setup(interrupt_table&);
 	void enable_interrupts();
 	void disable_interrupts();
 
-	void call(interrupt_state_t*);
-
-private:
-	interrupt_functor *functor;
+	void handle(interrupt_state_t*);
+	void handle_irq(int irq);
 };
 
 }

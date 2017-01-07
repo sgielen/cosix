@@ -10,6 +10,7 @@ class allocator;
 struct page_allocator;
 struct map_virtual;
 struct segment_table;
+struct interrupt_handler;
 struct driver_store;
 struct protocol_store;
 struct interface_store;
@@ -27,6 +28,7 @@ struct global_state {
 	cloudos::page_allocator *page_allocator;
 	cloudos::map_virtual *map_virtual;
 	cloudos::segment_table *gdt; /* for TSS access */
+	cloudos::interrupt_handler *interrupt_handler;
 	cloudos::vga_stream *vga;
 	cloudos::driver_store *driver_store;
 	cloudos::protocol_store *protocol_store;
@@ -55,6 +57,7 @@ GET_GLOBAL(allocator, allocator, alloc)
 GET_GLOBAL(page_allocator, page_allocator, page_allocator)
 GET_GLOBAL(map_virtual, map_virtual, map_virtual)
 GET_GLOBAL(gdt, segment_table, gdt)
+GET_GLOBAL(interrupt_handler, interrupt_handler, interrupt_handler);
 GET_GLOBAL(driver_store, driver_store, driver_store)
 GET_GLOBAL(protocol_store, protocol_store, protocol_store)
 GET_GLOBAL(interface_store, interface_store, interface_store)

@@ -1,9 +1,11 @@
-#include "interrupt.hpp"
-#include "cpu_io.hpp"
+#include <hw/interrupt.hpp>
+#include <hw/cpu_io.hpp>
+#include <hw/device.hpp>
+#include <global.hpp>
+#include <fd/scheduler.hpp>
+#include <fd/process_fd.hpp>
 
 using namespace cloudos;
-
-interrupt_global *global_interrupt = 0;
 
 static const uint8_t master_pic_cmd  = 0x20;
 static const uint8_t slave_pic_cmd   = 0xa0;
@@ -28,21 +30,99 @@ ISR_NUM(128);
 
 extern "C"
 void isr_handler(interrupt_state_t *regs) {
-	if(global_interrupt != 0) {
-		global_interrupt->call(regs);
+	get_interrupt_handler()->handle(regs);
+}
+
+const char scancode_to_key[] = {
+	0   , 0   , '1' , '2' , '3' , '4' , '5' , '6' , // 00-07
+	'7' , '8' , '9' , '0' , '-' , '=' , '\b', '\t', // 08-0f
+	'q' , 'w' , 'e' , 'r' , 't' , 'y' , 'u' , 'i' , // 10-17
+	'o' , 'p' , '[' , ']' , '\n' , 0  , 'a' , 's' , // 18-1f
+	'd' , 'f' , 'g' , 'h' , 'j' , 'k' , 'l' , ';' , // 20-27
+	'\'', '`' , 0   , '\\', 'z' , 'x' , 'c' , 'v' , // 28-2f
+	'b' , 'n' , 'm' , ',' , '.' , '/' , 0   , '*' , // 30-37
+	0   , ' ' , 0   , 0   , 0   , 0   , 0   , 0   , // 38-3f
+	0   , 0   , 0   , 0   , 0   , 0   , 0   , '7' , // 40-47
+	'8' , '9' , '-' , '4' , '5' , '6' , '+' , '1' , // 48-4f
+	'2' , '3' , '0' , '.' // 50-53
+};
+
+const char *int_num_to_name(int int_no, bool *err_code) {
+	bool errcode = false;
+	const char *str = nullptr;
+	switch(int_no) {
+	case 0:  str = "Divide-by-zero (#DE)"; break;
+	case 1:  str = "Debug (#DB)"; break;
+	case 2:  str = "Non-maskable interrupt"; break;
+	case 3:  str = "Breakpoint (#BP)"; break;
+	case 4:  str = "Overflow (#OF)"; break;
+	case 5:  str = "Bound Range Exceeded (#BR)"; break;
+	case 6:  str = "Invalid Opcode (#UD)"; break;
+	case 7:  str = "Device Not Available (#NM)"; break;
+	case 8:  str = "Double Fault (#DF)"; break;
+	case 9:  str = "Coprocessor Segment Overrun"; break;
+	case 10: str = "Invalid TSS (#TS)"; errcode = true; break;
+	case 11: str = "Segment Not Present (#NP)"; errcode = true; break;
+	case 12: str = "Stack-Segment Fault (#SS)"; errcode = true; break;
+	case 13: str = "General Protection Fault (#GP)"; errcode = true; break;
+	case 14: str = "Page Fault (#PF)"; errcode = true; break;
+
+	case 16: str = "x87 Floating-Point Exception (#MF)"; break;
+	case 17: str = "Alignment Check (#AC)"; errcode = true; break;
+	case 18: str = "Machine Check (#MC)"; break;
+	case 19: str = "SIMD Floating-Point Exception (#XM/#XF)"; break;
+	case 20: str = "Virtualization Exception (#VE)"; break;
+
+	case 30: str = "Security Exception (#SX)"; errcode = true; break;
+
+	default: str = "Unknown exception"; break;
 	}
+	if(err_code) *err_code = errcode;
+	return str;
 }
 
-interrupt_global::interrupt_global(interrupt_functor *f)
-: functor(f) {
-	global_interrupt = this;
+__attribute__((noreturn)) static void fatal_exception(int int_no, int err_code, interrupt_state_t *regs) {
+	auto &stream = get_vga_stream();
+	stream << "\n\n=============================================\n";
+	stream << "Fatal exception during processing in kernel\n";
+	bool errcode;
+	stream << "Interrupt number: " << int_no << " - " << int_num_to_name(int_no, &errcode) << "\n";
+	if(errcode) {
+		stream << "Error Code: 0x" << hex << err_code << dec << "\n";
+	}
+
+	auto thread = get_scheduler()->get_running_thread();
+	if(thread) {
+		stream << "Active process: " << thread->get_process() << " (\"" << thread->get_process()->name << "\")\n";
+	}
+
+	stream << "Instruction pointer at point of fault: 0x" << hex << regs->eip << dec << "\n";
+
+	if(int_no == 0x0e /* Page fault */) {
+		if(err_code & 0x01) {
+			stream << "Caused by a page-protection violation during page ";
+		} else {
+			stream << "Caused by a non-present page during page ";
+		}
+		stream << ((err_code & 0x02) ? "write" : "read");
+		stream << ((err_code & 0x04) ? " in unprivileged mode" : " in kernel mode");
+		if(err_code & 0x08) {
+			stream << " as a result of reading a reserved field";
+		}
+		if(err_code & 0x10) {
+			stream << " as a result of an instruction fetch";
+		}
+		stream << "\n";
+		uint32_t address;
+		asm volatile("mov %%cr2, %0" : "=a"(address));
+		stream << "Virtual address accessed: 0x" << hex << address << dec << "\n";
+	}
+
+	stream << "\n";
+	kernel_panic("A fatal exception occurred.");
 }
 
-interrupt_global::~interrupt_global() {
-	global_interrupt = nullptr;
-}
-
-void interrupt_global::setup(interrupt_table &table) {
+void interrupt_handler::setup(interrupt_table &table) {
 	/* use reinterpret_cast<uint64_t> for testing builds on 8-byte ptr archs. */
 #define INT(NUM) \
 	table.set_entry(NUM, reinterpret_cast<uint64_t>(isr ## NUM), 0x08, 0xee);
@@ -61,30 +141,105 @@ void interrupt_global::setup(interrupt_table &table) {
 	table.load();
 }
 
-void interrupt_global::call(interrupt_state_t *regs) {
-	interrupt_functor &f = *functor;
-	int int_no = regs->int_no;
-
-	if(int_no >= 0x20 && int_no < 0x30) {
-		// IRQ caused this interrupt, so ACK it with the PICs
-		outb(master_pic_cmd, 0x20);
-		if(int_no >= 0x28) {
-			outb(slave_pic_cmd, 0x20);
-		}
+void interrupt_handler::handle_irq(int irq) {
+	// IRQ caused this interrupt, so ACK it with the PICs
+	outb(master_pic_cmd, 0x20);
+	if(irq >= 8) {
+		outb(slave_pic_cmd, 0x20);
 	}
 
-	f(regs);
+	if(irq == 0 /* system timer */) {
+		get_root_device()->timer_event_recursive();
+		if(!get_scheduler()->is_waiting_for_ready_task()) {
+			// this timer event occurred while already waiting for something
+			// to do, so just return immediately to prevent stack overflow
+			get_scheduler()->thread_yield();
+		}
+	} else if(irq == 1 /* keyboard */) {
+		// keyboard input!
+		// wait for the ready bit to turn on
+		uint32_t waits = 0;
+		while((inb(0x64) & 0x1) == 0 && waits < 0xfffff) {
+			waits++;
+		}
+
+		if((inb(0x64) & 0x1) == 0x1) {
+			uint16_t scancode = inb(0x60);
+			char buf[2];
+			buf[0] = scancode_to_key[scancode];
+			buf[1] = 0;
+			if(scancode <= 0x53) {
+				get_vga_stream() << buf;
+			}
+		} else {
+			get_vga_stream() << "Waited for scancode for too long\n";
+		}
+	} else {
+		get_vga_stream() << "Got unknown hardware interrupt " << irq << "\n";
+	}
 }
 
-void interrupt_global::enable_interrupts() {
+void interrupt_handler::handle(interrupt_state_t *regs) {
+	int int_no = regs->int_no;
+	int err_code = regs->err_code;
+
+	if(regs->cs != 27 && regs->cs != 8) {
+		get_vga_stream() << "!!!! Interrupt occurred, but unexpected code segment value !!!!\n";
+		fatal_exception(int_no, err_code, regs);
+	}
+
+	bool in_kernel = regs->cs == 8;
+	auto running_thread = get_scheduler()->get_running_thread();
+	if(running_thread) {
+		running_thread->set_return_state(regs);
+	}
+
+	if(!in_kernel && !running_thread) {
+		get_vga_stream() << "!!!! Interrupt occurred in userland, but without an active thread !!!!\n";
+		fatal_exception(int_no, err_code, regs);
+	}
+
+	// TODO: handle page fault as a special case, because it can be
+	// solved by the running_thread
+
+	// Any exceptions in the userland are handled by the thread
+	if(!in_kernel && (int_no < 0x20 || int_no >= 0x30)) {
+		// During the handling of this interrupt, we might exit this thread and
+		// switch to another, then clean the thread. To ensure this is possible,
+		// ensure we don't have a shared ptr to the thread on the stack.
+		assert(running_thread.use_count() > 1);
+		thread *thr = running_thread.get();
+		weak_ptr<thread> weak_thread = running_thread;
+		running_thread.reset();
+		thr->interrupt(int_no, err_code);
+		// interrupt returned, so this thread survived
+		running_thread = weak_thread.lock();
+		assert(running_thread);
+	}
+	// Any exceptions in the kernel lead to immediate kernel_panic
+	else if(int_no < 0x20 || int_no >= 0x30) {
+		fatal_exception(int_no, err_code, regs);
+	}
+	// Hardware interrupts are handled normally
+	else {
+		handle_irq(int_no - 0x20);
+	}
+
+	if(running_thread) {
+		assert(!running_thread->is_exited());
+		running_thread->get_return_state(regs);
+	}
+}
+
+void interrupt_handler::enable_interrupts() {
 	asm volatile("sti");
 }
 
-void interrupt_global::disable_interrupts() {
+void interrupt_handler::disable_interrupts() {
 	asm volatile("cli");
 }
 
-void interrupt_global::reprogram_pic() {
+void interrupt_handler::reprogram_pic() {
 	uint8_t master_pic_mask = inb(master_pic_data);
 	uint8_t slave_pic_mask  = inb(slave_pic_data);
 
