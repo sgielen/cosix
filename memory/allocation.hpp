@@ -4,6 +4,14 @@
 #include <stddef.h>
 #include <oslibc/assert.hpp>
 
+#ifdef TESTING_ENABLED
+#include <new>
+#else
+inline void *operator new(size_t, void *p) noexcept {
+	return p;
+}
+#endif
+
 namespace cloudos {
 
 struct Blk {

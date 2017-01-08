@@ -5,14 +5,6 @@
 #include "memory/bucketizer.hpp"
 #include "memory/map_virtual.hpp"
 
-#ifdef TESTING_ENABLED
-#include <new>
-#else
-inline void *operator new(size_t, void *p) noexcept {
-	return p;
-}
-#endif
-
 namespace cloudos {
 
 class allocator {

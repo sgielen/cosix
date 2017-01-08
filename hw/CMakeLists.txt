@@ -20,6 +20,9 @@ add_library(hw
 	root_device.hpp root_device.cpp
 	net/virtio.hpp net/virtio.cpp
 	net/ethernet_device.hpp net/ethernet_device.cpp
+	arch/x86/x86.hpp arch/x86/x86.cpp
+	arch/x86/x86_pit.hpp arch/x86/x86_pit.cpp
+	arch/x86/x86_kbd.hpp arch/x86/x86_kbd.cpp
 	${EXTRA_HW_SOURCES})
 list(APPEND hw_tests
 	test/test_vga.cpp

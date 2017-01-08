@@ -10,6 +10,7 @@
 #include "hw/pci_bus.hpp"
 #include "hw/sse.hpp"
 #include "hw/net/virtio.hpp"
+#include "hw/arch/x86/x86.hpp"
 #include "net/loopback_interface.hpp"
 #include "net/interface_store.hpp"
 #include "oslibc/numeric.h"
@@ -170,6 +171,7 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 		get_driver_store()->register_driver(driver); \
 	} while(0);
 
+	REGISTER_DRIVER(x86_driver);
 	REGISTER_DRIVER(pci_driver);
 	REGISTER_DRIVER(virtio_net_driver);
 

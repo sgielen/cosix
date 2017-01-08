@@ -33,20 +33,6 @@ void isr_handler(interrupt_state_t *regs) {
 	get_interrupt_handler()->handle(regs);
 }
 
-const char scancode_to_key[] = {
-	0   , 0   , '1' , '2' , '3' , '4' , '5' , '6' , // 00-07
-	'7' , '8' , '9' , '0' , '-' , '=' , '\b', '\t', // 08-0f
-	'q' , 'w' , 'e' , 'r' , 't' , 'y' , 'u' , 'i' , // 10-17
-	'o' , 'p' , '[' , ']' , '\n' , 0  , 'a' , 's' , // 18-1f
-	'd' , 'f' , 'g' , 'h' , 'j' , 'k' , 'l' , ';' , // 20-27
-	'\'', '`' , 0   , '\\', 'z' , 'x' , 'c' , 'v' , // 28-2f
-	'b' , 'n' , 'm' , ',' , '.' , '/' , 0   , '*' , // 30-37
-	0   , ' ' , 0   , 0   , 0   , 0   , 0   , 0   , // 38-3f
-	0   , 0   , 0   , 0   , 0   , 0   , 0   , '7' , // 40-47
-	'8' , '9' , '-' , '4' , '5' , '6' , '+' , '1' , // 48-4f
-	'2' , '3' , '0' , '.' // 50-53
-};
-
 const char *int_num_to_name(int int_no, bool *err_code) {
 	bool errcode = false;
 	const char *str = nullptr;
@@ -141,39 +127,16 @@ void interrupt_handler::setup(interrupt_table &table) {
 	table.load();
 }
 
-void interrupt_handler::handle_irq(int irq) {
+void interrupt_handler::handle_irq(uint8_t irq) {
 	// IRQ caused this interrupt, so ACK it with the PICs
 	outb(master_pic_cmd, 0x20);
 	if(irq >= 8) {
 		outb(slave_pic_cmd, 0x20);
 	}
 
-	if(irq == 0 /* system timer */) {
-		get_root_device()->timer_event_recursive();
-		if(!get_scheduler()->is_waiting_for_ready_task()) {
-			// this timer event occurred while already waiting for something
-			// to do, so just return immediately to prevent stack overflow
-			get_scheduler()->thread_yield();
-		}
-	} else if(irq == 1 /* keyboard */) {
-		// keyboard input!
-		// wait for the ready bit to turn on
-		uint32_t waits = 0;
-		while((inb(0x64) & 0x1) == 0 && waits < 0xfffff) {
-			waits++;
-		}
-
-		if((inb(0x64) & 0x1) == 0x1) {
-			uint16_t scancode = inb(0x60);
-			char buf[2];
-			buf[0] = scancode_to_key[scancode];
-			buf[1] = 0;
-			if(scancode <= 0x53) {
-				get_vga_stream() << buf;
-			}
-		} else {
-			get_vga_stream() << "Waited for scancode for too long\n";
-		}
+	auto handler = irq_handlers[irq];
+	if(handler != 0) {
+		handler->handle_irq(irq);
 	} else {
 		get_vga_stream() << "Got unknown hardware interrupt " << irq << "\n";
 	}
@@ -267,3 +230,23 @@ void interrupt_handler::reprogram_pic() {
 	outb(master_pic_data, master_pic_mask);
 	outb(slave_pic_data, slave_pic_mask);
 }
+
+irq_handler::~irq_handler() {}
+
+void irq_handler::register_irq(uint8_t irq) {
+	get_interrupt_handler()->register_irq_handler(irq, this);
+}
+
+interrupt_handler::interrupt_handler() {
+	for(size_t i = 0; i < NUM_ELEMENTS(irq_handlers); ++i) {
+		irq_handlers[i] = nullptr;
+	}
+}
+
+void interrupt_handler::register_irq_handler(uint8_t irq, irq_handler *handler) {
+	assert(irq < NUM_ELEMENTS(irq_handlers));
+	assert(irq_handlers[irq] == nullptr);
+
+	irq_handlers[irq] = handler;
+}
+
