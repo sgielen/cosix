@@ -19,6 +19,17 @@ void thread_condition::satisfy()
 	thr->thread_unblock();
 }
 
+void thread_condition::cancel()
+{
+	signaler->cancel_condition(this);
+}
+
+void thread_condition::reset()
+{
+	signaler = nullptr;
+	thread.reset();
+}
+
 thread_condition_signaler::thread_condition_signaler()
 : satisfied_function(nullptr)
 , satisfied_function_userdata(nullptr)
@@ -125,8 +136,7 @@ void thread_condition_waiter::wait() {
 	iterate(conditions, [&](thread_condition_list *item) {
 		thread_condition *c = item->data;
 		if(!c->thread.expired() && !c->satisfied) {
-			c->signaler->cancel_condition(c);
-			c->thread.reset();
+			c->cancel();
 		}
 	});
 }

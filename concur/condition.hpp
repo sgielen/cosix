@@ -24,10 +24,13 @@ struct thread_condition_waiter;
 struct thread_condition {
 	thread_condition(thread_condition_signaler *signaler);
 	void satisfy();
+	void cancel();
 
 	void *userdata;
 
 private:
+	void reset();
+
 	thread_condition_signaler *signaler;
 	weak_ptr<thread> thread;
 	bool satisfied;

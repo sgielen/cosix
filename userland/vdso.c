@@ -29,8 +29,13 @@ cloudabi_sys_clock_res_get(
 	cloudabi_clockid_t clock_id,
 	cloudabi_timestamp_t *resolution
 ) {
-	putstring_l(__PRETTY_FUNCTION__);
-	return CLOUDABI_ENOSYS;
+	register int32_t reg_eax asm("eax") = 26;
+	register cloudabi_clockid_t reg_ebx asm("ebx") = clock_id;
+	register cloudabi_timestamp_t *reg_ecx asm("ecx") = resolution;
+	asm volatile("int $0x80"
+		: "+r"(reg_eax) : "r"(reg_ebx), "r"(reg_ecx)
+		: "memory", "eax", "ebx", "ecx");
+	return reg_eax;
 }
 
 cloudabi_errno_t
@@ -39,8 +44,14 @@ cloudabi_sys_clock_time_get(
 	cloudabi_timestamp_t precision,
 	cloudabi_timestamp_t *time
 ) {
-	putstring_l(__PRETTY_FUNCTION__);
-	return CLOUDABI_ENOSYS;
+	register int32_t reg_eax asm("eax") = 27;
+	register cloudabi_clockid_t reg_ebx asm("ebx") = clock_id;
+	register uint32_t reg_ecx asm("ecx") = precision;
+	register cloudabi_timestamp_t *reg_edx asm("edx") = time;
+	asm volatile("int $0x80"
+		: "+r"(reg_eax) : "r"(reg_ebx), "r"(reg_ecx), "r"(reg_edx)
+		: "memory", "eax", "ebx", "ecx", "edx");
+	return reg_eax;
 }
 
 cloudabi_errno_t

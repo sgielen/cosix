@@ -24,6 +24,7 @@
 #include "memory/map_virtual.hpp"
 #include "global.hpp"
 #include "rng/rng.hpp"
+#include <time/clock_store.hpp>
 
 using namespace cloudos;
 
@@ -160,6 +161,8 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	int_handler.setup(interrupts);
 	int_handler.reprogram_pic();
 	global.interrupt_handler = &int_handler;
+
+	global.clock_store = allocate<clock_store>();
 
 	global.driver_store = get_allocator()->allocate<driver_store>();
 	new(global.driver_store) driver_store();

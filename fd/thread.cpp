@@ -7,6 +7,7 @@
 #include "global.hpp"
 #include <rng/rng.hpp>
 #include <oslibc/assert.hpp>
+#include <time/clock_store.hpp>
 
 using namespace cloudos;
 
@@ -612,7 +613,7 @@ void thread::handle_syscall() {
 			// timeout passes.
 			auto *lock = in[0].lock.lock;
 			if(nsubscriptions == 2) {
-				get_vga_stream() << "poll(): clocks are not supported yet\n";
+				get_vga_stream() << "poll(): clocks for locks are not supported yet\n";
 				state.edx = 0;
 				state.eax = ENOSYS;
 				return;
@@ -638,7 +639,7 @@ void thread::handle_syscall() {
 			auto *condvar = in[0].condvar.condvar;
 			auto *lock = in[0].condvar.lock;
 			if(nsubscriptions == 2) {
-				get_vga_stream() << "poll(): clocks are not supported yet\n";
+				get_vga_stream() << "poll(): clocks for condvars are not supported yet\n";
 				state.edx = 0;
 				state.eax = ENOSYS;
 				return;
@@ -693,11 +694,27 @@ void thread::handle_syscall() {
 				case CLOUDABI_EVENTTYPE_LOCK_RDLOCK:
 				case CLOUDABI_EVENTTYPE_LOCK_WRLOCK:
 					kernel_panic("Eventtype cannot exist here");
-				case CLOUDABI_EVENTTYPE_CLOCK:
-					get_vga_stream() << "Unimplemented clock eventtype, failing\n";
-					userdata->error = ENOSYS;
-					signaler = &null_signaler;
+				case CLOUDABI_EVENTTYPE_CLOCK: {
+					auto clock = get_clock_store()->get_clock(i.clock.clock_id);
+					if(clock == nullptr) {
+						get_vga_stream() << "Unknown clock ID " << i.clock.clock_id << "\n";
+						userdata->error = ENOSYS;
+						signaler = &null_signaler;
+						break;
+					}
+					auto timeout = i.clock.timeout;
+					auto time = clock->get_time(i.clock.precision);
+					if(!(i.clock.flags == CLOUDABI_SUBSCRIPTION_CLOCK_ABSTIME)) {
+						timeout += time;
+					}
+					if(timeout <= time) {
+						// already satisfied
+						signaler = &null_signaler;
+					} else {
+						signaler = clock->get_signaler(timeout, i.clock.precision);
+					}
 					break;
+				}
 				case CLOUDABI_EVENTTYPE_FD_READ:
 					get_vga_stream() << "Unimplemented fd-read eventtype, failing\n";
 					userdata->error = ENOSYS;
@@ -746,7 +763,9 @@ void thread::handle_syscall() {
 				o.userdata = i->userdata;
 				o.type = i->type;
 				o.error = userdata->error;
-				if(i->type == CLOUDABI_EVENTTYPE_PROC_TERMINATE && o.error == 0) {
+				if(i->type == CLOUDABI_EVENTTYPE_CLOCK) {
+					o.clock.identifier = i->clock.identifier;
+				} else if(i->type == CLOUDABI_EVENTTYPE_PROC_TERMINATE && o.error == 0) {
 					cloudabi_fd_t proc_fdnum = o.proc_terminate.fd = i->proc_terminate.fd;
 					// TODO: store signal and exitcode in the thread_condition when the process dies,
 					// so that if we closed the fd in the meantime, we don't error out here
@@ -835,6 +854,32 @@ void thread::handle_syscall() {
 
 		state.ecx = mapping->fd->seek(offset, whence);
 		state.eax = mapping->fd->error;
+	} else if(syscall == 26) {
+		// sys_clock_res_get(ebx=clock_id, ecx=resolution)
+		cloudabi_clockid_t clockid = state.ebx;
+		auto resolution = reinterpret_cast<cloudabi_timestamp_t*>(state.ecx);
+		auto clock = get_clock_store()->get_clock(clockid);
+		if(clock == nullptr) {
+			get_vga_stream() << "Unknown clock ID " << clockid << "\n";
+			state.eax = EINVAL;
+		} else {
+			*resolution = clock->get_resolution();
+			state.eax = 0;
+		}
+	} else if(syscall == 27) {
+		// sys_clock_time_get(ebx=clock_id, ecx=precision, edx=time)
+		cloudabi_clockid_t clockid = state.ebx;
+		cloudabi_timestamp_t precision = state.ecx;
+		auto time = reinterpret_cast<cloudabi_timestamp_t*>(state.edx);
+
+		auto clock = get_clock_store()->get_clock(clockid);
+		if(clock == nullptr) {
+			get_vga_stream() << "Unknown clock ID " << clockid << "\n";
+			state.eax = EINVAL;
+		} else {
+			*time = clock->get_time(precision);
+			state.eax = 0;
+		}
 	} else {
 		get_vga_stream() << "Syscall " << state.eax << " unknown, signalling process\n";
 		process->signal(CLOUDABI_SIGSYS);
