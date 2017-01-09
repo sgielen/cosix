@@ -985,13 +985,17 @@ void thread::acquire_userspace_lock(_Atomic(cloudabi_lock_t) *lock, cloudabi_eve
 	}
 
 	// Verify that this thread has the lock now
+	// NOTE: it is possible that this thread is only scheduled after another thread already changed the
+	// lock value. For example, for pthread_once(), another userland thread may set the readcount to 0
+	// even if this thread just did a readlock, before this thread is scheduled again to do the check below.
+	// So, we'll warn because it helps to find potential bugs, but don't assert().
 	if(want_write_lock) {
 		if((*lock & CLOUDABI_LOCK_WRLOCKED) == 0 || (*lock & 0x3fffffff) != thread_id) {
-			kernel_panic("Thought I had a writelock, but it's not writelocked or thread ID isn't mine");
+			get_vga_stream() << "Warning: Thought I had a writelock, but it's not writelocked or thread ID isn't mine\n";
 		}
 	} else {
 		if((*lock & 0x3fffffff) == 0) {
-			kernel_panic("Thought I had a readlock, but readcount is 0");
+			get_vga_stream() << "Warning: Thought I had a readlock, but readcount is 0.\n";
 		}
 	}
 }
