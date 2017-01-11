@@ -1,7 +1,9 @@
 #include "procfs.hpp"
 #include "global.hpp"
+#include <fd/memory_fd.hpp>
 #include <oslibc/numeric.h>
 #include <memory/allocator.hpp>
+#include <time/clock_store.hpp>
 
 using namespace cloudos;
 
@@ -22,8 +24,8 @@ private:
 	size_t depth;
 };
 
-struct procfs_uptime_fd : seekable_fd_t {
-	procfs_uptime_fd(const char *n) : seekable_fd_t(CLOUDABI_FILETYPE_REGULAR_FILE, n) {}
+struct procfs_uptime_fd : public memory_fd {
+	procfs_uptime_fd(const char *n) : memory_fd(n) {}
 
 	size_t read(void *dest, size_t count) override;
 };
@@ -123,25 +125,14 @@ shared_ptr<fd_t> procfs_directory_fd::openat(const char *pathname, size_t pathle
 }
 
 size_t procfs_uptime_fd::read(void *dest, size_t count) {
-	error = 0;
-	// TODO compute uptime
-	int uptime = 12345;
+	auto uptime = get_clock_store()->get_clock(CLOUDABI_CLOCK_MONOTONIC)->get_time(0) / 1e9;
 	char buf[10];
 
-	// TODO this is the same code for every file for which we
-	// already have all contents in memory, so unify this
 	char *addr = ui64toa_s(uptime, buf, sizeof(buf), 10);
-	size_t length = strlen(addr);
-	if(pos + count > length) {
-		reinterpret_cast<char*>(dest)[0] = 0;
-		return 0;
-	}
-
-	size_t bytes_left = length - pos;
-	size_t copied = count < bytes_left ? count : bytes_left;
-	memcpy(reinterpret_cast<char*>(dest), addr + pos, copied);
-	pos += copied;
-	return copied;
+	reset(addr, strlen(addr));
+	auto res = memory_fd::read(dest, count);
+	reset();
+	return res;
 }
 
 shared_ptr<fd_t> procfs::get_root_fd() {
