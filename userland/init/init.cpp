@@ -9,14 +9,47 @@
 #include <sys/procdesc.h>
 #include <signal.h>
 #include <pthread.h>
+#include <unistd.h>
 
 int stdout;
+int procfs;
 int bootfs;
 int reversefd;
 int pseudofd;
 
+long uptime() {
+	int uptimefd = openat(procfs, "kernel/uptime", O_RDONLY);
+	if(uptimefd < 0) {
+		dprintf(stdout, "INIT: failed to open uptime: %s\n", strerror(errno));
+		return 0;
+	}
+	char buf[16];
+	ssize_t r = read(uptimefd, buf, sizeof(buf) - 1);
+	if(r <= 0) {
+		dprintf(stdout, "INIT: failed to read uptime: %s\n", strerror(errno));
+		return 0;
+	}
+	buf[r] = 0;
+	return atol(buf);
+}
+
 argdata_t *argdata_create_string(const char *value) {
 	return argdata_create_str(value, strlen(value));
+}
+
+void program_run(const char *name, int bfd, argdata_t *ad) {
+	int pfd = program_spawn(bfd, ad);
+	if(pfd < 0) {
+		dprintf(stdout, "INIT: %s failed to start: %s\n", name, strerror(errno));
+		return;
+	}
+
+	dprintf(stdout, "INIT: %s started.\n", name);
+
+	siginfo_t si;
+	pdwait(pfd, &si, 0);
+	dprintf(stdout, "INIT: %s exited, exit status %d\n", name, si.si_status);
+	dprintf(stdout, "INIT: current uptime: %ld seconds\n", uptime());
 }
 
 void start_unittests() {
@@ -31,12 +64,7 @@ void start_unittests() {
 	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(pseudofd), argdata_create_int(1)};
 	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 
-	int pfd = program_spawn(bfd, ad);
-	if(pfd < 0) {
-		dprintf(stdout, "unittests failed to spawn: %s\n", strerror(errno));
-	} else {
-		dprintf(stdout, "unittests spawned, fd: %d\n", pfd);
-	}
+	program_run("unittests", bfd, ad);
 }
 
 void start_tmpfs() {
@@ -59,11 +87,11 @@ void start_tmpfs() {
 	}
 }
 
-int start_binary(const char *name) {
+void start_binary(const char *name) {
 	int bfd = openat(bootfs, name, O_RDONLY);
 	if(bfd < 0) {
 		dprintf(stdout, "Failed to open %s: %s\n", name, strerror(errno));
-		return bfd;
+		return;
 	}
 
 	dprintf(stdout, "Init going to program_spawn() %s...\n", name);
@@ -72,21 +100,12 @@ int start_binary(const char *name) {
 	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(pseudofd)};
 	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 
-	int pfd = program_spawn(bfd, ad);
-	if(pfd < 0) {
-		dprintf(stdout, "%s failed to spawn: %s\n", name, strerror(errno));
-	} else {
-		dprintf(stdout, "%s spawned, fd: %d\n", name, pfd);
-		siginfo_t si;
-		pdwait(pfd, &si, 0);
-		dprintf(stdout, "%s exited, exit status %d\n", name, si.si_status);
-	}
-
-	return pfd;
+	program_run(name, bfd, ad);
 }
 
 void program_main(const argdata_t *) {
 	stdout = 0;
+	procfs = 2;
 	bootfs = 3;
 	reversefd = 4;
 	pseudofd = 5;
