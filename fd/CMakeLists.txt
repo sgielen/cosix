@@ -2,7 +2,7 @@ if(BAREMETAL_ENABLED)
 	include_directories(${CMAKE_BINARY_DIR})
 	add_library(fd
 		fd.hpp
-		memory_fd.hpp
+		memory_fd.cpp memory_fd.hpp
 		mem_mapping.cpp mem_mapping.hpp
 		process_fd.cpp process_fd.hpp
 		scheduler.cpp scheduler.hpp scheduler.s

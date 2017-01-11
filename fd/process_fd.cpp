@@ -70,10 +70,10 @@ void process_fd::add_initial_fds() {
 	auto vga = make_shared<vga_fd>("vga_fd");
 	add_fd(vga, CLOUDABI_RIGHT_FD_WRITE);
 
-	char *fd_buf = get_allocator()->allocate<char>(200);
-	strncpy(fd_buf, "These are the contents of my buffer!\n", 200);
+	Blk fd_buf = allocate(200);
+	strncpy(reinterpret_cast<char*>(fd_buf.ptr), "These are the contents of my buffer!\n", fd_buf.size);
 
-	auto memory = make_shared<memory_fd>(fd_buf, strlen(fd_buf) + 1, "memory_fd");
+	auto memory = make_shared<memory_fd>(fd_buf, strlen(reinterpret_cast<char*>(fd_buf.ptr)) + 1, "memory_fd");
 	add_fd(memory, CLOUDABI_RIGHT_FD_READ);
 
 	add_fd(procfs::get_root_fd(), CLOUDABI_RIGHT_FILE_OPEN, CLOUDABI_RIGHT_FD_READ | CLOUDABI_RIGHT_FILE_OPEN);

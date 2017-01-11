@@ -4,29 +4,34 @@ namespace cloudos {
 
 /** Memory file descriptor
  *
- * This file descriptor takes ownership of the given buffer. Reads on this
- * file descriptor will read from the buffer. Writes are not supported.
+ * This file descriptor acts as a read-only fd to a regular file with the
+ * given static contents.
  */
 struct memory_fd : public seekable_fd_t {
-	inline memory_fd(char *a, size_t l, const char *n) : seekable_fd_t(CLOUDABI_FILETYPE_SHARED_MEMORY, n), addr(a), length(l) {}
+	// Empty constructor: read() will fail, but you can override read()
+	// to replace the returned string with reset(), call memory_fd::read(),
+	// then reset() again.
+	memory_fd(const char *name);
 
-	size_t read(void *dest, size_t count) override {
-		error = 0;
-		if(pos + count > length) {
-			// EOF, don't change dest
-			return 0;
-		}
+	// Owning memory constructor: will return the data in the allocation,
+	// and free the Blk when destructed.
+	memory_fd(Blk allocation, size_t file_length, const char *name);
 
-		size_t bytes_left = length - pos;
-		size_t copied = count < bytes_left ? count : bytes_left;
-		memcpy(reinterpret_cast<char*>(dest), addr + pos, copied);
-		pos += copied;
-		return copied;
-	}
+	// Non-owning memory constructor: will return the data in the
+	// allocation, will not free the Blk when destructed.
+	memory_fd(void *address, size_t file_length, const char *name);
+	~memory_fd();
+
+	size_t read(void *dest, size_t count) override;
+
+	void reset();
+	void reset(Blk allocation, size_t file_length);
+	void reset(void *address, size_t file_length);
 
 private:
-	char *addr;
-	size_t length;
+	Blk alloc;
+	size_t file_length;
+	bool owned;
 };
 
 }
