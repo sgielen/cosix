@@ -117,6 +117,7 @@ thread::~thread() {
 	assert(exited);
 	assert(get_scheduler()->get_running_thread().get() != this);
 	bool on_stack;
+	(void)on_stack; /* unused */
 	assert(reinterpret_cast<uintptr_t>(&on_stack) < reinterpret_cast<uintptr_t>(kernel_stack_alloc.ptr)
 	    || reinterpret_cast<uintptr_t>(&on_stack) >= reinterpret_cast<uintptr_t>(kernel_stack_alloc.ptr) + kernel_stack_alloc.size);
 	deallocate(kernel_stack_alloc);
