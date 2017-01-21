@@ -16,7 +16,8 @@ void *thread_handler(void *w) {
 	int fd = *reinterpret_cast<int*>(w);
 	for(size_t j = 0; j < 5; ++j) {
 		// wait a bit
-		for(int i = 0; i < 50000000; ++i) {}
+		struct timespec ts = {.tv_sec = 1, .tv_nsec = 0};
+		clock_nanosleep(CLOCK_MONOTONIC, 0, &ts);
 
 		// send something
 		char buf[20];
