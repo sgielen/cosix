@@ -30,6 +30,7 @@ long uptime() {
 		return 0;
 	}
 	buf[r] = 0;
+	close(uptimefd);
 	return atol(buf);
 }
 
@@ -50,6 +51,8 @@ void program_run(const char *name, int bfd, argdata_t *ad) {
 	pdwait(pfd, &si, 0);
 	dprintf(stdout, "INIT: %s exited, exit status %d\n", name, si.si_status);
 	dprintf(stdout, "INIT: current uptime: %ld seconds\n", uptime());
+
+	close(pfd);
 }
 
 void start_unittests() {
@@ -65,6 +68,7 @@ void start_unittests() {
 	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 
 	program_run("unittests", bfd, ad);
+	close(bfd);
 }
 
 void start_tmpfs() {
@@ -101,6 +105,7 @@ void start_binary(const char *name) {
 	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 
 	program_run(name, bfd, ad);
+	close(bfd);
 }
 
 void program_main(const argdata_t *) {
