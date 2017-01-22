@@ -141,7 +141,7 @@ struct process_fd : public fd_t {
 	void remove_thread(shared_ptr<thread> t);
 
 private:
-	thread_list *threads;
+	thread_list *threads = nullptr;
 	void add_thread(shared_ptr<thread> thr);
 	void exit_all_threads();
 
@@ -152,7 +152,7 @@ private:
 	static const int PAGE_DIRECTORY_SIZE = 1024 /* entries */;
 
 	size_t fd_capacity = 0;
-	fd_mapping_t **fds;
+	fd_mapping_t **fds = nullptr;
 
 	// Page directory, filled with physical addresses to page tables
 	uint32_t *page_directory = 0;

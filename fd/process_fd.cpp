@@ -24,7 +24,6 @@ static bool process_already_terminated(void *userdata, thread_condition*) {
 
 process_fd::process_fd(const char *n)
 : fd_t(CLOUDABI_FILETYPE_PROCESS, n)
-, threads(nullptr)
 {
 	Blk page_directory_alloc = allocate_aligned(PAGE_SIZE, PAGE_SIZE);
 	if(page_directory_alloc.ptr == 0) {
