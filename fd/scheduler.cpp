@@ -85,7 +85,9 @@ void scheduler::schedule_next()
 		// next thread is not ready for running, unschedule it, we'll re-schedule it
 		// later
 		ready->data->unscheduled = true;
-		ready = ready->next;
+		auto *next = ready->next;
+		deallocate(ready);
+		ready = next;
 	}
 
 	// Note: it's possible no thread was ready, in which case running is
@@ -131,10 +133,7 @@ void scheduler::schedule_next()
 void scheduler::thread_ready(shared_ptr<thread> fd)
 {
 	// add to ready
-	thread_list *e = get_allocator()->allocate<thread_list>();
-	e->data = fd;
-	e->next = nullptr;
-
+	thread_list *e = allocate<thread_list>(fd);
 	append(&ready, e);
 }
 
