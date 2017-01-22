@@ -423,12 +423,22 @@ cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping
 		fds[i] = new_fds[i];
 	}
 
-	remove_all(&old_mappings, [&](mem_mapping_list * /*item*/) {
-		// TODO: free the physical pages behind the old mappings as well, but
-		// don't unmap them in the new page directory, they were mapped in
-		// the old one.
-		//item->data->unmap_completely();
+	// temporarily re-install the old page directory, so we unmap from the old page directory
+	auto new_page_directory = page_directory;
+	auto new_page_tables = page_tables;
+	page_directory = old_page_directory;
+	page_tables = old_page_tables;
+	iterate(old_mappings, [&](mem_mapping_list *item) {
+		item->data->unmap_completely();
+	});
+	page_directory = new_page_directory;
+	page_tables = new_page_tables;
+
+	remove_all(&old_mappings, [&](mem_mapping_list *) {
 		return true;
+	}, [&](mem_mapping_list *item) {
+		deallocate(item->data);
+		deallocate(item);
 	});
 
 	deallocate({old_page_directory, PAGE_SIZE});
