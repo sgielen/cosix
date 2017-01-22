@@ -64,6 +64,7 @@ void scheduler::thread_yield()
 			assert(dealloc->data);
 			weak_ptr<thread> thr_weak = dealloc->data;
 			dealloc->data.reset();
+			deallocate(dealloc);
 			dealloc = nullptr;
 			assert(thr_weak.expired());
 		}
@@ -114,10 +115,13 @@ void scheduler::schedule_next()
 				dealloc = old_thread;
 			} else if(old_thread->data->is_blocked()) {
 				old_thread->data->unscheduled = true;
-				// can safely forget about this thread here, since it's still running the process
-				// keeps it alive
+				// can safely forget about this thread here,
+				// since it's still running the process keeps
+				// it alive
 				assert(old_thread->data.use_count() > 1);
 				old_thread->data.reset();
+				deallocate(old_thread);
+				old_thread = nullptr;
 			}
 		}
 
