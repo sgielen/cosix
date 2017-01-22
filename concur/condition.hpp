@@ -23,6 +23,7 @@ struct thread_condition_waiter;
  */
 struct thread_condition {
 	thread_condition(thread_condition_signaler *signaler);
+	~thread_condition();
 	void satisfy();
 	void cancel();
 

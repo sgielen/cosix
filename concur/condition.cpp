@@ -10,6 +10,13 @@ thread_condition::thread_condition(thread_condition_signaler *s)
 , satisfied(false)
 {}
 
+thread_condition::~thread_condition()
+{
+	if(signaler) {
+		cancel();
+	}
+}
+
 void thread_condition::satisfy()
 {
 	auto thr = thread.lock();
@@ -17,11 +24,13 @@ void thread_condition::satisfy()
 	satisfied = true;
 	// unblock if it was blocked
 	thr->thread_unblock();
+	reset();
 }
 
 void thread_condition::cancel()
 {
 	signaler->cancel_condition(this);
+	reset();
 }
 
 void thread_condition::reset()
