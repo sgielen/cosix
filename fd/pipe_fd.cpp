@@ -9,7 +9,13 @@ pipe_fd::pipe_fd(size_t c, const char *n)
 , used(0)
 , capacity(c)
 {
-	buffer = get_allocator()->allocate<char>(capacity);
+	Blk b = allocate(capacity);
+	buffer = reinterpret_cast<char*>(b.ptr);
+}
+
+pipe_fd::~pipe_fd()
+{
+	deallocate({buffer, capacity});
 }
 
 size_t pipe_fd::read(void *dest, size_t count)
