@@ -67,22 +67,47 @@ const char *int_num_to_name(int int_no, bool *err_code) {
 	return str;
 }
 
+static void dump_stack(uintptr_t *ebp, void *eip) {
+	auto &stream = get_vga_stream();
+	stream << dec;
+	int frame = 0;
+	while(ebp && eip) {
+		stream << "frame " << frame << " at " << eip << "\n";
+		eip = reinterpret_cast<void*>(*(ebp + 1));
+		ebp = reinterpret_cast<uintptr_t*>(*ebp);
+		frame++;
+	}
+}
+
 __attribute__((noreturn)) static void fatal_exception(int int_no, int err_code, interrupt_state_t *regs) {
 	auto &stream = get_vga_stream();
-	stream << "\n\n=============================================\n";
-	stream << "Fatal exception during processing in kernel\n";
-	bool errcode;
-	stream << "Interrupt number: " << int_no << " - " << int_num_to_name(int_no, &errcode) << "\n";
-	if(errcode) {
-		stream << "Error Code: 0x" << hex << err_code << dec << "\n";
+	static int fatal_exception_occurred = 0;
+	fatal_exception_occurred++;
+	if(fatal_exception_occurred == 2) {
+		stream << "\nFatal exception occurred during handling of another fatal exception, aborting!\n";
 	}
+	if(fatal_exception_occurred >= 2) {
+		asm volatile("cli; halted2: hlt; jmp halted2;");
+	}
+	stream << "\nFatal exception during processing in kernel\n";
+	bool errcode;
+	stream << "Interrupt number: " << dec << int_no << " - " << int_num_to_name(int_no, &errcode);
+	if(errcode) {
+		stream << " - Error Code: 0x" << hex << err_code << dec;
+	}
+	stream << "\n";
 
 	auto thread = get_scheduler()->get_running_thread();
 	if(thread) {
 		stream << "Active process: " << thread->get_process() << " (\"" << thread->get_process()->name << "\")\n";
 	}
 
-	stream << "Instruction pointer at point of fault: 0x" << hex << regs->eip << dec << "\n";
+	stream << hex;
+	stream << "EAX " << regs->eax << "   EBX " << regs->ebx << "\nECX " << regs->ecx << "   EDX " << regs->edx << "\n";
+	stream << "ESP " << regs->esp << "   EBP " << regs->ebp << "\nESI " << regs->esi << "   EDI " << regs->edi << "\n";
+	stream << "EIP " << regs->eip << "   EFLAGS " << regs->eflags << "\n";
+	stream << "UESP " << regs->useresp << "  CS " << regs->cs << "  SS " << regs->ss << "\n";
+	stream << dec << "\n";
 
 	if(int_no == 0x0e /* Page fault */) {
 		if(err_code & 0x01) {
@@ -103,6 +128,8 @@ __attribute__((noreturn)) static void fatal_exception(int int_no, int err_code, 
 		asm volatile("mov %%cr2, %0" : "=a"(address));
 		stream << "Virtual address accessed: 0x" << hex << address << dec << "\n";
 	}
+
+	dump_stack(reinterpret_cast<uintptr_t*>(regs->ebp), reinterpret_cast<void*>(regs->eip));
 
 	stream << "\n";
 	kernel_panic("A fatal exception occurred.");

@@ -43,7 +43,7 @@ struct global_state {
 
 __attribute__((noreturn)) inline void kernel_panic(const char *message) {
 	if(global_state_ && global_state_->vga) {
-		*(global_state_->vga) << "!!! KERNEL PANIC - HALTING !!!\n" << message << "\n\n\n";
+		*(global_state_->vga) << "!!! KERNEL PANIC - HALTING !!!\n" << message;
 	}
 	asm volatile("cli; halted: hlt; jmp halted;");
 	while(1) {}
