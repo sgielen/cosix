@@ -51,6 +51,15 @@ process_fd::~process_fd()
 	assert(!running);
 	assert(threads == nullptr);
 
+	if(fds != nullptr) {
+		for(size_t i = 0; i < fd_capacity; ++i) {
+			close_fd(i);
+		}
+		deallocate({fds, fd_capacity * sizeof(fd_mapping_t*)});
+		fds = nullptr;
+		fd_capacity = 0;
+	}
+
 	remove_all(&mappings, [&](mem_mapping_list *item) {
 		item->data->unmap_completely();
 		return true;
@@ -138,11 +147,17 @@ cloudabi_fd_t process_fd::add_fd(shared_ptr<fd_t> fd, cloudabi_rights_t rights_b
 		fd_mapping_t **old_fds = fds;
 
 		fd_capacity += 100;
-		fds = get_allocator()->allocate<fd_mapping_t*>(fd_capacity * sizeof(fd_mapping_t*));
+
+		Blk fds_blk = allocate(fd_capacity * sizeof(fd_mapping_t*));
+		fds = reinterpret_cast<fd_mapping_t**>(fds_blk.ptr);
 
 		memcpy(fds, old_fds, old_capacity * sizeof(fd_mapping_t*));
-		memset(fds + old_capacity * sizeof(fd_mapping_t*), 0, (fd_capacity - old_capacity) * sizeof(fd_mapping_t*));
+		memset(fds + old_capacity, 0, (fd_capacity - old_capacity) * sizeof(fd_mapping_t*));
 		fdnum = old_capacity;
+
+		if(old_fds != nullptr) {
+			deallocate({old_fds, old_capacity * sizeof(fd_mapping_t*)});
+		}
 	}
 
 	fd_mapping_t *mapping = get_allocator()->allocate<fd_mapping_t>();
