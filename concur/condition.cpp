@@ -101,7 +101,10 @@ thread_condition_waiter::thread_condition_waiter()
 thread_condition_waiter::~thread_condition_waiter()
 {
 	if(conditions != nullptr) {
-		finish();
+		auto *list = finish();
+		remove_all(&list, [](thread_condition_list *) {
+			return true;
+		});
 	}
 }
 
