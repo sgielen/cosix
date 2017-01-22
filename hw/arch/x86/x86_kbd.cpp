@@ -33,6 +33,7 @@ cloudabi_errno_t x86_kbd::init() {
 
 void x86_kbd::handle_irq(uint8_t irq) {
 	assert(irq == 1);
+	UNUSED(irq);
 
 	// keyboard input!
 	// wait for the ready bit to turn on
