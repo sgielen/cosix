@@ -199,12 +199,12 @@ void interrupt_handler::handle(interrupt_state_t *regs) {
 		// ensure we don't have a shared ptr to the thread on the stack.
 		assert(running_thread.use_count() > 1);
 		thread *thr = running_thread.get();
-		weak_ptr<thread> weak_thread = running_thread;
 		running_thread.reset();
 		thr->interrupt(int_no, err_code);
 		// interrupt returned, so this thread survived
-		running_thread = weak_thread.lock();
+		running_thread = get_scheduler()->get_running_thread();
 		assert(running_thread);
+		assert(running_thread.get() == thr);
 	}
 	// Any exceptions in the kernel lead to immediate kernel_panic
 	else if(int_no < 0x20 || int_no >= 0x30) {
