@@ -26,6 +26,12 @@ struct tracked_allocation {
 	cloudabi_timestamp_t time;
 };
 
+namespace track_detail {
+	cloudabi_timestamp_t get_time();
+	void dump_allocation(tracked_allocation*, cloudabi_timestamp_t);
+	size_t dump_allocations(tracked_allocation*, bool, cloudabi_timestamp_t, cloudabi_timestamp_t);
+}
+
 template <typename Allocator>
 struct AllocationTracker {
 	AllocationTracker(Allocator *a)
@@ -139,8 +145,29 @@ struct AllocationTracker {
 		allocator->deallocate(info->blk);
 	}
 
+	// Track all allocations done in this period, unless they are
+	// deallocated.
 	void start_tracking() {
+		last_started_tracking = track_detail::get_time();
 		tracking = true;
+	}
+
+	// Remain tracking deallocations, but don't track allocations anymore.
+	void stop_tracking() {
+		last_stopped_tracking = track_detail::get_time();
+		tracking = false;
+	}
+
+	// Dump all allocations that are still being tracked. If you call
+	// start_tracking(), wait a while, then call stop_tracking() and wait
+	// another while, then this function will print all remaining
+	// allocations (which could be memory leaks) and return the amount of
+	// allocations. You could, for example, while debugging call
+	// start_tracking(), do something a million times, stop_tracking() and
+	// assert that the number of remaining allocations is less than some
+	// low amount.
+	size_t dump_allocations() {
+		return track_detail::dump_allocations(head, tracking, last_started_tracking, last_stopped_tracking);
 	}
 
 	tracked_allocation *get_head() {
@@ -151,7 +178,10 @@ private:
 	Allocator *allocator;
 	tracked_allocation *head = nullptr;
 	tracked_allocation *tail = nullptr;
+
 	bool tracking = false;
+	cloudabi_timestamp_t last_started_tracking = 0;
+	cloudabi_timestamp_t last_stopped_tracking = 0;
 };
 
 }
