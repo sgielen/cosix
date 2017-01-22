@@ -51,6 +51,7 @@ private:
  */
 struct thread_condition_signaler {
 	thread_condition_signaler();
+	~thread_condition_signaler();
 
 	typedef bool (*thread_condition_satisfied_function_t)(void*, thread_condition*);
 

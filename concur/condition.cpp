@@ -36,6 +36,22 @@ thread_condition_signaler::thread_condition_signaler()
 , conditions(nullptr)
 {}
 
+thread_condition_signaler::~thread_condition_signaler()
+{
+	// TODO: when there are still conditions left, we will never trigger
+	// them so the threads will never wake up if they are waiting only on
+	// this condition. This can happen, for example, if a file descriptor
+	// is closed while another thread is waiting for read. Should we add
+	// something like a 'failed trigger', so that at least the thread can
+	// wake up and potentially handle the failed condition?
+	while(conditions) {
+		conditions->data->signaler = nullptr; /* we're going away, remove dangling pointer */
+		auto *next = conditions->next;
+		deallocate(conditions);
+		conditions = next;
+	}
+}
+
 void thread_condition_signaler::set_already_satisfied_function(thread_condition_satisfied_function_t function, void *userdata) {
 	satisfied_function = function;
 	satisfied_function_userdata = userdata;
@@ -67,8 +83,8 @@ void thread_condition_signaler::condition_notify() {
 	if(conditions) {
 		thread_condition_list *item = conditions;
 		conditions = item->next;
-		item->next = nullptr;
 		item->data->satisfy();
+		deallocate(item);
 	}
 }
 
