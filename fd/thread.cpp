@@ -668,8 +668,8 @@ void thread::handle_syscall() {
 
 			// return an event when any of these subscriptions happen.
 			thread_condition_waiter w;
-			thread_condition *conditions = get_allocator()->allocate<thread_condition>(
-				sizeof(thread_condition) * nsubscriptions);
+			auto conditions_alloc = allocate(sizeof(thread_condition) * nsubscriptions);
+			thread_condition *conditions = reinterpret_cast<thread_condition*>(conditions_alloc.ptr);
 
 			struct thread_condition_userdata {
 				const cloudabi_subscription_t *subscription;
@@ -685,7 +685,7 @@ void thread::handle_syscall() {
 			for(size_t subi = 0; subi < nsubscriptions; ++subi) {
 				cloudabi_subscription_t const &i = in[subi];
 				thread_condition &condition = conditions[subi];
-				thread_condition_userdata *userdata = get_allocator()->allocate<thread_condition_userdata>();
+				thread_condition_userdata *userdata = allocate<thread_condition_userdata>();
 				userdata->subscription = &i;
 				userdata->error = 0;
 
@@ -788,6 +788,14 @@ void thread::handle_syscall() {
 					}
 				}
 			});
+			remove_all(&satisfied, [](thread_condition_list*){
+				return true;
+			});
+			for(size_t subi = 0; subi < nsubscriptions; ++subi) {
+				thread_condition &condition = conditions[subi];
+				deallocate(reinterpret_cast<thread_condition_userdata*>(condition.userdata));
+			}
+			deallocate(conditions_alloc);
 		}
 	} else if(syscall == 22) {
 		// lock_unlock(ebx=lock, ecx=scope)
