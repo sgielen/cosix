@@ -19,7 +19,7 @@ struct tracked_allocation {
 	tracked_allocation *prev = nullptr;
 	tracked_allocation *next = nullptr;
 
-	void *caller[4] = {nullptr, nullptr, nullptr, nullptr};
+	void *caller[6] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
 
 	Blk blk;
 	size_t user_size;
