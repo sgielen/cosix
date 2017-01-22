@@ -49,6 +49,9 @@ struct AllocationTracker {
 		assert(memcmp(prefix, info->alloc_prefix, sizeof(info->alloc_prefix)) == 0);
 		assert(memcmp(suffix, info->alloc_suffix, sizeof(info->alloc_suffix)) == 0);
 		assert(size == info->user_size);
+		UNUSED(prefix);
+		UNUSED(suffix);
+		UNUSED(size);
 	}
 
 	Blk allocate_aligned(size_t s, size_t alignment) {
