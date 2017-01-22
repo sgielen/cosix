@@ -163,8 +163,7 @@ cloudabi_fd_t process_fd::add_fd(shared_ptr<fd_t> fd, cloudabi_rights_t rights_b
 		}
 	}
 
-	fd_mapping_t *mapping = get_allocator()->allocate<fd_mapping_t>();
-	new (mapping) fd_mapping_t();
+	fd_mapping_t *mapping = allocate<fd_mapping_t>();
 	assert(fd);
 	mapping->fd = fd;
 	mapping->rights_base = rights_base;
@@ -196,6 +195,7 @@ cloudabi_errno_t process_fd::close_fd(cloudabi_fd_t num) {
 	auto res = get_fd(&mapping, num, 0);
 	if(res == 0) {
 		mapping->fd.reset();
+		deallocate(fds[num]);
 		fds[num] = 0;
 	}
 	return res;
@@ -626,8 +626,7 @@ void process_fd::fork(shared_ptr<thread> otherthread) {
 		fd_mapping_t *mapping = nullptr;
 
 		if(old_mapping != nullptr) {
-			mapping = get_allocator()->allocate<fd_mapping_t>();
-			new (mapping) fd_mapping_t();
+			mapping = allocate<fd_mapping_t>();
 			mapping->fd = old_mapping->fd;
 			mapping->rights_base = old_mapping->rights_base;
 			mapping->rights_inheriting = old_mapping->rights_inheriting;
