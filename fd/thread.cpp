@@ -990,7 +990,7 @@ void thread::acquire_userspace_lock(_Atomic(cloudabi_lock_t) *lock, cloudabi_eve
 		thread_block();
 	} else {
 		lock_info->number_of_readers += 1;
-		lock_info->readers_cv->wait();
+		lock_info->readers_cv.wait();
 	}
 
 	// Verify that this thread has the lock now
@@ -1054,7 +1054,7 @@ void thread::drop_userspace_lock(_Atomic(cloudabi_lock_t) *lock)
 	// lock is no longer kernel-managed, because it's now contention-free
 	if(lock_info != nullptr) {
 		*lock = lock_info->number_of_readers;
-		lock_info->readers_cv->broadcast();
+		lock_info->readers_cv.broadcast();
 		process->forget_userland_lock_info(lock);
 	} else {
 		*lock = 0;
@@ -1066,7 +1066,7 @@ void thread::wait_userspace_cv(_Atomic(cloudabi_condvar_t) *condvar)
 	userland_condvar_waiters_t *condvar_cv = process->get_or_create_userland_condvar_cv(condvar);
 	condvar_cv->waiters += 1;
 	*condvar = 1;
-	condvar_cv->cv->wait();
+	condvar_cv->cv.wait();
 }
 
 void thread::signal_userspace_cv(_Atomic(cloudabi_condvar_t) *condvar, cloudabi_nthreads_t nwaiters)
@@ -1081,12 +1081,12 @@ void thread::signal_userspace_cv(_Atomic(cloudabi_condvar_t) *condvar, cloudabi_
 	// thread wakes up, it already atomically has the lock
 	if(condvar_cv->waiters <= nwaiters) {
 		*condvar = 0;
-		condvar_cv->cv->broadcast();
+		condvar_cv->cv.broadcast();
 		process->forget_userland_condvar_cv(condvar);
 	} else {
 		while(nwaiters-- > 0) {
 			condvar_cv->waiters -= 1;
-			condvar_cv->cv->notify();
+			condvar_cv->cv.notify();
 		}
 	}
 }

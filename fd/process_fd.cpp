@@ -746,12 +746,8 @@ userland_lock_waiters_t *process_fd::get_or_create_userland_lock_info(_Atomic(cl
 		return res;
 	}
 
-	userland_lock_waiters_t *new_info = get_allocator()->allocate<userland_lock_waiters_t>();
+	userland_lock_waiters_t *new_info = allocate<userland_lock_waiters_t>();
 	new_info->lock = lock;
-	new_info->readers_cv = get_allocator()->allocate<cv_t>();
-	new (new_info->readers_cv) cv_t();
-	new_info->number_of_readers = 0;
-	new_info->waiting_writers = nullptr;
 
 	userland_lock_waiters_list *new_list = allocate<userland_lock_waiters_list>(new_info);
 	append(&userland_locks, new_list);
@@ -762,6 +758,9 @@ void process_fd::forget_userland_lock_info(_Atomic(cloudabi_lock_t) *lock)
 {
 	remove_one(&userland_locks, [&](userland_lock_waiters_list *item) {
 		return item->data->lock == lock;
+	}, [&](userland_lock_waiters_list *item) {
+		deallocate(item->data);
+		deallocate(item);
 	});
 }
 
@@ -780,11 +779,8 @@ userland_condvar_waiters_t *process_fd::get_or_create_userland_condvar_cv(_Atomi
 		return res;
 	}
 
-	userland_condvar_waiters_t *new_info = get_allocator()->allocate<userland_condvar_waiters_t>();
+	userland_condvar_waiters_t *new_info = allocate<userland_condvar_waiters_t>();
 	new_info->condvar = condvar;
-	new_info->waiters = 0;
-	new_info->cv = get_allocator()->allocate<cv_t>();
-	new (new_info->cv) cv_t();
 
 	userland_condvar_waiters_list *new_list = allocate<userland_condvar_waiters_list>(new_info);
 	append(&userland_condvars, new_list);
@@ -795,6 +791,9 @@ void process_fd::forget_userland_condvar_cv(_Atomic(cloudabi_condvar_t) *condvar
 {
 	remove_one(&userland_condvars, [&](userland_condvar_waiters_list *item) {
 		return item->data->condvar == condvar;
+	}, [&](userland_condvar_waiters_list *item) {
+		deallocate(item->data);
+		deallocate(item);
 	});
 }
 
