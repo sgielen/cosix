@@ -332,6 +332,10 @@ cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping
 	// process address space
 	Blk elf_buffer_blk = allocate(10 * 1024 * 1024);
 	uint8_t *elf_buffer = reinterpret_cast<uint8_t*>(elf_buffer_blk.ptr);
+	if(elf_buffer == nullptr) {
+		return ENOMEM;
+	}
+
 	size_t buffer_size = 0;
 	do {
 		size_t read = fd->read(&elf_buffer[buffer_size], 1024);

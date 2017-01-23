@@ -38,6 +38,9 @@ thread::thread(process_fd *p, void *stack_location, void *auxv_address, void *en
 	// initialize the stack
 	kernel_stack_size = 0x10000 /* 64 kb */;
 	kernel_stack_alloc = allocate_aligned(kernel_stack_size, process_fd::PAGE_SIZE);
+	if(kernel_stack_alloc.ptr == nullptr) {
+		kernel_panic("Failed to allocate kernel stack");
+	}
 
 	// initialize all registers and return state to zero
 	memset(&state, 0, sizeof(state));
