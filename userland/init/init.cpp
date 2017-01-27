@@ -38,11 +38,11 @@ argdata_t *argdata_create_string(const char *value) {
 	return argdata_create_str(value, strlen(value));
 }
 
-void program_run(const char *name, int bfd, argdata_t *ad) {
+int program_run(const char *name, int bfd, argdata_t *ad) {
 	int pfd = program_spawn(bfd, ad);
 	if(pfd < 0) {
 		dprintf(stdout, "INIT: %s failed to start: %s\n", name, strerror(errno));
-		return;
+		return -1;
 	}
 
 	dprintf(stdout, "INIT: %s started.\n", name);
@@ -53,13 +53,14 @@ void program_run(const char *name, int bfd, argdata_t *ad) {
 	dprintf(stdout, "INIT: current uptime: %ld seconds\n", uptime());
 
 	close(pfd);
+	return si.si_status;
 }
 
-void start_unittests() {
+int start_unittests() {
 	int bfd = openat(bootfs, "unittests", O_RDONLY);
 	if(bfd < 0) {
 		dprintf(stdout, "Won't run unittests, because I failed to open them: %s\n", strerror(errno));
-		return;
+		return -1;
 	}
 
 	dprintf(stdout, "Running unit tests...\n");
@@ -67,8 +68,9 @@ void start_unittests() {
 	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(pseudofd), argdata_create_int(1)};
 	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 
-	program_run("unittests", bfd, ad);
+	auto res = program_run("unittests", bfd, ad);
 	close(bfd);
+	return res;
 }
 
 void start_tmpfs() {
@@ -91,11 +93,11 @@ void start_tmpfs() {
 	}
 }
 
-void start_binary(const char *name) {
+int start_binary(const char *name) {
 	int bfd = openat(bootfs, name, O_RDONLY);
 	if(bfd < 0) {
 		dprintf(stdout, "Failed to open %s: %s\n", name, strerror(errno));
-		return;
+		return 1;
 	}
 
 	dprintf(stdout, "Init going to program_spawn() %s...\n", name);
@@ -104,8 +106,9 @@ void start_binary(const char *name) {
 	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(pseudofd)};
 	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 
-	program_run(name, bfd, ad);
+	auto r = program_run(name, bfd, ad);
 	close(bfd);
+	return r;
 }
 
 void program_main(const argdata_t *) {
