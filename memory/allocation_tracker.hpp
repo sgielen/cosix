@@ -22,6 +22,7 @@ struct tracked_allocation {
 	void *caller[6] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
 
 	Blk blk;
+	bool active = true;
 	size_t user_size;
 	cloudabi_timestamp_t time;
 };
@@ -46,6 +47,7 @@ struct AllocationTracker {
 		char *suffix = buf + info->user_size;
 
 		assert(memcmp(original_alloc, "ALLCMGIC", sizeof(info->track_marker)) == 0);
+		assert(info->active);
 		assert(memcmp(prefix, info->alloc_prefix, sizeof(info->alloc_prefix)) == 0);
 		assert(memcmp(suffix, info->alloc_suffix, sizeof(info->alloc_suffix)) == 0);
 		assert(size == info->user_size);
@@ -124,6 +126,7 @@ struct AllocationTracker {
 
 		char *original_alloc = actual_alloc - sizeof(tracked_allocation) - sizeof(tracked_allocation::alloc_prefix);
 		tracked_allocation *info = reinterpret_cast<tracked_allocation*>(original_alloc);
+		info->active = false;
 
 		// take info out of the linked list
 		auto *prev = info->prev;
