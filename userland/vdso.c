@@ -169,8 +169,8 @@ cloudabi_sys_fd_read(
 	*nread = 0;
 	for(size_t i = 0; i < iovcnt; ++i) {
 		reg_eax = 3;
-		reg_ecx = iov[i].iov_base;
-		reg_edx = iov[i].iov_len;
+		reg_ecx = iov[i].buf;
+		reg_edx = iov[i].buf_len;
 		asm volatile("int $0x80"
 			: "+r"(reg_eax), "+r"(reg_edx) : "r"(reg_ebx), "r"(reg_ecx)
 			: "memory");
@@ -266,8 +266,8 @@ cloudabi_sys_fd_write(
 	*nwritten = 0;
 	for(size_t i = 0; i < iovcnt; ++i) {
 		reg_eax = 2;
-		reg_ecx = iov[i].iov_base;
-		reg_edx = iov[i].iov_len;
+		reg_ecx = iov[i].buf;
+		reg_edx = iov[i].buf_len;
 		asm volatile("int $0x80"
 			: "+r"(reg_eax), "+r"(reg_edx) : "r"(reg_ecx), "r"(reg_ebx)
 			: "memory");
