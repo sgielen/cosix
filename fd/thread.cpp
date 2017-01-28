@@ -8,6 +8,7 @@
 #include <rng/rng.hpp>
 #include <oslibc/assert.hpp>
 #include <time/clock_store.hpp>
+#include <proc/syscalls.hpp>
 
 using namespace cloudos;
 
@@ -867,30 +868,34 @@ void thread::handle_syscall() {
 		state.ecx = mapping->fd->seek(offset, whence);
 		state.eax = mapping->fd->error;
 	} else if(syscall == 26) {
-		// sys_clock_res_get(ebx=clock_id, ecx=resolution)
-		cloudabi_clockid_t clockid = state.ebx;
-		auto resolution = reinterpret_cast<cloudabi_timestamp_t*>(state.ecx);
-		auto clock = get_clock_store()->get_clock(clockid);
-		if(clock == nullptr) {
-			get_vga_stream() << "Unknown clock ID " << clockid << "\n";
-			state.eax = EINVAL;
+		// sys_clock_res_get
+		syscall_context c(reinterpret_cast<void*>(state.esp));
+		auto error = syscall_clock_res_get(c);
+		if(error) {
+			// failed, so set carry bit
+			state.eflags |= 0x1;
+			state.eax = error;
+			state.edx = 0;
 		} else {
-			*resolution = clock->get_resolution();
-			state.eax = 0;
+			// succeeded, unset carry bit
+			state.eflags &= ~0x1;
+			state.eax = c.result & 0xffffffff;
+			state.edx = c.result >> 32;
 		}
 	} else if(syscall == 27) {
-		// sys_clock_time_get(ebx=clock_id, ecx=precision, edx=time)
-		cloudabi_clockid_t clockid = state.ebx;
-		cloudabi_timestamp_t precision = state.ecx;
-		auto time = reinterpret_cast<cloudabi_timestamp_t*>(state.edx);
-
-		auto clock = get_clock_store()->get_clock(clockid);
-		if(clock == nullptr) {
-			get_vga_stream() << "Unknown clock ID " << clockid << "\n";
-			state.eax = EINVAL;
+		// sys_clock_time_get
+		syscall_context c(reinterpret_cast<void*>(state.esp));
+		auto error = syscall_clock_time_get(c);
+		if(error) {
+			// failed, so set carry bit
+			state.eflags |= 0x1;
+			state.eax = error;
+			state.edx = 0;
 		} else {
-			*time = clock->get_time(precision);
-			state.eax = 0;
+			// succeeded, unset carry bit
+			state.eflags &= ~0x1;
+			state.eax = c.result & 0xffffffff;
+			state.edx = c.result >> 32;
 		}
 	} else {
 		get_vga_stream() << "Syscall " << state.eax << " unknown, signalling process\n";
