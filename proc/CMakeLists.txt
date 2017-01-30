@@ -4,5 +4,14 @@ if(BAREMETAL_ENABLED)
 		syscall_context.hpp
 		syscalls.hpp
 		syscall/clock_syscalls.cpp
+		syscall/concur_syscalls.cpp
+		syscall/fd_syscalls.cpp
+		syscall/file_syscalls.cpp
+		syscall/mem_syscalls.cpp
+		syscall/poll_syscalls.cpp
+		syscall/proc_syscalls.cpp
+		syscall/random_syscalls.cpp
+		syscall/sock_syscalls.cpp
+		syscall/thread_syscalls.cpp
 	)
 endif()

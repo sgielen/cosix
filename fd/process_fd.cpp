@@ -628,13 +628,32 @@ void process_fd::fork(shared_ptr<thread> otherthread) {
 	strncpy(name, otherprocess->name, sizeof(name));
 	strncat(name, "->forked", sizeof(name) - strlen(name) - 1);
 
+	// set return values for the child. The thread constructor immediately
+	// copies the state to an iret frame on the initial kernel stack, so
+	// this needs to be done before the thread is constructed.
+	interrupt_state_t state;
+	otherthread->get_return_state(&state);
+	auto old_eax = state.eax;
+	auto old_edx = state.edx;
+	auto old_eflags = state.eflags;
+	state.eax = CLOUDABI_PROCESS_CHILD;
+	state.edx = MAIN_THREAD;
+	state.eflags &= ~0x1; /* set carry bit */
+	otherthread->set_return_state(&state);
+
 	auto mainthread = make_shared_aligned<thread>(16, this, otherthread);
+
+	state.eax = old_eax;
+	state.edx = old_edx;
+	state.eflags = old_eflags;
+	otherthread->set_return_state(&state);
 
 	running = true;
 
 	// dup all fd's
 	fd_capacity = otherprocess->fd_capacity;
-	fds = get_allocator()->allocate<fd_mapping_t*>(fd_capacity * sizeof(fd_mapping_t*));
+	Blk fds_blk = allocate(fd_capacity * sizeof(fd_mapping_t*));
+	fds = reinterpret_cast<fd_mapping_t**>(fds_blk.ptr);
 	for(cloudabi_fd_t i = 0; i < fd_capacity; ++i) {
 		fd_mapping_t *old_mapping = otherprocess->fds[i];
 		fd_mapping_t *mapping = nullptr;

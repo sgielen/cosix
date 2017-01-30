@@ -42,6 +42,10 @@ struct thread : enable_shared_from_this<thread> {
 
 	~thread();
 
+	inline cloudabi_tid_t get_thread_id() {
+		return thread_id;
+	}
+
 	void interrupt(int int_no, int err_code);
 	void handle_syscall();
 
@@ -64,13 +68,13 @@ struct thread : enable_shared_from_this<thread> {
 	void thread_block();
 	void thread_unblock();
 
-private:
 	void acquire_userspace_lock(_Atomic(cloudabi_lock_t) *lock, cloudabi_eventtype_t locktype);
 	void drop_userspace_lock(_Atomic(cloudabi_lock_t) *lock);
 
 	void wait_userspace_cv(_Atomic(cloudabi_condvar_t) *condvar);
 	void signal_userspace_cv(_Atomic(cloudabi_condvar_t) *condvar, cloudabi_nthreads_t nwaiters);
 
+private:
 	process_fd *process;
 	// note: only the bottom 30 bits may be used
 	cloudabi_tid_t thread_id;
