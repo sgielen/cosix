@@ -22,8 +22,11 @@ void *thread_handler(void *w) {
 		// send something
 		char buf[20];
 		snprintf(buf, sizeof(buf), "This is message #%d", j + 1);
-		dprintf(stdout, "tx: %s\n", buf);
-		write(fd, buf, strlen(buf));
+		if(write(fd, buf, strlen(buf)) < 0) {
+			dprintf(stdout, "tx failed: %s\n", strerror(errno));
+		} else {
+			dprintf(stdout, "tx: %s\n", buf);
+		}
 	}
 	close(fd);
 	return nullptr;
@@ -45,11 +48,11 @@ void program_main(const argdata_t *) {
 	for(size_t i = 0; i < 5; ++i) {
 		ssize_t count = read(fds[0], buf, sizeof(buf));
 		if(count <= 0) {
-			dprintf(stdout, "pipe_test: read() failed: %s\n", strerror(errno));
-			break;
+			dprintf(stdout, "rx failed: %s\n", strerror(errno));
+		} else {
+			buf[count] = 0;
+			dprintf(stdout, "rx: %s\n", buf);
 		}
-		buf[count] = 0;
-		dprintf(stdout, "rx: %s\n", buf);
 	}
 
 	pthread_exit(NULL);
