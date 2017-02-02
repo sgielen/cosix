@@ -3,13 +3,16 @@
 #include <stdlib.h>
 #include <cassert>
 
+using namespace cosix;
+
 tmpfs::tmpfs(cloudabi_device_t d)
-: device(d)
+: filesystem(d)
 {
 	// make directory entry /
-	file_entry_ptr root(new file_entry);
+	file_entry_ptr root(new tmpfs_file_entry);
 	cloudabi_inode_t root_inode = reinterpret_cast<cloudabi_inode_t>(root.get());
-	root->device = device;
+
+	root->device = get_device();
 	root->inode = root_inode;
 	root->type = CLOUDABI_FILETYPE_DIRECTORY;
 	inodes[root_inode] = root;
@@ -22,7 +25,7 @@ tmpfs::tmpfs(cloudabi_device_t d)
 	pseudo_fds[0] = root_pseudo;
 }
 
-file_entry_ptr tmpfs::lookup(pseudofd_t pseudo, const char *path, size_t len, cloudabi_lookupflags_t lookupflags)
+file_entry tmpfs::lookup(pseudofd_t pseudo, const char *path, size_t len, cloudabi_lookupflags_t lookupflags)
 {
 	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
 
@@ -31,7 +34,7 @@ file_entry_ptr tmpfs::lookup(pseudofd_t pseudo, const char *path, size_t len, cl
 	if(it == directory->files.end()) {
 		throw filesystem_error(ENOENT);
 	} else {
-		return it->second;
+		return *it->second;
 	}
 }
 
@@ -78,9 +81,9 @@ cloudabi_inode_t tmpfs::create(pseudofd_t pseudo, const char *path, size_t len, 
 		throw filesystem_error(EEXIST);
 	}
 
-	file_entry_ptr entry(new file_entry);
+	file_entry_ptr entry(new tmpfs_file_entry);
 	cloudabi_inode_t inode = reinterpret_cast<cloudabi_inode_t>(entry.get());
-	entry->device = device;
+	entry->device = get_device();
 	entry->inode = inode;
 	entry->type = type;
 

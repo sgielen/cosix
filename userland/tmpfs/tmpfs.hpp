@@ -2,22 +2,16 @@
 
 #include <map>
 #include <string>
-#include <cloudabi_types.h>
 #include <stdexcept>
-#include "../../fd/reverse_proto.hpp"
+#include <cosix/filesystem.hpp>
 #include <memory>
 #include <vector>
 
-using reverse_proto::pseudofd_t;
+struct tmpfs_file_entry;
 
-struct file_entry;
-typedef std::shared_ptr<file_entry> file_entry_ptr;
+typedef std::shared_ptr<tmpfs_file_entry> file_entry_ptr;
 
-struct file_entry {
-	cloudabi_device_t device;
-	cloudabi_inode_t inode;
-	cloudabi_filetype_t type;
-
+struct tmpfs_file_entry : public cosix::file_entry {
 	std::map<std::string, file_entry_ptr> files;
 	std::string contents;
 };
@@ -28,32 +22,25 @@ struct pseudo_fd_entry {
 
 typedef std::shared_ptr<pseudo_fd_entry> pseudo_fd_ptr;
 
-struct filesystem_error : public std::runtime_error {
-	filesystem_error(cloudabi_errno_t e)
-	: std::runtime_error(strerror(e))
-	, error(e)
-	{}
-
-	cloudabi_errno_t error;
-};
-
 /** A temporary filesystem implementation.
  */
-struct tmpfs {
-	tmpfs(cloudabi_device_t device_id);
+struct tmpfs : public cosix::filesystem {
+	tmpfs(cloudabi_device_t);
 
-	file_entry_ptr lookup(pseudofd_t pseudo, const char *path, size_t len, cloudabi_lookupflags_t lookupflags);
-	pseudofd_t open(cloudabi_inode_t inode, int flags);
-	void unlink(pseudofd_t pseudo, const char *path, size_t len, cloudabi_ulflags_t unlinkflags);
-	cloudabi_inode_t create(pseudofd_t pseudo, const char *path, size_t len, cloudabi_filetype_t type);
-	void close(pseudofd_t pseudo);
-	size_t pread(pseudofd_t pseudo, off_t offset, char *dest, size_t requested);
-	void pwrite(pseudofd_t pseudo, off_t offset, const char *buf, size_t length);
+	typedef cosix::file_entry file_entry;
+	typedef cosix::pseudofd_t pseudofd_t;
 
-	size_t readdir(pseudofd_t pseudo, char *buffer, size_t buflen, cloudabi_dircookie_t &cookie);
+	file_entry lookup(pseudofd_t pseudo, const char *path, size_t len, cloudabi_lookupflags_t lookupflags) override;
+	pseudofd_t open(cloudabi_inode_t inode, int flags) override;
+	void unlink(pseudofd_t pseudo, const char *path, size_t len, cloudabi_ulflags_t unlinkflags) override;
+	cloudabi_inode_t create(pseudofd_t pseudo, const char *path, size_t len, cloudabi_filetype_t type) override;
+	void close(pseudofd_t pseudo) override;
+	size_t pread(pseudofd_t pseudo, off_t offset, char *dest, size_t requested) override;
+	void pwrite(pseudofd_t pseudo, off_t offset, const char *buf, size_t length) override;
+
+	size_t readdir(pseudofd_t pseudo, char *buffer, size_t buflen, cloudabi_dircookie_t &cookie) override;
 
 private:
-	cloudabi_device_t device;
 	std::map<cloudabi_inode_t, file_entry_ptr> inodes;
 	std::map<pseudofd_t, pseudo_fd_ptr> pseudo_fds;
 
