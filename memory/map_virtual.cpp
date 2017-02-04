@@ -166,6 +166,10 @@ Blk map_virtual::allocate(size_t size) {
 #ifndef NDEBUG
 	// In debug mode, fill all allocated pages with 0xda, a marker for use
 	// of uninitialized memory.
+	// TODO: I should test regularly with various values for this member,
+	// since different values may lead to various kinds of bugs when memory
+	// is not initialized correctly.
+	//memset(first_ptr, 0xad, size);
 	memset(first_ptr, 0xda, size);
 #endif
 
