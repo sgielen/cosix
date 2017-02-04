@@ -111,13 +111,21 @@ void mem_mapping_t::ensure_backed(size_t page)
 	uint16_t page_entry_num = reinterpret_cast<uint64_t>(address) >> 12 & 0x03ff;
 	uint32_t &page_entry = page_table[page_entry_num];
 	if(!(page_entry & 0x1)) {
-		Blk b = get_page_allocator()->allocate_phys();
+		Blk b = get_map_virtual()->allocate(PAGE_SIZE);
 		if(b.ptr == 0) {
 			kernel_panic("Failed to allocate page to back a mapping");
 		}
 
 		assert((reinterpret_cast<uint32_t>(b.ptr) & 0xfff) == 0);
-		page_entry = reinterpret_cast<uint32_t>(b.ptr) | 0x07; // TODO: use the correct permission bits
+		// Fill mapping with zeroes
+		// TODO: if this mapping is fd-backed, fill it with fd contents
+		// instead of zeroes
+		memset(b.ptr, 0, PAGE_SIZE);
+
+		// Re-map to userland
+		void *phys = get_map_virtual()->to_physical_address(b.ptr);
+		page_entry = reinterpret_cast<uint32_t>(phys) | 0x07; // TODO: use the correct permission bits
+		get_map_virtual()->unmap_page_only(b.ptr);
 	}
 }
 

@@ -26,6 +26,7 @@ struct map_virtual {
 
 	Blk allocate(size_t bytes);
 	void deallocate(Blk b);
+	void unmap_page_only(void *logical_address);
 
 	Blk allocate_aligned(size_t s, size_t alignment) {
 		// Our allocations are always 4096-bytes aligned, other alignments

@@ -180,23 +180,29 @@ void map_virtual::deallocate(Blk b) {
 	size_t num_pages = num_pages_for_size(b.size);
 
 	for(size_t page = 0; page < num_pages; ++page) {
-		uint32_t ptr = reinterpret_cast<uint32_t>(b.ptr) + PAGE_SIZE * page;
-		auto *phys_addr = to_physical_address(reinterpret_cast<void*>(ptr));
+		void *ptr = reinterpret_cast<void*>(reinterpret_cast<uint32_t>(b.ptr) + PAGE_SIZE * page);
+		auto *phys_addr = to_physical_address(ptr);
 		assert(phys_addr != 0);
 
-		uint16_t page_table_num = (ptr >> 22) - KERNEL_PAGE_OFFSET;
-		uint16_t page_entry_num = ptr >> 12 & 0x03ff;
-
-		// Mark the virtual page as unused, also flush TLB cache
-		kernel_page_tables[page_table_num][page_entry_num] = 0;
-		asm volatile ( "invlpg (%0)" : : "b"(ptr) : "memory");
-
-		// Allow handing out the virtual page again
-		vmem_bitmap.unset(page_table_num * PAGING_TABLE_SIZE + page_entry_num);
+		// Unmap virtual page
+		unmap_page_only(ptr);
 
 		// Allow handing out the physical page again
 		pa->deallocate_phys({reinterpret_cast<void*>(phys_addr), PAGE_SIZE});
 	}
+}
+
+void map_virtual::unmap_page_only(void *virtual_address) {
+	uint32_t addr = reinterpret_cast<uint32_t>(virtual_address);
+	uint16_t page_table_num = (addr >> 22) - KERNEL_PAGE_OFFSET;
+	uint16_t page_entry_num = addr >> 12 & 0x03ff;
+
+	// Mark the virtual page as unused, also flush TLB cache
+	kernel_page_tables[page_table_num][page_entry_num] = 0;
+	asm volatile ( "invlpg (%0)" : : "b"(addr) : "memory");
+
+	// Allow handing out the virtual page again
+	vmem_bitmap.unset(page_table_num * PAGING_TABLE_SIZE + page_entry_num);
 }
 
 void map_virtual::fill_kernel_pages(uint32_t *page_directory) {
