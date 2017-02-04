@@ -25,7 +25,6 @@ static inline T *allocate_on_stack(uint32_t &useresp) {
 thread::thread(process_fd *p, void *stack_location, void *auxv_address, void *entrypoint, cloudabi_tid_t t)
 : process(p)
 , thread_id(t)
-, exited(false)
 , userland_stack_top(stack_location)
 {
 	if((thread_id & 0x80000000) != 0) {
@@ -91,7 +90,6 @@ thread::thread(process_fd *p, void *stack_location, void *auxv_address, void *en
 thread::thread(process_fd *p, shared_ptr<thread> otherthread)
 : process(p)
 , thread_id(MAIN_THREAD)
-, exited(false)
 , userland_stack_top(otherthread->userland_stack_top)
 {
 	kernel_stack_size = otherthread->kernel_stack_size;

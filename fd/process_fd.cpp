@@ -226,6 +226,7 @@ uint32_t *process_fd::ensure_get_page_table(int i) {
 		kernel_panic("Failed to allocate page table");
 	}
 
+	memset(table_alloc.ptr, 0, table_alloc.size);
 	auto address = get_map_virtual()->to_physical_address(table_alloc.ptr);
 	assert((reinterpret_cast<uint32_t>(address) & 0xfff) == 0);
 

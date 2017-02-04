@@ -75,16 +75,16 @@ struct thread : enable_shared_from_this<thread> {
 	void signal_userspace_cv(_Atomic(cloudabi_condvar_t) *condvar, cloudabi_nthreads_t nwaiters);
 
 private:
-	process_fd *process;
+	process_fd *process = 0;
 	// note: only the bottom 30 bits may be used
-	cloudabi_tid_t thread_id;
-	bool exited;
+	cloudabi_tid_t thread_id = 0;
+	bool exited = false;
 
 	friend struct cloudos::scheduler;
 	void *esp = 0;
 
-	bool blocked;
-	bool unscheduled;
+	bool blocked = false;
+	bool unscheduled = false;
 
 	interrupt_state_t state;
 	sse_state_t sse_state;
