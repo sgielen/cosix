@@ -96,6 +96,13 @@ struct fd_t {
 		error = EINVAL;
 	}
 
+	/** Ulinks a path of given type.
+	 */
+	virtual void file_unlink(const char * /*path*/, size_t /*pathlen*/, cloudabi_ulflags_t /*flags*/)
+	{
+		error = EINVAL;
+	}
+
 	virtual ~fd_t() {}
 
 protected:

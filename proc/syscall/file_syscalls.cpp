@@ -141,8 +141,21 @@ cloudabi_errno_t cloudos::syscall_file_symlink(syscall_context &)
 	return ENOSYS;
 }
 
-cloudabi_errno_t cloudos::syscall_file_unlink(syscall_context &)
+cloudabi_errno_t cloudos::syscall_file_unlink(syscall_context &c)
 {
-	return ENOSYS;
+	auto args = arguments_t<cloudabi_fd_t, char*, size_t, cloudabi_ulflags_t>(c);
+	auto fdnum = args.first();
+	fd_mapping_t *mapping;
+	auto res = c.process()->get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FILE_UNLINK);
+	if(res != 0) {
+		return res;
+	}
+
+	auto path = args.second();
+	auto pathlen = args.third();
+	auto flags = args.fourth();
+
+	mapping->fd->file_unlink(path, pathlen, flags);
+	return mapping->fd->error;
 }
 

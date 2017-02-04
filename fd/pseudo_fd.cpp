@@ -218,6 +218,26 @@ void pseudo_fd::file_create(const char *path, size_t pathlen, cloudabi_filetype_
 	}
 }
 
+void pseudo_fd::file_unlink(const char *path, size_t pathlen, cloudabi_ulflags_t flags)
+{
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::unlink;
+	request.inode = 0;
+	request.flags = flags;
+	request.length = pathlen < sizeof(request.buffer) ? pathlen : sizeof(request.buffer);
+	memcpy(request.buffer, path, request.length);
+
+	reverse_response_t *response = send_request(&request);
+	if(!response /* invalid path */) {
+		error = EINVAL;
+	} else if(response->result < 0) {
+		error = -response->result;
+	} else {
+		error = 0;
+	}
+}
+
 size_t pseudo_fd::readdir(char *buf, size_t nbyte, cloudabi_dircookie_t cookie)
 {
 	// TODO: the RPC protocol allows requesting a single readdir buffer. We

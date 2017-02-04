@@ -58,9 +58,25 @@ void tmpfs::unlink(pseudofd_t pseudo, const char *path, size_t len, cloudabi_ulf
 		throw filesystem_error(ENOENT);
 	}
 
-	auto entry = it->second;
-	directory->files.erase(filename);
+	bool removedir = unlinkflags & CLOUDABI_UNLINK_REMOVEDIR;
 
+	auto entry = it->second;
+	if(entry->type == CLOUDABI_FILETYPE_DIRECTORY) {
+		if(!removedir) {
+			throw filesystem_error(EISDIR);
+		}
+		for(auto &file : entry->files) {
+			if(file.first != "." && file.first != "..") {
+				throw filesystem_error(ENOTEMPTY);
+			}
+		}
+	} else {
+		if(removedir) {
+			throw filesystem_error(ENOTDIR);
+		}
+	}
+
+	directory->files.erase(filename);
 	// TODO: erase inode if this was the last reference to it
 	// (possibly, using the deleter of the inode bound to this tmpfs*)
 }

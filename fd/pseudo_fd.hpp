@@ -30,6 +30,7 @@ struct pseudo_fd : public seekable_fd_t {
 	shared_ptr<fd_t> openat(const char *path, size_t pathlen, cloudabi_oflags_t oflags, const cloudabi_fdstat_t * fdstat) override;
 	size_t readdir(char *buf, size_t nbyte, cloudabi_dircookie_t cookie) override;
 	void file_create(const char *path, size_t pathlen, cloudabi_filetype_t type) override;
+	void file_unlink(const char *path, size_t pathlen, cloudabi_ulflags_t flags) override;
 
 private:
 	reverse_response_t *send_request(reverse_request_t *request);
