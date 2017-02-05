@@ -10,6 +10,10 @@
 #include <signal.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <stdint.h>
+#include <dirent.h>
+#include <vector>
+#include <string>
 
 int stdout;
 int procfs;
@@ -111,6 +115,33 @@ int start_binary(const char *name) {
 	return r;
 }
 
+void rm_rf_contents(DIR *d) {
+	struct dirent *ent;
+	std::vector<std::string> files;
+	std::vector<std::string> directories;
+	while((ent = readdir(d)) != nullptr) {
+		if(ent->d_type == DT_DIR) {
+			if(strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0) {
+				directories.push_back(ent->d_name);
+			}
+		} else {
+			files.push_back(ent->d_name);
+		}
+	}
+
+	for(auto &dir : directories) {
+		// delete all files within
+		int innerdh = openat(dirfd(d), dir.c_str(), O_RDONLY);
+		DIR *innerdir = fdopendir(innerdh);
+		rm_rf_contents(innerdir);
+		closedir(innerdir);
+		unlinkat(dirfd(d), dir.c_str(), AT_REMOVEDIR);
+	}
+	for(auto &f : files) {
+		unlinkat(dirfd(d), f.c_str(), 0);
+	}
+}
+
 void program_main(const argdata_t *) {
 	stdout = 0;
 	procfs = 2;
@@ -132,7 +163,21 @@ void program_main(const argdata_t *) {
 	start_tmpfs();
 	//start_binary("tmptest");
 
-	start_unittests();
+	uint32_t num_iterations = 0;
+	while(1) {
+		auto res = start_unittests();
+		if(res == 0) {
+			dprintf(stdout, "== Unittest iteration %d finished ==\n", ++num_iterations);
+			DIR *dir = fdopendir(dup(pseudofd));
+			rm_rf_contents(dir);
+			closedir(dir);
+			struct timespec ts = {.tv_sec = 5, .tv_nsec = 0};
+			clock_nanosleep(CLOCK_MONOTONIC, 0, &ts);
+		} else {
+			dprintf(stdout, "== Unittest iteration %d FAILED ==\n", ++num_iterations);
+			break;
+		}
+	}
 
 	pthread_mutex_t mtx;
 	pthread_mutex_init(&mtx, NULL);
