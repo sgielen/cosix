@@ -167,9 +167,9 @@ size_t tmpfs::readdir(pseudofd_t pseudo, char *buffer, size_t buflen, cloudabi_d
 	// TODO: if files are created or removed during a readdir, this may cause readdir to miss
 	// files or return them twice
 	auto it = directory->files.begin();
-	std::advance(it, cookie);
+	for(auto c = cookie; c-- > 0 && it != directory->files.end(); ++it);
 	if(it == directory->files.end()) {
-		cookie = 0;
+		cookie = CLOUDABI_DIRCOOKIE_START;
 		return 0;
 	}
 
