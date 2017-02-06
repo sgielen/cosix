@@ -61,8 +61,7 @@ cloudabi_errno_t cloudos::syscall_mem_map(syscall_context &c)
 		return EINVAL;
 	}
 
-	mem_mapping_t *mapping = get_allocator()->allocate<mem_mapping_t>();
-	new (mapping) mem_mapping_t(c.process(), address_requested, len_to_pages(len), NULL, 0, prot);
+	mem_mapping_t *mapping = allocate<mem_mapping_t>(c.process(), address_requested, len_to_pages(len), nullptr, 0, prot);
 	c.process()->add_mem_mapping(mapping, fixed);
 	// TODO: instead of completely backing, await the page fault and do it then
 	mapping->ensure_completely_backed();
