@@ -30,6 +30,12 @@ struct procfs_uptime_fd : public memory_fd {
 	size_t read(void *dest, size_t count) override;
 };
 
+struct procfs_alloctrack_fd : public fd_t {
+	procfs_alloctrack_fd(const char *n) : fd_t(CLOUDABI_FILETYPE_REGULAR_FILE, n) {}
+
+	void putstring(const char *buf, size_t count) override;
+};
+
 }
 
 procfs_directory_fd::procfs_directory_fd(const char (*p)[PROCFS_FILE_MAX], const char *n)
@@ -112,6 +118,14 @@ shared_ptr<fd_t> procfs_directory_fd::openat(const char *pathname, size_t pathle
 			error = 0;
 			return make_shared<procfs_uptime_fd>(pathbuf);
 		}
+	} else if(strcmp(pathbuf, "kernel/alloctracker") == 0) {
+		if(must_be_directory) {
+			error = ENOTDIR;
+			return nullptr;
+		} else {
+			error = 0;
+			return make_shared<procfs_alloctrack_fd>(pathbuf);
+		}
 	} else if(strcmp(pathbuf, "kernel") == 0 || strcmp(pathbuf, "kernel/") == 0) {
 		error = 0;
 		char pb[2][PROCFS_FILE_MAX];
@@ -133,6 +147,29 @@ size_t procfs_uptime_fd::read(void *dest, size_t count) {
 	auto res = memory_fd::read(dest, count);
 	reset();
 	return res;
+}
+
+void procfs_alloctrack_fd::putstring(const char *buf, size_t count) {
+	error = 0;
+	// TODO: static_assert 'if get_allocator()->get_allocator()->start_tracking() exists'
+#ifndef NDEBUG
+	if(count == 0) {
+		return;
+	}
+	char b = buf[0];
+	if(b == '1') {
+		get_vga_stream() << "====== allocation tracking turned on =======\n";
+		get_allocator()->get_allocator()->start_tracking();
+	} else if(b == '0') {
+		get_vga_stream() << "====== allocation tracking turned off =======\n";
+		get_allocator()->get_allocator()->stop_tracking();
+	} else if(b == 'R') {
+		size_t num = get_allocator()->get_allocator()->dump_allocations();
+		if(num == 0) {
+			get_vga_stream() << "===== zero allocations still live =====\n";
+		}
+	}
+#endif
 }
 
 shared_ptr<fd_t> procfs::get_root_fd() {

@@ -87,7 +87,13 @@ void process_fd::add_initial_fds() {
 	auto memory = make_shared<memory_fd>(fd_buf, strlen(reinterpret_cast<char*>(fd_buf.ptr)) + 1, "memory_fd");
 	add_fd(memory, CLOUDABI_RIGHT_FD_READ);
 
-	add_fd(procfs::get_root_fd(), CLOUDABI_RIGHT_FILE_OPEN, CLOUDABI_RIGHT_FD_READ | CLOUDABI_RIGHT_FILE_OPEN);
+	add_fd(procfs::get_root_fd(), CLOUDABI_RIGHT_FILE_OPEN,
+		CLOUDABI_RIGHT_FD_READ |
+		CLOUDABI_RIGHT_FD_WRITE |
+		CLOUDABI_RIGHT_FD_SEEK |
+		CLOUDABI_RIGHT_FD_TELL |
+		CLOUDABI_RIGHT_FILE_OPEN
+	);
 
 	add_fd(bootfs::get_root_fd(), CLOUDABI_RIGHT_FILE_OPEN, CLOUDABI_RIGHT_FD_READ | CLOUDABI_RIGHT_FILE_OPEN | CLOUDABI_RIGHT_PROC_EXEC);
 
