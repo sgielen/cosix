@@ -23,7 +23,9 @@ void thread_condition::satisfy()
 	assert(thr);
 	satisfied = true;
 	// unblock if it was blocked
-	thr->thread_unblock();
+	if(thr->is_blocked()) {
+		thr->thread_unblock();
+	}
 	reset();
 }
 
@@ -129,13 +131,15 @@ void thread_condition_waiter::wait() {
 	// Subscribe on all conditions
 	iterate(conditions, [&](thread_condition_list *item) {
 		thread_condition *c = item->data;
+		assert(c);
+		assert(c->signaler);
+		c->thread = thr;
 		if(!initially_satisfied) {
-			c->thread = thr;
 			c->signaler->subscribe_condition(c);
 		}
 
 		if(c->signaler->already_satisfied(c)) {
-			c->satisfied = true;
+			c->satisfy();
 			initially_satisfied = true;
 		} else {
 			c->satisfied = false;

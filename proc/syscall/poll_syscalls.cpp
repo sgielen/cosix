@@ -179,6 +179,7 @@ cloudabi_errno_t cloudos::syscall_poll(syscall_context &c)
 			}
 		}
 		}
+		assert(signaler);
 		new (&condition) thread_condition(signaler);
 		condition.userdata = reinterpret_cast<void*>(userdata);
 		w.add_condition(&condition);
@@ -226,6 +227,7 @@ cloudabi_errno_t cloudos::syscall_poll(syscall_context &c)
 	for(size_t subi = 0; subi < nsubscriptions; ++subi) {
 		thread_condition &condition = conditions[subi];
 		deallocate(reinterpret_cast<thread_condition_userdata*>(condition.userdata));
+		condition.~thread_condition();
 	}
 	deallocate(conditions_alloc);
 	c.result = nevents;
