@@ -95,7 +95,12 @@ void process_fd::add_initial_fds() {
 		CLOUDABI_RIGHT_FILE_OPEN
 	);
 
-	add_fd(bootfs::get_root_fd(), CLOUDABI_RIGHT_FILE_OPEN, CLOUDABI_RIGHT_FD_READ | CLOUDABI_RIGHT_FILE_OPEN | CLOUDABI_RIGHT_PROC_EXEC);
+	add_fd(bootfs::get_root_fd(), CLOUDABI_RIGHT_FILE_OPEN,
+		CLOUDABI_RIGHT_FD_READ |
+		CLOUDABI_RIGHT_FD_SEEK |
+		CLOUDABI_RIGHT_FD_TELL |
+		CLOUDABI_RIGHT_FILE_OPEN |
+		CLOUDABI_RIGHT_PROC_EXEC);
 
 	shared_ptr<socket_fd> my_reverse, their_reverse;
 	socket_fd::socketpair(my_reverse, their_reverse, 1024);
