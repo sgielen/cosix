@@ -26,10 +26,10 @@ struct scheduler {
 private:
 	void schedule_next();
 
-	thread_list *running;
-	thread_list *ready;
-	thread_list *dealloc;
-	bool waiting_for_ready_task;
+	thread_list *running = nullptr;
+	thread_list *ready = nullptr;
+	thread_list *dealloc_later = nullptr;
+	bool waiting_for_ready_task = true;
 };
 
 }

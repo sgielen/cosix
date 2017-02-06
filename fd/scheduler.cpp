@@ -10,10 +10,6 @@ extern "C" void switch_thread(void **old_sp, void *sp);
 using namespace cloudos;
 
 scheduler::scheduler()
-: running(0)
-, ready(0)
-, dealloc(0)
-, waiting_for_ready_task(true)
 {}
 
 void scheduler::initial_yield()
@@ -59,15 +55,15 @@ void scheduler::thread_yield()
 		switch_thread(esp, running->data->esp);
 		// scheduler yielded back to this thread
 
-		if(dealloc) {
-			assert(dealloc->next == nullptr);
+		remove_all(&dealloc_later, [&](thread_list *) {
+			return true;
+		}, [&](thread_list *dealloc) {
 			assert(dealloc->data);
 			weak_ptr<thread> thr_weak = dealloc->data;
 			dealloc->data.reset();
 			deallocate(dealloc);
-			dealloc = nullptr;
 			assert(thr_weak.expired());
-		}
+		});
 	}
 }
 
@@ -112,7 +108,8 @@ void scheduler::schedule_next()
 			// reschedule, deallocate or forget about it
 			if(old_thread->data->is_exited()) {
 				// deallocate it when we next switch
-				dealloc = old_thread;
+				assert(old_thread->next == nullptr);
+				append(&dealloc_later, old_thread);
 			} else if(old_thread->data->is_blocked()) {
 				old_thread->data->unscheduled = true;
 				// can safely forget about this thread here,
