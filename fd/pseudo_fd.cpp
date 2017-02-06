@@ -11,7 +11,11 @@ pseudo_fd::pseudo_fd(pseudofd_t id, shared_ptr<fd_t> r, cloudabi_filetype_t t, c
 {
 }
 
-reverse_response_t *pseudo_fd::send_request(reverse_request_t *request) {
+bool pseudo_fd::send_request(reverse_request_t *request, reverse_response_t *response) {
+	response->result = -EIO;
+	response->flags = 0;
+	response->length = 0;
+
 	// Lock the reverse_fd. Multiple pseudo FD's may have a reference to
 	// this reverse_fd, and another one may have an outstanding request
 	// already.
@@ -28,16 +32,15 @@ reverse_response_t *pseudo_fd::send_request(reverse_request_t *request) {
 	char *msg = reinterpret_cast<char*>(request);
 	reverse_fd->putstring(msg, sizeof(reverse_request_t));
 
-	reverse_response_t *resp = get_allocator()->allocate<reverse_response_t>();
-	msg = reinterpret_cast<char*>(resp);
+	msg = reinterpret_cast<char*>(response);
 	size_t received = 0;
 	while(received < sizeof(reverse_response_t)) {
 		// TODO: error checking on the reverse_fd, in case it closed
 		size_t remaining = sizeof(reverse_response_t) - received;
-		received += reverse_fd->read(resp + received, remaining);
+		received += reverse_fd->read(msg + received, remaining);
 	}
 	reverse_fd->refcount = 1;
-	return resp;
+	return true;
 }
 
 bool pseudo_fd::is_valid_path(const char *path, size_t length)
@@ -52,7 +55,7 @@ bool pseudo_fd::is_valid_path(const char *path, size_t length)
 	return true;
 }
 
-reverse_response_t *pseudo_fd::lookup_inode(const char *path, size_t length, cloudabi_oflags_t oflags)
+bool pseudo_fd::lookup_inode(const char *path, size_t length, cloudabi_oflags_t oflags, reverse_response_t *response)
 {
 	if(!is_valid_path(path, length)) {
 		return nullptr;
@@ -67,7 +70,7 @@ reverse_response_t *pseudo_fd::lookup_inode(const char *path, size_t length, clo
 	}
 	request.length = length;
 	memcpy(request.buffer, path, length);
-	return send_request(&request);
+	return send_request(&request, response);
 }
 
 size_t pseudo_fd::read(void *dest, size_t count)
@@ -82,22 +85,21 @@ size_t pseudo_fd::read(void *dest, size_t count)
 	request.flags = 0;
 	request.offset = pos;
 	request.length = count;
-	reverse_response_t *response = send_request(&request);
-	if(!response || response->result < 0) {
-		// TODO error handling
-		error = EINVAL;
+	reverse_response_t response;
+	if(!send_request(&request, &response) || response.result < 0) {
+		error = -response.result;
 		return 0;
 	}
 
 	error = 0;
-	if(response->length < count) {
-		count = response->length;
+	if(response.length < count) {
+		count = response.length;
 	}
-	else if(response->length > count) {
+	else if(response.length > count) {
 		get_vga_stream() << "pseudo-fd filesystem returned more data than requested, dropping";
 	}
 
-	memcpy(dest, response->buffer, count);
+	memcpy(dest, response.buffer, count);
 	pos += count;
 	return count;
 }
@@ -121,10 +123,9 @@ void pseudo_fd::putstring(const char *str, size_t remaining)
 		request.length = count;
 		memcpy(request.buffer, str + copied, count);
 		copied += count;
-		reverse_response_t *response = send_request(&request);
-		if(!response || response->result < 0) {
-			// TODO error handling
-			error = EINVAL;
+		reverse_response_t response;
+		if(!send_request(&request, &response) || response.result < 0) {
+			error = -response.result;
 			return;
 		}
 	}
@@ -135,11 +136,11 @@ shared_ptr<fd_t> pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_of
 {
 	int64_t inode;
 	int filetype;
-	reverse_response_t *response = lookup_inode(path, pathlen, oflags);
-	if(!response /* invalid path */) {
-		error = EINVAL;
+	reverse_response_t response;
+	if(!lookup_inode(path, pathlen, oflags, &response)) {
+		error = -response.result;
 		return nullptr;
-	} else if(response->result == -ENOENT && (oflags & CLOUDABI_O_CREAT)) {
+	} else if(response.result == -ENOENT && (oflags & CLOUDABI_O_CREAT)) {
 		// The file doesn't exist and should be created.
 		filetype = CLOUDABI_FILETYPE_REGULAR_FILE;
 		reverse_request_t request;
@@ -150,17 +151,19 @@ shared_ptr<fd_t> pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_of
 		request.length = pathlen < sizeof(request.buffer) ? pathlen : sizeof(request.buffer);
 		memcpy(request.buffer, path, request.length);
 
-		response = send_request(&request);
+		if(!send_request(&request, &response) || response.result < 0) {
+			error = -response.result;
+			return nullptr;
+		}
 
-		inode = response->result;
-	} else if(response->result < 0) {
-		error = -response->result;
+		inode = response.result;
+	} else if(response.result < 0) {
+		error = -response.result;
 		return nullptr;
 	} else {
-		inode = response->result;
-		filetype = response->flags;
+		inode = response.result;
+		filetype = response.flags;
 	}
-
 
 	reverse_request_t request;
 	request.pseudofd = pseudo_id;
@@ -169,18 +172,12 @@ shared_ptr<fd_t> pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_of
 	request.flags = oflags;
 	request.length = 0;
 
-	response = send_request(&request);
-
-	if(!response) {
-		// TODO: this can't currently happen
-		error = EINVAL;
-		return nullptr;
-	} else if(response->result < 0) {
-		error = -response->result;
+	if(!send_request(&request, &response) || response.result < 0) {
+		error = -response.result;
 		return nullptr;
 	}
 
-	pseudofd_t new_pseudo_id = response->result;
+	pseudofd_t new_pseudo_id = response.result;
 
 	char new_name[sizeof(name)];
 	strncpy(new_name, name, sizeof(new_name));
@@ -208,11 +205,9 @@ void pseudo_fd::file_create(const char *path, size_t pathlen, cloudabi_filetype_
 	request.length = pathlen < sizeof(request.buffer) ? pathlen : sizeof(request.buffer);
 	memcpy(request.buffer, path, request.length);
 
-	reverse_response_t *response = send_request(&request);
-	if(!response /* invalid path */) {
-		error = EINVAL;
-	} else if(response->result < 0) {
-		error = -response->result;
+	reverse_response_t response;
+	if(!send_request(&request, &response) || response.result < 0) {
+		error = -response.result;
 	} else {
 		error = 0;
 	}
@@ -228,11 +223,9 @@ void pseudo_fd::file_unlink(const char *path, size_t pathlen, cloudabi_ulflags_t
 	request.length = pathlen < sizeof(request.buffer) ? pathlen : sizeof(request.buffer);
 	memcpy(request.buffer, path, request.length);
 
-	reverse_response_t *response = send_request(&request);
-	if(!response /* invalid path */) {
-		error = EINVAL;
-	} else if(response->result < 0) {
-		error = -response->result;
+	reverse_response_t response;
+	if(!send_request(&request, &response) || response.result < 0) {
+		error = -response.result;
 	} else {
 		error = 0;
 	}
@@ -250,30 +243,26 @@ size_t pseudo_fd::readdir(char *buf, size_t nbyte, cloudabi_dircookie_t cookie)
 		request.op = reverse_request_t::operation::readdir;
 		request.flags = cookie;
 		request.length = 0;
-		reverse_response_t *response = send_request(&request);
-		if(!response) {
-			error = EIO;
+		reverse_response_t response;
+		if(!send_request(&request, &response) || response.result < 0) {
+			error = -response.result;
 			return 0;
-		} else if(response->result < 0) {
-			error = -response->result;
-			return 0;
-		}
-		if(response->result == 0) {
+		} else if(response.result == 0) {
 			// there were no more entries
 			break;
 		}
-		cookie = response->result;
+		cookie = response.result;
 		// check the entry, add it to buf
-		cloudabi_dirent_t *dirent = reinterpret_cast<cloudabi_dirent_t*>(response->buffer);
-		if(response->length != sizeof(cloudabi_dirent_t) + dirent->d_namlen) {
+		cloudabi_dirent_t *dirent = reinterpret_cast<cloudabi_dirent_t*>(response.buffer);
+		if(response.length != sizeof(cloudabi_dirent_t) + dirent->d_namlen) {
 			// filesystem did not provide enough data, maybe the filename didn't fit?
 			error = EIO;
 			return 0;
 		}
 		// append this buf to the given buffer
 		size_t remaining = nbyte - written;
-		size_t write = remaining < response->length ? remaining : response->length;
-		memcpy(buf + written, response->buffer, write);
+		size_t write = remaining < response.length ? remaining : response.length;
+		memcpy(buf + written, response.buffer, write);
 		written += write;
 	}
 	error = 0;

@@ -33,9 +33,9 @@ struct pseudo_fd : public seekable_fd_t {
 	void file_unlink(const char *path, size_t pathlen, cloudabi_ulflags_t flags) override;
 
 private:
-	reverse_response_t *send_request(reverse_request_t *request);
+	bool send_request(reverse_request_t *request, reverse_response_t *response);
 	bool is_valid_path(const char *path, size_t length);
-	reverse_response_t *lookup_inode(const char *path, size_t length, cloudabi_oflags_t oflags);
+	bool lookup_inode(const char *path, size_t length, cloudabi_oflags_t oflags, reverse_response_t *response);
 
 	pseudofd_t pseudo_id;
 	shared_ptr<fd_t> reverse_fd;
