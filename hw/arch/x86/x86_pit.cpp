@@ -75,6 +75,10 @@ thread_condition_signaler *x86_pit_clock::get_signaler(cloudabi_timestamp_t time
 	x86_pit_clock_signaler *sig = allocate<x86_pit_clock_signaler>();
 	x86_pit_clock_signaler_list *item = allocate<x86_pit_clock_signaler_list>(sig);
 
+	if(!sig || !item) {
+		kernel_panic("Failed to allocate clock signaler / clock signaler list");
+	}
+
 	sig->timeout = timeout;
 	sig->precision = precision;
 
