@@ -45,10 +45,13 @@ cloudabi_errno_t cloudos::syscall_proc_exec(syscall_context &c)
 cloudabi_errno_t cloudos::syscall_proc_exit(syscall_context &c)
 {
 	auto args = arguments_t<cloudabi_exitcode_t>(c);
+
+	assert(!c.process()->is_terminated());
 	c.process()->exit(args.first());
-	// exited will be true after this, so we won't be rescheduled.
-	// we'll be cleaned up when the last file descriptor to this process closes.
-	get_scheduler()->thread_yield();
+
+	// exit() sets exited to true and does a thread_yield(), so we won't be
+	// reschedule. We'll be cleaned up when the last file descriptor to
+	// this process closes.
 	kernel_panic("Unreachable code");
 }
 
@@ -73,10 +76,11 @@ cloudabi_errno_t cloudos::syscall_proc_fork(syscall_context &c)
 cloudabi_errno_t cloudos::syscall_proc_raise(syscall_context &c)
 {
 	auto args = arguments_t<cloudabi_signal_t>(c);
+
+	assert(!c.process()->is_terminated());
 	c.process()->signal(args.first());
 
 	// like with exit, if signal is fatal exited will be true, we'll be cleaned up later
-	get_scheduler()->thread_yield();
+	assert(!c.process()->is_terminated());
 	return 0;
 }
-
