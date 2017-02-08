@@ -34,6 +34,15 @@ void program_main(const argdata_t *ad) {
 
 	dprintf(stdout, "tmptest spawned, tmpdir is %d\n", tmpdir);
 
+	/* open nonexistant file */
+	int f = openat(tmpdir, "nonexistant.xxx", O_RDONLY);
+	if(f < 0) {
+		dprintf(stdout, "Good. Nonexistant file didn't exist.\n");
+	} else {
+		dprintf(stdout, "Nonexistant file existed?\n");
+		exit(1);
+	}
+
 	/* create file */
 	const char *filename = "foobar";
 	int tmpfile = openat(tmpdir, filename, O_WRONLY | O_CREAT | O_TRUNC);
