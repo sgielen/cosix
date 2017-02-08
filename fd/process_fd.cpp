@@ -413,6 +413,7 @@ cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping
 		strncpy(name, old_name, sizeof(name));
 		install_page_directory();
 		deallocate(page_directory_alloc);
+		// TODO: deallocate all page tables themselves as well
 		deallocate(page_tables_alloc);
 		return res;
 	}
