@@ -175,10 +175,16 @@ struct shared_ptr {
 	void reset() {
 		shared_control_block *c = control();
 		if(c) {
+			// temporarily increase weak use count, so that
+			// the control block is not deallocated by the
+			// destructor of enable_shared_from_this if *ptr
+			// inherits from it
+			c->weak_increment();
 			if(c->shared_decrement()) {
 				ptr->~T();
 				c->deallocate();
 			}
+			c->weak_decrement();
 			if(c->unreferenced()) {
 				deallocate(control_block);
 			}
