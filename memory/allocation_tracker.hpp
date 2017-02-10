@@ -12,6 +12,10 @@ namespace cloudos {
 struct tracked_allocation {
 	tracked_allocation();
 
+	/* every tracked allocation starts with 8 bytes of padding, so that the
+	 * track_marker of a deallocated buffer is more likely to remain intact.
+	 */
+	char padding[8];
 	char track_marker[8] = {'A', 'L', 'L', 'C', 'M', 'G', 'I', 'C'};
 	char alloc_prefix[8];
 	char alloc_suffix[8];
@@ -46,7 +50,7 @@ struct AllocationTracker {
 		char *prefix = buf - sizeof(tracked_allocation::alloc_prefix);
 		char *suffix = buf + info->user_size;
 
-		assert(memcmp(original_alloc, "ALLCMGIC", sizeof(info->track_marker)) == 0);
+		assert(memcmp(info->track_marker, "ALLCMGIC", sizeof(info->track_marker)) == 0);
 		assert(info->active);
 		assert(memcmp(prefix, info->alloc_prefix, sizeof(info->alloc_prefix)) == 0);
 		assert(memcmp(suffix, info->alloc_suffix, sizeof(info->alloc_suffix)) == 0);
