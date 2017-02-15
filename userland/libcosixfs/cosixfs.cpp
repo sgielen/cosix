@@ -73,6 +73,7 @@ void cosix::handle_request(reverse_request_t *request, reverse_response_t *respo
 			response->length = sizeof(cloudabi_filestat_t);
 			auto statbuf = reinterpret_cast<cloudabi_filestat_t*>(&response->buffer[0]);
 			fs->stat_get(request->pseudofd, request->flags, reinterpret_cast<char*>(request->buffer), request->length, statbuf);
+			response->result = 0;
 			break;
 		}
 		case op::stat_put:

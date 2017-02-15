@@ -151,6 +151,8 @@ cloudabi_errno_t cloudos::syscall_poll(syscall_context &c)
 			break;
 		}
 		case CLOUDABI_EVENTTYPE_FD_READ:
+			// TODO: on sockets in listen mode: wait on the event queue?
+			// This is done in BSD sockets, not defined for CloudABI sockets
 			get_vga_stream() << "Unimplemented fd-read eventtype, failing\n";
 			userdata->error = ENOSYS;
 			signaler = &null_signaler;

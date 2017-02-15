@@ -11,6 +11,6 @@ if(BAREMETAL_ENABLED)
 		thread.cpp thread.hpp
 		pipe_fd.cpp pipe_fd.hpp
 		pseudo_fd.cpp pseudo_fd.hpp
-		socket_fd.cpp socket_fd.hpp
+		unixsock.cpp unixsock.hpp
 	)
 endif()

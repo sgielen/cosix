@@ -25,6 +25,7 @@
 #include "global.hpp"
 #include "rng/rng.hpp"
 #include <time/clock_store.hpp>
+#include <fd/unixsock.hpp>
 
 using namespace cloudos;
 
@@ -198,6 +199,9 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	dump_device_descriptions(stream, global.root_device);
 
 	dump_interfaces(stream, global.interface_store);
+
+	unixsock_listen_store uls;
+	global.unixsock_listen_store = &uls;
 
 	stream << "Waiting for interrupts...\n";
 	int_handler.enable_interrupts();

@@ -83,11 +83,6 @@ void tmpfs::unlink(pseudofd_t pseudo, const char *path, size_t len, cloudabi_ulf
 
 cloudabi_inode_t tmpfs::create(pseudofd_t pseudo, const char *path, size_t len, cloudabi_filetype_t type)
 {
-	if(type != CLOUDABI_FILETYPE_DIRECTORY && type != CLOUDABI_FILETYPE_REGULAR_FILE) {
-		// TODO: implement this for types other than directories
-		throw filesystem_error(EINVAL);
-	}
-
 	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
 
 	std::string filename = normalize_path(directory, path, len, 0 /* TODO: lookup flags */);

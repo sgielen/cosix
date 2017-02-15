@@ -10,7 +10,7 @@
 #include <fd/procfs.hpp>
 #include <fd/bootfs.hpp>
 #include <fd/pseudo_fd.hpp>
-#include <fd/socket_fd.hpp>
+#include <fd/unixsock.hpp>
 #include <fd/scheduler.hpp>
 #include <userland/vdso_support.h>
 #include <elf.h>
@@ -102,9 +102,18 @@ void process_fd::add_initial_fds() {
 		CLOUDABI_RIGHT_FILE_OPEN |
 		CLOUDABI_RIGHT_PROC_EXEC);
 
-	shared_ptr<socket_fd> my_reverse, their_reverse;
-	socket_fd::socketpair(my_reverse, their_reverse, 1024);
-	add_fd(their_reverse, CLOUDABI_RIGHT_FD_READ | CLOUDABI_RIGHT_FD_WRITE);
+	auto my_reverse = make_shared<unixsock>(CLOUDABI_FILETYPE_SOCKET_STREAM, "my_reverse");
+	auto their_reverse = make_shared<unixsock>(CLOUDABI_FILETYPE_SOCKET_STREAM, "their_reverse");
+	my_reverse->socketpair(their_reverse);
+	assert(my_reverse->error == 0);
+	assert(their_reverse->error == 0);
+
+	auto sock_rights = CLOUDABI_RIGHT_POLL_FD_READWRITE
+			| CLOUDABI_RIGHT_FD_WRITE
+			| CLOUDABI_RIGHT_FD_READ
+			| CLOUDABI_RIGHT_SOCK_SHUTDOWN
+			| CLOUDABI_RIGHT_SOCK_STAT_GET;
+	add_fd(their_reverse, sock_rights);
 
 	auto pseudo = make_shared<pseudo_fd>(0, my_reverse, CLOUDABI_FILETYPE_DIRECTORY, "pseudo_root");
 	add_fd(pseudo,
@@ -117,7 +126,9 @@ void process_fd::add_initial_fds() {
 		CLOUDABI_RIGHT_FILE_OPEN |
 		CLOUDABI_RIGHT_FILE_READDIR |
 		CLOUDABI_RIGHT_FILE_STAT_GET |
-		CLOUDABI_RIGHT_FILE_UNLINK,
+		CLOUDABI_RIGHT_FILE_UNLINK |
+		CLOUDABI_RIGHT_SOCK_BIND_DIRECTORY |
+		CLOUDABI_RIGHT_SOCK_CONNECT_DIRECTORY,
 		/* inherited rights */
 		CLOUDABI_RIGHT_FD_DATASYNC |
 		CLOUDABI_RIGHT_FD_READ |
@@ -143,7 +154,9 @@ void process_fd::add_initial_fds() {
 		CLOUDABI_RIGHT_MEM_MAP |
 		CLOUDABI_RIGHT_MEM_MAP_EXEC |
 		CLOUDABI_RIGHT_POLL_FD_READWRITE |
-		CLOUDABI_RIGHT_PROC_EXEC
+		CLOUDABI_RIGHT_PROC_EXEC |
+		CLOUDABI_RIGHT_SOCK_BIND_DIRECTORY |
+		CLOUDABI_RIGHT_SOCK_CONNECT_DIRECTORY
 	);
 }
 

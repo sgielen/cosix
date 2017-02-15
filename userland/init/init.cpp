@@ -184,6 +184,7 @@ void program_main(const argdata_t *) {
 
 	start_tmpfs();
 	//start_binary("tmptest");
+	start_binary("unixsock_test");
 
 	uint32_t num_success = 0;
 	uint32_t num_failures = 0;

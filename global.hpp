@@ -19,6 +19,7 @@ struct scheduler;
 struct process_fd;
 struct rng;
 struct clock_store;
+struct unixsock_listen_store;
 
 extern global_state *global_state_;
 
@@ -39,6 +40,7 @@ struct global_state {
 	cloudos::process_fd *init;
 	cloudos::rng *random;
 	cloudos::clock_store *clock_store;
+	cloudos::unixsock_listen_store *unixsock_listen_store;
 };
 
 __attribute__((noreturn)) inline void kernel_panic(const char *message) {
@@ -67,6 +69,7 @@ GET_GLOBAL(root_device, device, root_device)
 GET_GLOBAL(scheduler, scheduler, scheduler)
 GET_GLOBAL(random, rng, random)
 GET_GLOBAL(clock_store, clock_store, clock_store);
+GET_GLOBAL(unixsock_listen_store, unixsock_listen_store, unixsock_listen_store);
 
 inline vga_stream &get_vga_stream() {
 	assert(global_state_ && global_state_->vga);

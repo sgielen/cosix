@@ -197,6 +197,12 @@ shared_ptr<fd_t> pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_of
 
 cloudabi_inode_t pseudo_fd::file_create(const char *path, size_t pathlen, cloudabi_filetype_t type)
 {
+	auto res = lookup_device_id();
+	if(res != 0) {
+		error = res;
+		return 0;
+	}
+
 	reverse_request_t request;
 	request.pseudofd = pseudo_id;
 	request.op = reverse_request_t::operation::create;
@@ -330,6 +336,7 @@ cloudabi_errno_t pseudo_fd::lookup_device_id() {
 		}
 		auto *stat = reinterpret_cast<cloudabi_filestat_t*>(&response.buffer[0]);
 		device = stat->st_dev;
+		assert(device > 0);
 		device_id_obtained = true;
 		return 0;
 	}

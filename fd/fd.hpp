@@ -61,7 +61,7 @@ struct fd_t {
 		return 0;
 	}
 
-	/* For memory, pipes and files */
+	/* For memory, pipes, files and sockets */
 	virtual size_t read(void * /*dest*/, size_t /*count*/) {
 		error = EINVAL;
 		return 0;
@@ -90,7 +90,7 @@ struct fd_t {
 	 * the end of the directory was reached if the size returned < the nbyte given.
 	 */
 	virtual size_t readdir(char * /*buf*/, size_t /*nbyte*/, cloudabi_dircookie_t /*cookie*/) {
-		error = EINVAL;
+		error = ENOTDIR;
 		return 0;
 	}
 
@@ -114,6 +114,48 @@ struct fd_t {
 	virtual void file_stat_get(cloudabi_lookupflags_t /*flags*/, const char* /*path*/, size_t /*path_len*/, cloudabi_filestat_t* /*buf*/)
 	{
 		error = EINVAL;
+	}
+
+	/* For sockets */
+	virtual void sock_bind(cloudabi_sa_family_t /*family*/, shared_ptr<fd_t> /*fd*/, void * /*address*/, size_t /*address_len*/)
+	{
+		error = ENOTSOCK;
+	}
+
+	virtual void sock_connect(cloudabi_sa_family_t /*family*/, shared_ptr<fd_t> /*fd*/, void * /*address*/, size_t /*address_len*/)
+	{
+		error = ENOTSOCK;
+	}
+
+	virtual void sock_listen(cloudabi_backlog_t /*backlog*/)
+	{
+		error = ENOTSOCK;
+	}
+
+	virtual shared_ptr<fd_t> sock_accept(cloudabi_sa_family_t /*family*/, void * /*address*/, size_t* /*address_len*/)
+	{
+		error = ENOTSOCK;
+		return nullptr;
+	}
+
+	virtual void sock_shutdown(cloudabi_sdflags_t /*how*/)
+	{
+		error = ENOTSOCK;
+	}
+
+	virtual void sock_stat_get(cloudabi_sockstat_t* /*buf*/, cloudabi_ssflags_t /*flags*/)
+	{
+		error = ENOTSOCK;
+	}
+
+	virtual void sock_recv(const cloudabi_recv_in_t* /*in*/, cloudabi_recv_out_t* /*out*/)
+	{
+		error = ENOTSOCK;
+	}
+
+	virtual void sock_send(const cloudabi_send_in_t* /*in*/, cloudabi_send_out_t* /*out*/)
+	{
+		error = ENOTSOCK;
 	}
 
 	virtual ~fd_t() {}
