@@ -41,13 +41,18 @@ inline vga_stream &operator<<(vga_stream &s, cloudabi_filetype_t type) {
 
 struct fd_t {
 	cloudabi_filetype_t type;
-	cloudabi_fdflags_t flags;
+	cloudabi_fdflags_t flags = 0;
 
-	size_t refcount;
-	bool invalid;
+	/* If this device represents a filesystem, this number must
+	 * be positie and unique for this filesystem
+	 */
+	cloudabi_device_t device = 0;
+
+	size_t refcount = 1;
+	bool invalid = false;
 
 	char name[64]; /* for debugging */
-	cloudabi_errno_t error;
+	cloudabi_errno_t error = 0;
 
 	virtual cloudabi_filesize_t seek(cloudabi_filedelta_t /*offset*/, cloudabi_whence_t /*whence*/) {
 		// this is not a seekable fd. Inherit from seekable_fd_t to have
@@ -104,10 +109,17 @@ struct fd_t {
 		error = EINVAL;
 	}
 
+	/** Get attributes of a file by path.
+	 */
+	virtual void file_stat_get(cloudabi_lookupflags_t /*flags*/, const char* /*path*/, size_t /*path_len*/, cloudabi_filestat_t* /*buf*/)
+	{
+		error = EINVAL;
+	}
+
 	virtual ~fd_t() {}
 
 protected:
-	inline fd_t(cloudabi_filetype_t t, const char *n) : type(t), flags(0), refcount(1), invalid(false), error(0) {
+	inline fd_t(cloudabi_filetype_t t, const char *n) : type(t) {
 		strncpy(name, n, sizeof(name));
 		name[sizeof(name)-1] = 0;
 	}

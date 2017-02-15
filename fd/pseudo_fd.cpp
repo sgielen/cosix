@@ -233,6 +233,40 @@ void pseudo_fd::file_unlink(const char *path, size_t pathlen, cloudabi_ulflags_t
 	}
 }
 
+void pseudo_fd::file_stat_get(cloudabi_lookupflags_t flags, const char *path, size_t pathlen, cloudabi_filestat_t *buf)
+{
+	auto res = lookup_device_id();
+	if(res != 0) {
+		error = res;
+		return;
+	}
+
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::stat_get;
+	request.inode = 0;
+	request.flags = flags;
+	request.length = pathlen < sizeof(request.buffer) ? pathlen : sizeof(request.buffer);
+	memcpy(request.buffer, path, request.length);
+
+	reverse_response_t response;
+	if(!send_request(&request, &response) || response.result < 0) {
+		error = -response.result;
+	} else {
+		if(response.length < sizeof(cloudabi_filestat_t)) {
+			error = EIO;
+			return;
+		}
+		memcpy(buf, response.buffer, sizeof(cloudabi_filestat_t));
+		if(buf->st_dev != device) {
+			get_vga_stream() << "Pseudo FD powered filesystem changed device ID's";
+			error = EIO;
+			return;
+		}
+		error = 0;
+	}
+}
+
 size_t pseudo_fd::readdir(char *buf, size_t nbyte, cloudabi_dircookie_t cookie)
 {
 	// TODO: the RPC protocol allows requesting a single readdir buffer. We
@@ -270,3 +304,34 @@ size_t pseudo_fd::readdir(char *buf, size_t nbyte, cloudabi_dircookie_t cookie)
 	error = 0;
 	return written;
 }
+
+cloudabi_errno_t pseudo_fd::lookup_device_id() {
+	if(device_id_obtained) {
+		return 0;
+	}
+
+	// figure out the device ID by doing a stat() for .
+	// NOTE: the uniqueness of device IDs is not checked, which means that
+	// the userland is responsible for keeping them unique!
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::stat_get;
+	request.inode = 0;
+	request.flags = flags;
+	request.length = 1;
+	request.buffer[0] = '.';
+
+	reverse_response_t response;
+	if(!send_request(&request, &response) || response.result < 0) {
+		return -response.result;
+	} else {
+		if(response.length < sizeof(cloudabi_filestat_t)) {
+			return EIO;
+		}
+		auto *stat = reinterpret_cast<cloudabi_filestat_t*>(&response.buffer[0]);
+		device = stat->st_dev;
+		device_id_obtained = true;
+		return 0;
+	}
+}
+

@@ -107,8 +107,8 @@ void start_tmpfs() {
 	}
 
 	dprintf(stdout, "Running tmpfs...\n");
-	argdata_t *keys[] = {argdata_create_string("stdout"), argdata_create_string("reversefd")};
-	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(reversefd)};
+	argdata_t *keys[] = {argdata_create_string("stdout"), argdata_create_string("reversefd"), argdata_create_string("deviceid")};
+	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(reversefd), argdata_create_int(1)};
 	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 
 	int pfd = program_spawn(bfd, ad);

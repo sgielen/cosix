@@ -193,6 +193,29 @@ size_t tmpfs::readdir(pseudofd_t pseudo, char *buffer, size_t buflen, cloudabi_d
 	return to_copy;
 }
 
+void tmpfs::stat_get(pseudofd_t pseudo, cloudabi_lookupflags_t flags, char *path, size_t len, cloudabi_filestat_t *buf) {
+	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
+
+	std::string filename = normalize_path(directory, path, len, flags);
+	auto it = directory->files.find(filename);
+	if(it == directory->files.end()) {
+		throw filesystem_error(ENOENT);
+	}
+
+	auto entry = it->second;
+	buf->st_dev = entry->device;
+	buf->st_ino = entry->inode;
+	buf->st_filetype = entry->type;
+	/* TODO: hard link count */
+	buf->st_nlink = 1;
+	/* TODO directory size? */
+	buf->st_size = entry->contents.size();
+	/* TODO: times */
+	buf->st_atim = 0;
+	buf->st_mtim = 0;
+	buf->st_ctim = 0;
+}
+
 /** Normalizes the given path. When it returns normally, directory
  * points at the innermost directory pointed to by path. It returns the
  * filename that is to be opened, created or unlinked.

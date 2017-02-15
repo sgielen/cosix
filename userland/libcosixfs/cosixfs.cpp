@@ -69,7 +69,12 @@ void cosix::handle_request(reverse_request_t *request, reverse_response_t *respo
 			response->result = cookie;
 			break;
 		}
-		case op::stat_get:
+		case op::stat_get: {
+			response->length = sizeof(cloudabi_filestat_t);
+			auto statbuf = reinterpret_cast<cloudabi_filestat_t*>(&response->buffer[0]);
+			fs->stat_get(request->pseudofd, request->flags, reinterpret_cast<char*>(request->buffer), request->length, statbuf);
+			break;
+		}
 		case op::stat_put:
 		case op::rename:
 		default:

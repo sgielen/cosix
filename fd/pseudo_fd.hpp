@@ -31,14 +31,17 @@ struct pseudo_fd : public seekable_fd_t {
 	size_t readdir(char *buf, size_t nbyte, cloudabi_dircookie_t cookie) override;
 	cloudabi_inode_t file_create(const char *path, size_t pathlen, cloudabi_filetype_t type) override;
 	void file_unlink(const char *path, size_t pathlen, cloudabi_ulflags_t flags) override;
+	void file_stat_get(cloudabi_lookupflags_t flags, const char *path, size_t pathlen, cloudabi_filestat_t *buf) override;
 
 private:
+	cloudabi_errno_t lookup_device_id();
 	bool send_request(reverse_request_t *request, reverse_response_t *response);
 	bool is_valid_path(const char *path, size_t length);
 	bool lookup_inode(const char *path, size_t length, cloudabi_oflags_t oflags, reverse_response_t *response);
 
 	pseudofd_t pseudo_id;
 	shared_ptr<fd_t> reverse_fd;
+	bool device_id_obtained = false;
 };
 
 }

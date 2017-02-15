@@ -32,6 +32,9 @@ void program_main(const argdata_t *ad) {
 		}
 	}
 
+	FILE *out = fdopen(stdout, "w");
+	fswap(stderr, out);
+
 	dprintf(stdout, "tmptest spawned, tmpdir is %d\n", tmpdir);
 
 	/* open nonexistant file */
@@ -41,6 +44,23 @@ void program_main(const argdata_t *ad) {
 	} else {
 		dprintf(stdout, "Nonexistant file existed?\n");
 		exit(1);
+	}
+
+	/* stat nonexistant file */
+	struct stat statbuf;
+	{
+		auto res = fstatat(tmpdir, "nonexistant.xxx", &statbuf, 0);
+		if(res < 0) {
+			if(errno == ENOENT) {
+				dprintf(stdout, "Good. Nonexistant file didn't exist during stat either\n");
+			} else {
+				perror("fstatat");
+				exit(1);
+			}
+		} else {
+			dprintf(stdout, "Nonexistant file existed?\n");
+			exit(1);
+		}
 	}
 
 	/* create file */
@@ -57,6 +77,15 @@ void program_main(const argdata_t *ad) {
 	close(tmpfile);
 
 	dprintf(stdout, "Wrote %zu bytes to \"%s\".\n", written, filename);
+
+	/* stat file */
+	if(fstatat(tmpdir, filename, &statbuf, 0) == 0) {
+		dprintf(stdout, "Stat succeeded. Dev: %lld, ino: %lld, type: %d\n",
+			statbuf.st_dev, statbuf.st_ino, statbuf.__st_filetype);
+	} else {
+		perror("stat");
+		exit(1);
+	}
 
 	/* read file */
 	tmpfile = openat(tmpdir, filename, O_RDONLY);

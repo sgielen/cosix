@@ -50,3 +50,7 @@ void filesystem::pwrite(pseudofd_t, off_t, const char*, size_t) {
 size_t filesystem::readdir(pseudofd_t, char*, size_t, cloudabi_dircookie_t&) {
 	throw filesystem_error(ENOSYS);
 }
+
+void filesystem::stat_get(pseudofd_t, cloudabi_lookupflags_t, char*, size_t, cloudabi_filestat_t*) {
+	throw filesystem_error(ENOSYS);
+}

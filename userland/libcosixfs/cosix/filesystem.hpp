@@ -50,6 +50,7 @@ struct filesystem {
 	virtual size_t pread(pseudofd_t pseudo, off_t offset, char *dest, size_t requested);
 	virtual void pwrite(pseudofd_t pseudo, off_t offset, const char *buf, size_t length);
 	virtual size_t readdir(pseudofd_t pseudo, char *buffer, size_t buflen, cloudabi_dircookie_t &cookie);
+	virtual void stat_get(pseudofd_t pseudo, cloudabi_lookupflags_t flags, char *path, size_t len, cloudabi_filestat_t *statbuf);
 
 	inline cloudabi_device_t get_device() {
 		return device;
