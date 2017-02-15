@@ -89,14 +89,15 @@ struct fd_t {
 		return 0;
 	}
 
-	/** Create a path of given type.
+	/** Create a path of given type. Returns the inode if no error is set.
 	 */
-	virtual void file_create(const char * /*path*/, size_t /*pathlen*/, cloudabi_filetype_t /*type*/)
+	virtual cloudabi_inode_t file_create(const char * /*path*/, size_t /*pathlen*/, cloudabi_filetype_t /*type*/)
 	{
 		error = EINVAL;
+		return 0;
 	}
 
-	/** Ulinks a path of given type.
+	/** Unlinks a path of given type.
 	 */
 	virtual void file_unlink(const char * /*path*/, size_t /*pathlen*/, cloudabi_ulflags_t /*flags*/)
 	{

@@ -195,7 +195,7 @@ shared_ptr<fd_t> pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_of
 	return new_fd;
 }
 
-void pseudo_fd::file_create(const char *path, size_t pathlen, cloudabi_filetype_t type)
+cloudabi_inode_t pseudo_fd::file_create(const char *path, size_t pathlen, cloudabi_filetype_t type)
 {
 	reverse_request_t request;
 	request.pseudofd = pseudo_id;
@@ -208,8 +208,10 @@ void pseudo_fd::file_create(const char *path, size_t pathlen, cloudabi_filetype_
 	reverse_response_t response;
 	if(!send_request(&request, &response) || response.result < 0) {
 		error = -response.result;
+		return 0;
 	} else {
 		error = 0;
+		return response.result;
 	}
 }
 
