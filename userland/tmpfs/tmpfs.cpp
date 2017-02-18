@@ -248,6 +248,10 @@ std::string tmpfs::normalize_path(file_entry_ptr &directory, const char *p, size
 		size_t splitter = path.find('/');
 		if(splitter == std::string::npos) {
 			// filename component.
+			if(path == ".." && depth == 0) {
+				// allow "foo/..", but not "foo/../.."
+				throw filesystem_error(ENOTCAPABLE);
+			}
 			if(lookupflags & CLOUDABI_LOOKUP_SYMLINK_FOLLOW) {
 				auto it = directory->files.find(path);
 				if(it != directory->files.end()) {
