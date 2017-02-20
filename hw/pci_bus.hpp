@@ -3,12 +3,29 @@
 #include "hw/driver.hpp"
 #include "hw/device.hpp"
 #include <stdint.h>
+#include <memory/allocation.hpp>
 
 namespace cloudos {
 
 struct pci_driver : public driver {
 	const char *description() override;
 	device *probe_root_device(device *root) override;
+};
+
+/**
+ * This device represents an unclaimed PCI device.
+ */
+struct pci_unused_device : public device {
+	pci_unused_device(pci_bus *bus, uint8_t dev);
+	~pci_unused_device();
+
+	const char *description() override;
+	cloudabi_errno_t init() override;
+
+private:
+	Blk descr;
+	pci_bus *bus = nullptr;
+	uint8_t dev = 0;
 };
 
 /**

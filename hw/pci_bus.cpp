@@ -1,6 +1,7 @@
 #include "hw/pci_bus.hpp"
 #include "hw/driver_store.hpp"
 #include "hw/cpu_io.hpp"
+#include <oslibc/numeric.h>
 #include "global.hpp"
 
 using namespace cloudos;
@@ -28,17 +29,25 @@ cloudabi_errno_t pci_bus::init()
 {
 	auto *list = get_driver_store()->get_drivers();
 	for(uint8_t device_nr = 0; device_nr < 32; ++device_nr) {
+		uint16_t device_id = get_device_id(device_nr);
+		uint16_t vendor_id = get_vendor_id(device_nr);
+		if(device_id == 0xffff && vendor_id == 0xffff) {
+			continue;
+		}
+
 		device *dev = nullptr;
 		find(list, [this, device_nr, &dev](driver_list *item) {
 			dev = item->data->probe_pci_device(this, device_nr);
 			return dev != nullptr;
 		});
 
-		if(dev != nullptr) {
-			auto res = dev->init();
-			if(res != 0) {
-				return res;
-			}
+		if(dev == nullptr) {
+			dev = allocate<pci_unused_device>(this, device_nr);
+		}
+
+		auto res = dev->init();
+		if(res != 0) {
+			return res;
 		}
 	}
 	return 0;
@@ -84,4 +93,33 @@ uint32_t pci_bus::read_pci_config(uint8_t bus, uint8_t device,
 	outl(CONFIG_ADDRESS, address);
 
 	return inl(CONFIG_DATA);
+}
+
+pci_unused_device::pci_unused_device(pci_bus *b, uint8_t d)
+: device(b)
+, bus(b)
+, dev(d)
+{}
+
+pci_unused_device::~pci_unused_device()
+{
+	deallocate(descr);
+}
+
+const char *pci_unused_device::description()
+{
+	return reinterpret_cast<const char*>(descr.ptr);
+}
+
+cloudabi_errno_t pci_unused_device::init()
+{
+	descr = allocate(48);
+	char *d = reinterpret_cast<char*>(descr.ptr);
+	strncpy(d, "Unused PCI device ", descr.size);
+
+	char buf[8];
+	strncat(d, uitoa_s(bus->get_vendor_id(dev), buf, sizeof(buf), 16), descr.size);
+	strncat(d, ":", descr.size);
+	strncat(d, uitoa_s(bus->get_device_id(dev), buf, sizeof(buf), 16), descr.size);
+	return 0;
 }
