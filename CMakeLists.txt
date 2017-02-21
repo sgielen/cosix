@@ -51,7 +51,8 @@ if(BAREMETAL_ENABLED)
 
 	set(QEMU_ARGS -kernel cloudkernel -m 1024
 		-net nic,model=virtio -net dump,file=dump.pcap -net user
-		-no-reboot -no-shutdown -d int -d cpu_reset -d guest_errors)
+		-no-reboot -no-shutdown -d int -d cpu_reset -d guest_errors
+		-serial file:kernel.log)
 
 	add_custom_target(boot
 		COMMAND qemu-system-i386 ${QEMU_ARGS}

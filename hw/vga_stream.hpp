@@ -5,14 +5,20 @@
 
 namespace cloudos {
 
+struct x86_serial;
+
 struct vga_stream {
 	vga_stream(vga_buffer &v);
 
 	int base;
 
-	vga_buffer &vga();
+	void write(const char*);
+	inline void set_serial(x86_serial *s) {
+		serial = s;
+	}
 
 private:
+	x86_serial *serial = nullptr;
 	vga_buffer &vga_;
 };
 

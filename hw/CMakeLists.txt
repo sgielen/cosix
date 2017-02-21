@@ -23,6 +23,7 @@ add_library(hw
 	arch/x86/x86.hpp arch/x86/x86.cpp
 	arch/x86/x86_pit.hpp arch/x86/x86_pit.cpp
 	arch/x86/x86_kbd.hpp arch/x86/x86_kbd.cpp
+	arch/x86/x86_serial.hpp arch/x86/x86_serial.cpp
 	${EXTRA_HW_SOURCES})
 list(APPEND hw_tests
 	test/test_vga.cpp
