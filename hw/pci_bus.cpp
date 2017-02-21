@@ -118,8 +118,8 @@ cloudabi_errno_t pci_unused_device::init()
 	strncpy(d, "Unused PCI device ", descr.size);
 
 	char buf[8];
-	strncat(d, uitoa_s(bus->get_vendor_id(dev), buf, sizeof(buf), 16), descr.size);
-	strncat(d, ":", descr.size);
-	strncat(d, uitoa_s(bus->get_device_id(dev), buf, sizeof(buf), 16), descr.size);
+	strncat(d, uitoa_s(bus->get_vendor_id(dev), buf, sizeof(buf), 16), descr.size - strlen(d) - 1);
+	strncat(d, ":", descr.size - strlen(d) - 1);
+	strncat(d, uitoa_s(bus->get_device_id(dev), buf, sizeof(buf), 16), descr.size - strlen(d) - 1);
 	return 0;
 }
