@@ -138,7 +138,7 @@ __attribute__((noreturn)) static void fatal_exception(int int_no, int err_code, 
 void interrupt_handler::setup(interrupt_table &table) {
 	/* use reinterpret_cast<uint64_t> for testing builds on 8-byte ptr archs. */
 #define INT(NUM) \
-	table.set_entry(NUM, reinterpret_cast<uint64_t>(isr ## NUM), 0x08, 0xee);
+	table.set_entry(NUM, reinterpret_cast<uint64_t>(isr ## NUM), 0x08, 0x8e);
 	/* Interrupts thrown by the processor */
 	INT(0); INT(1); INT(2); INT(3); INT(4); INT(5); INT(6); INT(7); INT(8);
 	INT(9); INT(10); INT(11); INT(12); INT(13); INT(14); INT(15); INT(16);
@@ -147,9 +147,9 @@ void interrupt_handler::setup(interrupt_table &table) {
 	/* Interrupts thrown by the PIC */
 	INT(32); INT(33); INT(34); INT(35); INT(36); INT(37); INT(38); INT(39);
 	INT(40); INT(41); INT(42); INT(43); INT(44); INT(45); INT(46); INT(47);
-	/* Software interrupts */
-	INT(128);
 #undef INTERRUPT
+	/* Software interrupts */
+	table.set_entry(128, reinterpret_cast<uint64_t>(isr128), 0x08, 0xee);
 
 	table.load();
 }
