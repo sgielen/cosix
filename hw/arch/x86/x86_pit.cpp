@@ -89,7 +89,8 @@ thread_condition_signaler *x86_pit_clock::get_signaler(cloudabi_timestamp_t time
 		return &(sig->signaler);
 	}
 
-	for(auto *s = signalers; s != nullptr; ++s) {
+	for(auto *s = signalers; s != nullptr; s = s->next) {
+		assert(s->data->timeout < timeout);
 		if(s->next == nullptr || s->next->data->timeout >= timeout) {
 			// insert it in between
 			item->next = s->next;
