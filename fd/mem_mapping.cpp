@@ -20,15 +20,15 @@ size_t cloudos::len_to_pages(size_t len) {
 
 mem_mapping_t::mem_mapping_t(process_fd *o, void *a,
 	size_t n, fd_mapping_t *b,
-	cloudabi_filesize_t offset, cloudabi_mprot_t p)
+	cloudabi_filesize_t offset, cloudabi_mprot_t p,
+	cloudabi_advice_t adv)
 : protection(p)
 , virtual_address(a)
 , number_of_pages(n)
 , owner(o)
 , backing_fd(b)
 , backing_offset(offset)
-, advice(CLOUDABI_ADVICE_NORMAL)
-, lock_count(0)
+, advice(adv)
 {
 	if(reinterpret_cast<uint32_t>(virtual_address) % PAGE_SIZE != 0) {
 		kernel_panic("non-page-aligned requested_address");
@@ -43,7 +43,6 @@ mem_mapping_t::mem_mapping_t(process_fd *o, mem_mapping_t *other)
 , backing_fd(other->backing_fd)
 , backing_offset(other->backing_offset)
 , advice(other->advice)
-, lock_count(0)
 {
 }
 
@@ -84,33 +83,42 @@ void mem_mapping_t::set_protection(cloudabi_mprot_t p)
 	// TODO: set all backed page table entries to these bits
 }
 
-bool mem_mapping_t::is_backed(size_t page)
+uint32_t *mem_mapping_t::get_page_entry(size_t page)
 {
-	if(page > number_of_pages) {
-		kernel_panic("page out of range");
-	}
+	assert(page < number_of_pages);
 	uint8_t *address = reinterpret_cast<uint8_t*>(virtual_address) + PAGE_SIZE * page;
 	uint16_t page_table_num = reinterpret_cast<uint64_t>(address) >> 22;
 	uint32_t *page_table = owner->get_page_table(page_table_num);
 	if(page_table == nullptr) {
-		return false;
+		return nullptr;
 	}
 	uint16_t page_entry_num = reinterpret_cast<uint64_t>(address) >> 12 & 0x03ff;
-	uint32_t &page_entry = page_table[page_entry_num];
-	return page_entry & 0x1;
+	return &page_table[page_entry_num];
 }
 
-void mem_mapping_t::ensure_backed(size_t page)
+uint32_t *mem_mapping_t::ensure_get_page_entry(size_t page)
 {
-	if(page > number_of_pages) {
-		kernel_panic("page out of range");
-	}
+	assert(page < number_of_pages);
 	uint8_t *address = reinterpret_cast<uint8_t*>(virtual_address) + PAGE_SIZE * page;
 	uint16_t page_table_num = reinterpret_cast<uint64_t>(address) >> 22;
 	uint32_t *page_table = owner->ensure_get_page_table(page_table_num);
 	uint16_t page_entry_num = reinterpret_cast<uint64_t>(address) >> 12 & 0x03ff;
-	uint32_t &page_entry = page_table[page_entry_num];
-	if(!(page_entry & 0x1)) {
+	return &page_table[page_entry_num];
+}
+
+bool mem_mapping_t::is_backed(size_t page)
+{
+	auto *page_entry = get_page_entry(page);
+	if(page_entry == nullptr) {
+		return false;
+	}
+	return *page_entry & 0x1;
+}
+
+void mem_mapping_t::ensure_backed(size_t page)
+{
+	auto *page_entry = ensure_get_page_entry(page);
+	if(!(*page_entry & 0x1)) {
 		Blk b = get_map_virtual()->allocate(PAGE_SIZE);
 		if(b.ptr == 0) {
 			kernel_panic("Failed to allocate page to back a mapping");
@@ -124,7 +132,7 @@ void mem_mapping_t::ensure_backed(size_t page)
 
 		// Re-map to userland
 		void *phys = get_map_virtual()->to_physical_address(b.ptr);
-		page_entry = reinterpret_cast<uint32_t>(phys) | 0x07; // TODO: use the correct permission bits
+		*page_entry = reinterpret_cast<uint32_t>(phys) | 0x07; // TODO: use the correct permission bits
 		get_map_virtual()->unmap_page_only(b.ptr);
 	}
 }
@@ -141,17 +149,15 @@ void mem_mapping_t::unmap(size_t page)
 	if(page > number_of_pages) {
 		kernel_panic("page out of range");
 	}
-	uint8_t *address = reinterpret_cast<uint8_t*>(virtual_address) + PAGE_SIZE * page;
-	uint16_t page_table_num = reinterpret_cast<uint64_t>(address) >> 22;
-	uint32_t *page_table = owner->get_page_table(page_table_num);
-	if(page_table == nullptr) {
+	auto *page_entry = get_page_entry(page);
+	if(page_entry == nullptr) {
 		return;
 	}
-	uint16_t page_entry_num = reinterpret_cast<uint64_t>(address) >> 12 & 0x03ff;
-	uint32_t &page_entry = page_table[page_entry_num];
-	void *phys = reinterpret_cast<void*>(page_entry & 0xfffff000);
+	void *phys = reinterpret_cast<void*>(*page_entry & 0xfffff000);
 
-	page_entry = 0;
+	*page_entry = 0;
+
+	uint8_t *address = reinterpret_cast<uint8_t*>(virtual_address) + PAGE_SIZE * page;
 	asm volatile ( "invlpg (%0)" : : "b"(address) : "memory");
 
 	// TODO: don't deallocate physical page if the page is shared!
@@ -165,3 +171,47 @@ void mem_mapping_t::unmap_completely()
 	}
 }
 
+mem_mapping_t *mem_mapping_t::split_at(size_t page, bool return_left) {
+	assert(page > 0);
+	assert(page < number_of_pages);
+	// if return_left is true, create a new mem_mapping_t for all pages < $page
+	// otherwise, create a new mem_mapping_t for all pages >= $page
+	// give it all physical pages currently held by this object, then resize this object accordingly
+
+	size_t my_new_num_pages, their_new_num_pages;
+	void *my_new_address, *their_new_address;
+	cloudabi_filesize_t my_new_offset, their_new_offset;
+
+	if(return_left) {
+		my_new_num_pages = number_of_pages - page;
+		their_new_num_pages = page;
+
+		my_new_address = reinterpret_cast<void*>(reinterpret_cast<size_t>(virtual_address) + PAGE_SIZE * their_new_num_pages);
+		their_new_address = virtual_address;
+
+		my_new_offset = backing_offset + PAGE_SIZE * their_new_num_pages;
+		their_new_offset = backing_offset;
+	} else {
+		// exactly the other way around
+		my_new_num_pages = page;
+		their_new_num_pages = number_of_pages - page;
+
+		my_new_address = virtual_address;
+		their_new_address = reinterpret_cast<void*>(reinterpret_cast<size_t>(virtual_address) + PAGE_SIZE * my_new_num_pages);
+
+		my_new_offset = backing_offset;
+		their_new_offset = backing_offset + PAGE_SIZE * my_new_num_pages;
+	}
+
+	mem_mapping_t *new_mapping =
+		allocate<mem_mapping_t>(owner, their_new_address, their_new_num_pages, backing_fd, their_new_offset, protection, advice);
+
+	// physical allocations are moved automatically, as they are stored
+	// in the process page directory by address
+
+	number_of_pages = my_new_num_pages;
+	virtual_address = my_new_address;
+	backing_offset = my_new_offset;
+
+	return new_mapping;
+}

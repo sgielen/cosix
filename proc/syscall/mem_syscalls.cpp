@@ -50,6 +50,9 @@ cloudabi_errno_t cloudos::syscall_mem_map(syscall_context &c)
 	// another free virtual range.
 	bool fixed = flags & CLOUDABI_MAP_FIXED;
 	if(!fixed && address_requested == nullptr) {
+		// TODO: also do this if the proposed memory map already
+		// overlaps with an existing mapping, or let add_mem_mapping
+		// do the placement as well
 		address_requested = c.process()->find_free_virtual_range(len_to_pages(len));
 		if(address_requested == nullptr) {
 			get_vga_stream() << "Failed to find virtual memory for mapping.\n";
@@ -92,7 +95,7 @@ cloudabi_errno_t cloudos::syscall_mem_unmap(syscall_context &c)
 	auto addr = args.first();
 	auto len = args.second();
 
-	c.process()->mem_unmap(addr, len);
+	c.process()->mem_unmap(addr, len_to_pages(len));
 	return 0;
 }
 

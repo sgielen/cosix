@@ -181,6 +181,7 @@ void program_main(const argdata_t *) {
 	start_binary("pipe_test");
 	start_binary("concur_test");
 	start_binary("time_test");
+	start_binary("mmap_test");
 
 	start_tmpfs();
 	//start_binary("tmptest");

@@ -34,7 +34,8 @@ struct mem_mapping_t {
 	mem_mapping_t(process_fd *owner,
 	  void *requested_address /* page aligned */,
 	  size_t number_of_pages, fd_mapping_t *backing_fd /* or NULL */,
-	  cloudabi_filesize_t offset, cloudabi_mprot_t protection);
+	  cloudabi_filesize_t offset, cloudabi_mprot_t protection,
+	  cloudabi_advice_t adv = CLOUDABI_ADVICE_NORMAL);
 
 	// Make a new mapping from the old one
 	mem_mapping_t(process_fd *owner, mem_mapping_t *other);
@@ -60,6 +61,11 @@ struct mem_mapping_t {
 	void unmap(size_t page);
 	void unmap_completely();
 
+	mem_mapping_t *split_at(size_t page, bool return_left);
+
+	uint32_t *get_page_entry(size_t page);
+	uint32_t *ensure_get_page_entry(size_t page);
+
 	void *virtual_address; /* always page-aligned */
 	size_t number_of_pages;
 
@@ -70,7 +76,6 @@ struct mem_mapping_t {
 	cloudabi_filesize_t backing_offset;
 
 	cloudabi_advice_t advice;
-	uint8_t lock_count;
 };
 
 }

@@ -279,25 +279,26 @@ void process_fd::install_page_directory() {
 
 cloudabi_errno_t process_fd::add_mem_mapping(mem_mapping_t *mapping, bool overwrite)
 {
-	mem_mapping_list *covering_mappings = nullptr;
-	remove_all(&mappings, [&](mem_mapping_list *item) {
-		bool covers = item->data->covers(mapping->virtual_address);
-		if(covers && !overwrite) {
+	void *begin = mapping->virtual_address;
+	void *end = reinterpret_cast<char*>(begin) + mapping->number_of_pages * PAGE_SIZE;
+
+	if(overwrite) {
+		// ensure the space is free
+		mem_unmap(mapping->virtual_address, mapping->number_of_pages);
+	}
+
+	iterate(mappings, [&](mem_mapping_list *item) {
+		void *i_begin = item->data->virtual_address;
+		void *i_end = reinterpret_cast<char*>(i_begin) + item->data->number_of_pages * PAGE_SIZE;
+
+		bool covers = end > i_begin && begin < i_end;
+		assert(!(covers && overwrite)); // this should be prevented by mem_unmap
+		if(covers) {
 			get_vga_stream() << "Trying to create a " << mapping->number_of_pages << "-page mapping at address " << mapping->virtual_address << "\n";
 			get_vga_stream() << "Found a " << item->data->number_of_pages << "-page mapping at address " << item->data->virtual_address << "\n";
 			kernel_panic("add_mem_mapping(mapping, false) called for a mapping that overlaps with an existing one");
 		}
-		return covers;
-	}, [&](mem_mapping_list *item) {
-		append(&covering_mappings, item);
 	});
-
-	if(covering_mappings != nullptr) {
-		// - split the old mappings in covered and uncovered parts
-		// - unmap the covered parts
-		// - add the covered parts back into the mappings list
-		kernel_panic("TODO: implement solving covered mappings in add_mem_mapping");
-	}
 
 	mem_mapping_list *entry = allocate<mem_mapping_list>(mapping);
 	append(&mappings, entry);
@@ -308,19 +309,75 @@ cloudabi_errno_t process_fd::add_mem_mapping(mem_mapping_t *mapping, bool overwr
 	// we will allocate physical pages and alter the page table.
 }
 
-void process_fd::mem_unmap(void *addr, size_t )
+void process_fd::mem_unmap(void *begin_addr, size_t num_pages)
 {
-	// TODO: find all mappings within this range
-	// - if they are fully covered, unmap them
-	// - if they are partially covered, split them and unmap the covered part
-	// - for now, assume that we only unmap full mappings
+	auto begin = reinterpret_cast<size_t>(begin_addr);
+	auto end = begin + num_pages * PAGE_SIZE;
+	assert(begin < end);
+
+	mem_mapping_list *new_mappings = nullptr;
+
 	remove_all(&mappings, [&](mem_mapping_list *item) {
-		return item->data->virtual_address == addr;
+		auto i_begin = reinterpret_cast<size_t>(item->data->virtual_address);
+		auto i_end = i_begin + item->data->number_of_pages * PAGE_SIZE;
+		assert(i_begin < i_end);
+
+		if(end <= i_begin || begin >= i_end) {
+			// this mapping fully survives
+			return false;
+		}
+		else if(begin <= i_begin && end >= i_end) {
+			// this mapping must be fully unmapped
+			return true;
+		}
+
+		if(begin <= i_begin) {
+			// the beginning of this mapping must be unmapped
+			assert(end > i_begin);
+			assert(((end - i_begin) % PAGE_SIZE) == 0);
+			size_t unmap_pages = (end - i_begin) / PAGE_SIZE;
+			mem_mapping_t *new_mapping = item->data->split_at(unmap_pages, false);
+			mem_mapping_list *entry = allocate<mem_mapping_list>(new_mapping);
+			append(&new_mappings, entry);
+			assert(new_mapping->virtual_address == reinterpret_cast<void*>(end));
+			return true;
+		} else if(end >= i_end) {
+			// the end of this mapping must be unmapped
+			assert(begin > i_begin);
+			assert(((begin - i_begin) % PAGE_SIZE) == 0);
+			size_t pages_left = (begin - i_begin) / PAGE_SIZE;
+			mem_mapping_t *new_mapping = item->data->split_at(pages_left, true);
+			mem_mapping_list *entry = allocate<mem_mapping_list>(new_mapping);
+			append(&new_mappings, entry);
+			assert(item->data->virtual_address == begin_addr);
+			return true;
+		} else {
+			// this mapping must be unmapped somewhere in the middle
+			// split it twice, such that this item remains the part to be unmapped
+			assert(((begin - i_begin) % PAGE_SIZE) == 0);
+			size_t pages_left = (begin - i_begin) / PAGE_SIZE;
+
+			assert(((end - begin) % PAGE_SIZE) == 0);
+			size_t pages_middle = (end - begin) / PAGE_SIZE;
+
+			mem_mapping_t *mapping_left = item->data->split_at(pages_left, true);
+			mem_mapping_list *entry_left = allocate<mem_mapping_list>(mapping_left);
+			append(&new_mappings, entry_left);
+			assert(item->data->virtual_address == begin_addr);
+
+			mem_mapping_t *mapping_right = item->data->split_at(pages_middle, false);
+			mem_mapping_list *entry_right = allocate<mem_mapping_list>(mapping_right);
+			append(&new_mappings, entry_right);
+			assert(mapping_right->virtual_address == reinterpret_cast<void*>(end));
+			return true;
+		}
 	}, [&](mem_mapping_list *item) {
 		item->data->unmap_completely();
 		deallocate(item->data);
 		deallocate(item);
 	});
+
+	append(&mappings, new_mappings);
 }
 
 void *process_fd::find_free_virtual_range(size_t num_pages)
