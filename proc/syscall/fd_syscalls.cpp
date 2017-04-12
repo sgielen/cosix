@@ -19,7 +19,6 @@ cloudabi_errno_t cloudos::syscall_fd_create1(syscall_context &c)
 	auto type = args.first();
 
 	if(type == CLOUDABI_FILETYPE_SOCKET_DGRAM
-	|| type == CLOUDABI_FILETYPE_SOCKET_SEQPACKET
 	|| type == CLOUDABI_FILETYPE_SOCKET_STREAM)
 	{
 		auto fd = make_shared<unixsock>(type, "unixsock");
@@ -60,7 +59,6 @@ cloudabi_errno_t cloudos::syscall_fd_create2(syscall_context &c)
 		c.set_results(a, b);
 		return 0;
 	} else if(type == CLOUDABI_FILETYPE_SOCKET_DGRAM
-	       || type == CLOUDABI_FILETYPE_SOCKET_SEQPACKET
 	       || type == CLOUDABI_FILETYPE_SOCKET_STREAM)
 	{
 		auto a = make_shared<unixsock>(type, "socketpair A");

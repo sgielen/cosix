@@ -39,7 +39,6 @@ unixsock::unixsock(cloudabi_filetype_t sockettype, const char *n)
 : fd_t(sockettype, n)
 {
 	assert(sockettype == CLOUDABI_FILETYPE_SOCKET_DGRAM
-	    || sockettype == CLOUDABI_FILETYPE_SOCKET_SEQPACKET
 	    || sockettype == CLOUDABI_FILETYPE_SOCKET_STREAM);
 }
 
@@ -366,7 +365,6 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 	}
 
 	assert(type == CLOUDABI_FILETYPE_SOCKET_DGRAM
-	    || type == CLOUDABI_FILETYPE_SOCKET_SEQPACKET
 	    || type == CLOUDABI_FILETYPE_SOCKET_STREAM);
 
 	if(recv_messages == nullptr) {
@@ -391,10 +389,7 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 	}
 	assert(recv_messages);
 
-	if(type == CLOUDABI_FILETYPE_SOCKET_SEQPACKET) {
-		// SEQPACKET: not supported
-		error = ENOSYS;
-	} else if(type == CLOUDABI_FILETYPE_SOCKET_DGRAM) {
+	if(type == CLOUDABI_FILETYPE_SOCKET_DGRAM) {
 		// Datagram receiving: take next message; fill current buffers
 		// with only it
 		auto item = recv_messages;
@@ -533,7 +528,6 @@ void unixsock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *out)
 	assert(other->othersock.lock());
 
 	assert(type == CLOUDABI_FILETYPE_SOCKET_DGRAM
-	    || type == CLOUDABI_FILETYPE_SOCKET_SEQPACKET
 	    || type == CLOUDABI_FILETYPE_SOCKET_STREAM);
 
 	// space in receive buffers?

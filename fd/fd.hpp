@@ -23,7 +23,6 @@ inline vga_stream &operator<<(vga_stream &s, cloudabi_filetype_t type) {
 	FT(REGULAR_FILE);
 	FT(SHARED_MEMORY);
 	FT(SOCKET_DGRAM);
-	FT(SOCKET_SEQPACKET);
 	FT(SOCKET_STREAM);
 	FT(SYMBOLIC_LINK);
 #undef FT
