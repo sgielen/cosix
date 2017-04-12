@@ -20,7 +20,7 @@ struct memory_fd : public seekable_fd_t {
 	// Non-owning memory constructor: will return the data in the
 	// allocation, will not free the Blk when destructed.
 	memory_fd(void *address, size_t file_length, const char *name);
-	~memory_fd();
+	~memory_fd() override;
 
 	size_t read(void *dest, size_t count) override;
 

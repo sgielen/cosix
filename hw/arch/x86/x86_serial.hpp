@@ -12,7 +12,7 @@ namespace cloudos {
  */
 struct x86_serial : public device, public irq_handler {
 	x86_serial(device *parent);
-	~x86_serial();
+	~x86_serial() override;
 
 	const char *description() override;
 	cloudabi_errno_t init() override;

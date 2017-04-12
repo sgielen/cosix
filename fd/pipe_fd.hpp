@@ -15,7 +15,7 @@ namespace cloudos {
  */
 struct pipe_fd : fd_t {
 	pipe_fd(size_t capacity, const char *n);
-	~pipe_fd();
+	~pipe_fd() override;
 
 	/** read() blocks until at least 1 byte of data is available;
 	 * then, it returns up to count bytes of data in the dest buffer.

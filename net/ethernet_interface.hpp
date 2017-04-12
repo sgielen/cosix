@@ -12,7 +12,7 @@ namespace cloudos {
 struct ethernet_interface : public interface
 {
 	ethernet_interface(ethernet_device *device);
-	virtual ~ethernet_interface() {}
+	virtual ~ethernet_interface() override {}
 
 	cloudabi_errno_t get_mac_address(char mac[6]) {
 		return device->get_mac_address(mac);

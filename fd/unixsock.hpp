@@ -38,7 +38,7 @@ private:
 
 struct unixsock : public fd_t, public enable_shared_from_this<unixsock> {
 	unixsock(cloudabi_filetype_t sockettype, const char *n);
-	~unixsock();
+	~unixsock() override;
 
 	enum status_t {
 		// If this socket is in SHUTDOWN, it cannot send() anymore, but

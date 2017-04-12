@@ -17,7 +17,7 @@ struct pci_driver : public driver {
  */
 struct pci_unused_device : public device {
 	pci_unused_device(pci_bus *bus, uint8_t dev);
-	~pci_unused_device();
+	~pci_unused_device() override;
 
 	const char *description() override;
 	cloudabi_errno_t init() override;

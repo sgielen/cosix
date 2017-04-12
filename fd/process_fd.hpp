@@ -62,7 +62,7 @@ typedef linked_list<userland_condvar_waiters_t*> userland_condvar_waiters_list;
  */
 struct process_fd : public fd_t {
 	process_fd(const char *n);
-	~process_fd();
+	~process_fd() override;
 	void add_initial_fds();
 
 	void install_page_directory();
