@@ -701,7 +701,7 @@ cloudabi_errno_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *
 	stack_mapping->ensure_completely_backed();
 
 	// create the main thread
-	add_thread(userland_stack_top, auxv_address, reinterpret_cast<void*>(header->e_entry));
+	add_thread(userland_stack_bottom, userland_stack_size, auxv_address, reinterpret_cast<void*>(header->e_entry));
 
 	return 0;
 }
@@ -773,11 +773,11 @@ void process_fd::add_thread(shared_ptr<thread> thr)
 	get_scheduler()->thread_ready(thr);
 }
 
-shared_ptr<thread> process_fd::add_thread(void *stack_address, void *auxv_address, void *entrypoint)
+shared_ptr<thread> process_fd::add_thread(void *stack_bottom, size_t stack_len, void *auxv_address, void *entrypoint)
 {
 	assert(running);
 
-	auto thr = make_shared_aligned<thread>(16, this, stack_address, auxv_address, entrypoint, ++last_thread);
+	auto thr = make_shared_aligned<thread>(16, this, stack_bottom, stack_len, auxv_address, entrypoint, ++last_thread);
 	add_thread(thr);
 	return thr;
 }

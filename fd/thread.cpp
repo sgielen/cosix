@@ -22,10 +22,10 @@ static inline T *allocate_on_stack(uint32_t &useresp) {
 	return reinterpret_cast<T*>(useresp);
 }
 
-thread::thread(process_fd *p, void *stack_location, void *auxv_address, void *entrypoint, cloudabi_tid_t t)
+thread::thread(process_fd *p, void *stack_bottom, size_t stack_len, void *auxv_address, void *entrypoint, cloudabi_tid_t t)
 : process(p)
 , thread_id(t)
-, userland_stack_top(stack_location)
+, userland_stack_top(reinterpret_cast<char*>(stack_bottom) + stack_len)
 {
 	if((thread_id & 0x80000000) != 0) {
 		kernel_panic("Upper 2 bits of the thread ID must not be set");

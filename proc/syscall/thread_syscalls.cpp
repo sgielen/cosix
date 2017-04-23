@@ -9,8 +9,7 @@ cloudabi_errno_t cloudos::syscall_thread_create(syscall_context &c)
 {
 	auto args = arguments_t<cloudabi_threadattr_t*, cloudabi_tid_t*>(c);
 	auto attr = args.first();
-	/* TODO: do something with attr->stack_size? */
-	shared_ptr<thread> thr = c.process()->add_thread(attr->stack, attr->argument, reinterpret_cast<void*>(attr->entry_point));
+	shared_ptr<thread> thr = c.process()->add_thread(attr->stack, attr->stack_len, attr->argument, reinterpret_cast<void*>(attr->entry_point));
 	c.result = thr->get_thread_id();
 	return 0;
 }

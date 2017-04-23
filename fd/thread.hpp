@@ -30,12 +30,13 @@ typedef uint8_t sse_state_t [512] __attribute__ ((aligned (16)));
  */
 struct thread : enable_shared_from_this<thread> {
 	/** Create a thread. auxv and entrypoint must already point to valid
-	 * memory, while stack_location will be the initial stack pointer, so it must
-	 * point just beyond a block of valid stack memory. The thread will start
-	 * running at the entrypoint, and will receive the thread_id as a parameter on
-	 * the stack unless the id is MAIN_THREAD. It will also receive the auxv ptr.
+	 * memory, while the userland stack will be given by stack_bottom until
+	 * stack_bottom + stack_len. The thread will start running at the
+	 * entrypoint, and will receive the thread_id as a parameter on the
+	 * stack unless the id is MAIN_THREAD. It will also receive the auxv
+	 * ptr.
 	 */
-	thread(process_fd *process, void *stack_location, void *auxv, void *entrypoint, cloudabi_tid_t thread_id);
+	thread(process_fd *process, void *stack_bottom, size_t stack_len, void *auxv, void *entrypoint, cloudabi_tid_t thread_id);
 
 	/** Create a thread, forked off of another thread from another process. */
 	thread(process_fd *process, shared_ptr<thread> other_thread);

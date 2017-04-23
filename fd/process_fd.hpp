@@ -101,9 +101,10 @@ struct process_fd : public fd_t {
 
 	/* Add a thread to this process.
 	 * auxv_address and entrypoint must already point to valid memory in
-	 * this process; stack_address must point just beyond a valid memory region.
+	 * this process; stack_bottom until stack_bottom + stack_len must point to
+	 * a valid memory region for the thread's stack.
 	 */
-	shared_ptr<thread> add_thread(void *stack_address, void *auxv_address, void *entrypoint);
+	shared_ptr<thread> add_thread(void *stack_bottom, size_t stack_len, void *auxv_address, void *entrypoint);
 
 	static const int PAGE_SIZE = 4096 /* bytes */;
 
