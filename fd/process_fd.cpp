@@ -281,6 +281,7 @@ cloudabi_errno_t process_fd::add_mem_mapping(mem_mapping_t *mapping, bool overwr
 {
 	void *begin = mapping->virtual_address;
 	void *end = reinterpret_cast<char*>(begin) + mapping->number_of_pages * PAGE_SIZE;
+	assert(mapping->number_of_pages > 0);
 
 	if(overwrite) {
 		// ensure the space is free
@@ -338,6 +339,7 @@ void process_fd::mem_unmap(void *begin_addr, size_t num_pages)
 			size_t unmap_pages = (end - i_begin) / PAGE_SIZE;
 			mem_mapping_t *new_mapping = item->data->split_at(unmap_pages, false);
 			mem_mapping_list *entry = allocate<mem_mapping_list>(new_mapping);
+			assert(new_mapping->number_of_pages > 0);
 			append(&new_mappings, entry);
 			assert(new_mapping->virtual_address == reinterpret_cast<void*>(end));
 			return true;
@@ -348,6 +350,7 @@ void process_fd::mem_unmap(void *begin_addr, size_t num_pages)
 			size_t pages_left = (begin - i_begin) / PAGE_SIZE;
 			mem_mapping_t *new_mapping = item->data->split_at(pages_left, true);
 			mem_mapping_list *entry = allocate<mem_mapping_list>(new_mapping);
+			assert(new_mapping->number_of_pages > 0);
 			append(&new_mappings, entry);
 			assert(item->data->virtual_address == begin_addr);
 			return true;
@@ -362,11 +365,13 @@ void process_fd::mem_unmap(void *begin_addr, size_t num_pages)
 
 			mem_mapping_t *mapping_left = item->data->split_at(pages_left, true);
 			mem_mapping_list *entry_left = allocate<mem_mapping_list>(mapping_left);
+			assert(mapping_left->number_of_pages > 0);
 			append(&new_mappings, entry_left);
 			assert(item->data->virtual_address == begin_addr);
 
 			mem_mapping_t *mapping_right = item->data->split_at(pages_middle, false);
 			mem_mapping_list *entry_right = allocate<mem_mapping_list>(mapping_right);
+			assert(mapping_right->number_of_pages > 0);
 			append(&new_mappings, entry_right);
 			assert(mapping_right->virtual_address == reinterpret_cast<void*>(end));
 			return true;
@@ -436,6 +441,8 @@ cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping
 		return EINVAL;
 	}
 
+	assert(argdata != nullptr);
+	assert(argdatalen > 0);
 	Blk argdata_alloc = allocate(argdatalen);
 	uint8_t *argdata_buffer = reinterpret_cast<uint8_t*>(argdata_alloc.ptr);
 	memcpy(argdata_buffer, argdata, argdatalen);

@@ -150,7 +150,8 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 		if(!init_exec_fd) {
 			kernel_panic("Failed to open init");
 		}
-		auto res = global.init->exec(init_exec_fd, 0, nullptr, nullptr, 0);
+		char argdata[] = {0x06 /* empty ADT_MAP */};
+		auto res = global.init->exec(init_exec_fd, 0, nullptr, argdata, sizeof(argdata));
 		if(res != 0) {
 			kernel_panic("Failed to start init");
 		}
