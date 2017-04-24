@@ -21,9 +21,36 @@ void scheduler::initial_yield()
 	}
 	void *esp;
 	switch_thread(&esp, running->data->esp);
+	kernel_panic("Switched back from initial yield");
+}
+
+void scheduler::thread_final_yield()
+{
+	assert(running && running->data && running->data->exited);
+
+	wait_for_next();
+	kernel_panic("Switched back from final yield");
 }
 
 void scheduler::thread_yield()
+{
+	assert(running && running->data && !running->data->exited);
+
+	wait_for_next();
+
+	// scheduler yielded back to this thread
+	remove_all(&dealloc_later, [&](thread_list *) {
+		return true;
+	}, [&](thread_list *dealloc) {
+		assert(dealloc->data);
+		weak_ptr<thread> thr_weak = dealloc->data;
+		dealloc->data.reset();
+		deallocate(dealloc);
+		assert(thr_weak.expired());
+	});
+}
+
+void scheduler::wait_for_next()
 {
 	auto old_thread = running->data;
 
@@ -53,17 +80,6 @@ void scheduler::thread_yield()
 		void **esp = &old_thread->esp;
 		old_thread.reset();
 		switch_thread(esp, running->data->esp);
-		// scheduler yielded back to this thread
-
-		remove_all(&dealloc_later, [&](thread_list *) {
-			return true;
-		}, [&](thread_list *dealloc) {
-			assert(dealloc->data);
-			weak_ptr<thread> thr_weak = dealloc->data;
-			dealloc->data.reset();
-			deallocate(dealloc);
-			assert(thr_weak.expired());
-		});
 	}
 }
 

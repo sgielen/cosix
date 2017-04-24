@@ -25,8 +25,10 @@ cloudabi_errno_t cloudos::syscall_thread_exit(syscall_context &c)
 	}
 	c.thread->thread_exit();
 	c.thread->drop_userspace_lock(lock);
-	get_scheduler()->thread_yield();
-	kernel_panic("Unreachable");
+
+	// Userland won't be rescheduled
+	assert(c.thread->is_exited());
+	return 0;
 }
 
 cloudabi_errno_t cloudos::syscall_thread_yield(syscall_context &)

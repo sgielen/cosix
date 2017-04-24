@@ -13,7 +13,8 @@ struct scheduler {
 		return waiting_for_ready_task;
 	}
 
-	void initial_yield();
+	[[noreturn]] void initial_yield();
+	[[noreturn]] void thread_final_yield();
 	void thread_yield();
 	void resume_running(interrupt_state_t *);
 
@@ -24,6 +25,7 @@ struct scheduler {
 	shared_ptr<thread> get_running_thread();
 
 private:
+	void wait_for_next();
 	void schedule_next();
 
 	thread_list *running = nullptr;

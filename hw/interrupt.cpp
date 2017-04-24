@@ -194,17 +194,10 @@ void interrupt_handler::handle(interrupt_state_t *regs) {
 
 	// Any exceptions in the userland are handled by the thread
 	if(!in_kernel && (int_no < 0x20 || int_no >= 0x30)) {
-		// During the handling of this interrupt, we might exit this thread and
-		// switch to another, then clean the thread. To ensure this is possible,
-		// ensure we don't have a shared ptr to the thread on the stack.
 		assert(running_thread.use_count() > 1);
-		thread *thr = running_thread.get();
-		running_thread.reset();
-		thr->interrupt(int_no, err_code);
-		// interrupt returned, so this thread survived
-		running_thread = get_scheduler()->get_running_thread();
-		assert(running_thread);
-		assert(running_thread.get() == thr);
+		running_thread->interrupt(int_no, err_code);
+		assert(running_thread.use_count() > 1);
+		assert(get_scheduler()->get_running_thread() == running_thread);
 	}
 	// Any exceptions in the kernel lead to immediate kernel_panic
 	else if(int_no < 0x20 || int_no >= 0x30) {
@@ -216,7 +209,15 @@ void interrupt_handler::handle(interrupt_state_t *regs) {
 	}
 
 	if(running_thread) {
-		assert(!running_thread->is_exited());
+		if(running_thread->is_exited()) {
+			// the thread we are about to reschedule has exited, so
+			// drop into the scheduler to find a new one to
+			// reschedule
+			assert(running_thread.use_count() > 1);
+			running_thread.reset();
+			get_scheduler()->thread_final_yield();
+			kernel_panic("Returned from thread_final_yield");
+		}
 		running_thread->get_return_state(regs);
 	}
 }

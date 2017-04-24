@@ -37,9 +37,10 @@ cloudabi_errno_t cloudos::syscall_proc_exec(syscall_context &c)
 		get_vga_stream() << "exec() failed because of " << res << "\n";
 		return res;
 	}
+
+	// Userland won't be rescheduled
 	assert(c.thread->is_exited());
-	get_scheduler()->thread_yield();
-	kernel_panic("Unreachable code");
+	return 0;
 }
 
 cloudabi_errno_t cloudos::syscall_proc_exit(syscall_context &c)
@@ -49,10 +50,9 @@ cloudabi_errno_t cloudos::syscall_proc_exit(syscall_context &c)
 	assert(!c.process()->is_terminated());
 	c.process()->exit(args.first());
 
-	// exit() sets exited to true and does a thread_yield(), so we won't be
-	// reschedule. We'll be cleaned up when the last file descriptor to
-	// this process closes.
-	kernel_panic("Unreachable code");
+	// Userland won't be rescheduled
+	assert(c.thread->is_exited());
+	return 0;
 }
 
 cloudabi_errno_t cloudos::syscall_proc_fork(syscall_context &c)
@@ -80,7 +80,6 @@ cloudabi_errno_t cloudos::syscall_proc_raise(syscall_context &c)
 	assert(!c.process()->is_terminated());
 	c.process()->signal(args.first());
 
-	// like with exit, if signal is fatal exited will be true, we'll be cleaned up later
-	assert(!c.process()->is_terminated());
+	// like with exit, if signal is fatal, userland won't be rescheduled
 	return 0;
 }

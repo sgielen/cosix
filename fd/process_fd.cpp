@@ -48,13 +48,15 @@ process_fd::process_fd(const char *n)
 
 process_fd::~process_fd()
 {
+	if(running) {
+		// immediately exit
+		exit(0, CLOUDABI_SIGKILL);
+	}
 	assert(!running);
+
 	assert(threads == nullptr);
 
 	if(fds != nullptr) {
-		for(size_t i = 0; i < fd_capacity; ++i) {
-			close_fd(i);
-		}
 		deallocate({fds, fd_capacity * sizeof(fd_mapping_t*)});
 		fds = nullptr;
 		fd_capacity = 0;
@@ -807,15 +809,14 @@ void process_fd::exit(cloudabi_exitcode_t c, cloudabi_signal_t s)
 
 	termination_signaler.condition_broadcast();
 
-	// TODO: close all file descriptors (this also kills sub-processes)
-	// TODO: clean up all memory maps
-	// TODO: free all allocations
+	for(size_t i = 0; i < fd_capacity; ++i) {
+		close_fd(i);
+	}
+
+	// deallocation will happen in the destructor
 
 	// unschedule all threads
 	exit_all_threads();
-
-	// now yield, so we can schedule a ready thread
-	get_scheduler()->thread_yield();
 }
 
 void process_fd::signal(cloudabi_signal_t s)
