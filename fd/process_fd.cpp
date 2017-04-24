@@ -720,6 +720,7 @@ void process_fd::fork(shared_ptr<thread> otherthread) {
 	assert(otherprocess->running);
 	assert(otherprocess->threads);
 	assert(!threads);
+	assert(!mappings);
 
 	strncpy(name, otherprocess->name, sizeof(name));
 	strncat(name, "->forked", sizeof(name) - strlen(name) - 1);
