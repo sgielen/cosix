@@ -38,6 +38,18 @@ struct interface {
 	}
 
 	/**
+	 * On interfaces that use it, this returns the MAC of the interface.
+	 * The size of the buffer is returned using the parameter. The returned
+	 * pointer is owned by the interface, and must never be freed by the
+	 * caller. The value may become invalid or dangling after subsequent
+	 * calls to methods of this interface.
+	 */
+	inline const char *get_mac(size_t *size) {
+		*size = mac_size;
+		return mac;
+	}
+
+	/**
 	 * This method returns the list of IPv4 addresses on this interface. It
 	 * returns nullptr if this interface has no IPv4 addresses. The
 	 * returned pointer is owned by the interface, and must never be freed
@@ -72,6 +84,19 @@ protected:
 	 */
 	cloudabi_errno_t received_ip_packet(uint8_t *frame, size_t frame_length, protocol_t frame_type, size_t ip_hdr_offset);
 
+	/**
+	 * This method can be called to set the MAC address.
+	 */
+	void set_mac(const char *m, size_t s) {
+		mac_size = s;
+		if(mac_size > sizeof(mac)) {
+			mac_size = sizeof(mac);
+		}
+		for(size_t i = 0; i < mac_size; ++i) {
+			mac[i] = m[i];
+		}
+	}
+
 private:
 	void set_name(const char *name);
 
@@ -79,6 +104,8 @@ private:
 	char name[8];
 	ipv4addr_list *ipv4_addrs;
 	ipv6addr_list *ipv6_addrs;
+	char mac[16];
+	size_t mac_size = 0;
 };
 
 }

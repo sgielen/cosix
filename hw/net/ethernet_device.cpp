@@ -22,7 +22,19 @@ cloudabi_errno_t ethernet_device::init()
 		return res;
 	}
 
-	return eth_init();
+	res = eth_init();
+	if(res != 0) {
+		return res;
+	}
+
+	char my_mac[6];
+	res = get_mac_address(my_mac);
+	if(res != 0) {
+		return res;
+	}
+
+	interface->set_mac(my_mac, sizeof(my_mac));
+	return 0;
 }
 
 cloudabi_errno_t ethernet_device::ethernet_frame_received(uint8_t *frame, size_t length)
