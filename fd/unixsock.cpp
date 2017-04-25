@@ -36,15 +36,13 @@ shared_ptr<unixsock> unixsock_listen_store::get_unixsock(cloudabi_device_t dev, 
 }
 
 unixsock::unixsock(cloudabi_filetype_t sockettype, const char *n)
-: fd_t(sockettype, n)
+: sock_t(sockettype, n)
 {
-	assert(sockettype == CLOUDABI_FILETYPE_SOCKET_DGRAM
-	    || sockettype == CLOUDABI_FILETYPE_SOCKET_STREAM);
 }
 
 unixsock::~unixsock()
 {
-	if(status == status_t::LISTENING) {
+	if(status == sockstatus_t::LISTENING) {
 		get_unixsock_listen_store()->unregister_unixsock(listen_device, listen_inode);
 
 		remove_all(&listenqueue, [&](unixsock_list *) {
@@ -57,10 +55,10 @@ unixsock::~unixsock()
 	// but the object is kept alive in the kernel until the listen socket
 	// closes as well. At that point, the socket is set back to IDLE with
 	// error set, after which it would be destructed.
-	assert(status != status_t::CONNECTING);
+	assert(status != sockstatus_t::CONNECTING);
 
-	if(status == status_t::CONNECTED
-	|| status == status_t::SHUTDOWN) {
+	if(status == sockstatus_t::CONNECTED
+	|| status == sockstatus_t::SHUTDOWN) {
 		sock_shutdown(CLOUDABI_SHUT_RD | CLOUDABI_SHUT_WR);
 		auto o = othersock.lock();
 		if(o) {
@@ -83,11 +81,11 @@ unixsock::~unixsock()
 
 void unixsock::socketpair(shared_ptr<unixsock> other)
 {
-	assert(status == status_t::IDLE);
-	assert(other->status == status_t::IDLE);
+	assert(status == sockstatus_t::IDLE);
+	assert(other->status == sockstatus_t::IDLE);
 	assert(type == other->type);
 
-	status = other->status = status_t::CONNECTED;
+	status = other->status = sockstatus_t::CONNECTED;
 	othersock = other;
 	other->othersock = weak_from_this();
 }
@@ -135,7 +133,7 @@ void unixsock::putstring(const char *str, size_t count)
 
 void unixsock::sock_bind(cloudabi_sa_family_t family, shared_ptr<fd_t> fd, void *a, size_t address_len)
 {
-	if(status != status_t::IDLE) {
+	if(status != sockstatus_t::IDLE) {
 		error = EINVAL;
 		return;
 	}
@@ -161,23 +159,23 @@ void unixsock::sock_bind(cloudabi_sa_family_t family, shared_ptr<fd_t> fd, void 
 	listen_device = fd->device;
 	listen_inode = inode;
 	assert(listen_device > 0);
-	status = status_t::BOUND;
+	status = sockstatus_t::BOUND;
 	error = 0;
 }
 
 void unixsock::sock_connect(cloudabi_sa_family_t family, shared_ptr<fd_t> fd, void *address, size_t address_len)
 {
-	if(status == status_t::CONNECTING || status == status_t::CONNECTED || status == status_t::SHUTDOWN) {
+	if(status == sockstatus_t::CONNECTING || status == sockstatus_t::CONNECTED || status == sockstatus_t::SHUTDOWN) {
 		error = EISCONN;
 		return;
 	}
-	if(status == status_t::BOUND || status == status_t::LISTENING) {
+	if(status == sockstatus_t::BOUND || status == sockstatus_t::LISTENING) {
 		/* TODO: POSIX says we should use EOPNOTSUPP here, but
 		 * it is not set in CloudABI, so EINVAL */
 		error = EINVAL;
 		return;
 	}
-	assert(status == status_t::IDLE);
+	assert(status == sockstatus_t::IDLE);
 
 	if(family != CLOUDABI_AF_UNIX) {
 		error = EAFNOSUPPORT;
@@ -185,18 +183,18 @@ void unixsock::sock_connect(cloudabi_sa_family_t family, shared_ptr<fd_t> fd, vo
 	}
 
 	cloudabi_filestat_t stat;
-	status = status_t::CONNECTING;
+	status = sockstatus_t::CONNECTING;
 	fd->file_stat_get(CLOUDABI_LOOKUP_SYMLINK_FOLLOW,
 		reinterpret_cast<const char*>(address), address_len, &stat);
 	if(fd->error) {
 		error = fd->error;
-		status = status_t::IDLE;
+		status = sockstatus_t::IDLE;
 		return;
 	}
 
 	if(stat.st_filetype != type) {
 		error = EPROTOTYPE;
-		status = status_t::IDLE;
+		status = sockstatus_t::IDLE;
 		return;
 	}
 
@@ -207,19 +205,19 @@ void unixsock::sock_connect(cloudabi_sa_family_t family, shared_ptr<fd_t> fd, vo
 	auto listensock = get_unixsock_listen_store()->get_unixsock(device, inode);
 	if(!listensock) {
 		error = ECONNREFUSED;
-		status = status_t::IDLE;
+		status = sockstatus_t::IDLE;
 		return;
 	}
 
 	error = 0;
-	assert(status == status_t::CONNECTING);
+	assert(status == sockstatus_t::CONNECTING);
 	listensock->queue_connect(shared_from_this());
-	if(status == status_t::CONNECTED) {
+	if(status == sockstatus_t::CONNECTED) {
 		assert(error == 0);
 		return;
 	} else {
 		// status and error were set by the one who rejected the connect
-		assert(status == status_t::IDLE);
+		assert(status == sockstatus_t::IDLE);
 		assert(error != 0);
 		return;
 	}
@@ -227,21 +225,21 @@ void unixsock::sock_connect(cloudabi_sa_family_t family, shared_ptr<fd_t> fd, vo
 
 void unixsock::sock_listen(cloudabi_backlog_t b)
 {
-	if(status == status_t::IDLE) {
+	if(status == sockstatus_t::IDLE) {
 		error = EDESTADDRREQ;
 		return;
 	}
-	if(status == status_t::CONNECTING || status == status_t::CONNECTED || status == status_t::SHUTDOWN) {
+	if(status == sockstatus_t::CONNECTING || status == sockstatus_t::CONNECTED || status == sockstatus_t::SHUTDOWN) {
 		error = EINVAL;
 		return;
 	}
 	if(b == 0) {
 		b = -1;
 	}
-	assert(status == status_t::BOUND || status == status_t::LISTENING);
-	if(status == status_t::BOUND) {
+	assert(status == sockstatus_t::BOUND || status == sockstatus_t::LISTENING);
+	if(status == sockstatus_t::BOUND) {
 		get_unixsock_listen_store()->register_unixsock(listen_device, listen_inode, shared_from_this());
-		status = status_t::LISTENING;
+		status = sockstatus_t::LISTENING;
 		assert(backlog == 0);
 		backlog = b;
 	} else {
@@ -274,7 +272,7 @@ void unixsock::queue_connect(shared_ptr<unixsock> connectingsock)
 {
 	assert(type == connectingsock->type);
 	if(size(listenqueue) == backlog) {
-		connectingsock->status = status_t::IDLE;
+		connectingsock->status = sockstatus_t::IDLE;
 		connectingsock->error = ECONNREFUSED;
 		return;
 	}
@@ -283,10 +281,10 @@ void unixsock::queue_connect(shared_ptr<unixsock> connectingsock)
 	// creates an accepting socket for accept() to return. On most OSes,
 	// this can be changed with a setsockopt, but CloudABI doesn't have
 	// setsockopt, so this is the only mode we support.
-	assert(status == status_t::LISTENING);
-	assert(connectingsock->status == status_t::CONNECTING);
+	assert(status == sockstatus_t::LISTENING);
+	assert(connectingsock->status == sockstatus_t::CONNECTING);
 	auto accepting = make_shared<unixsock>(type, "accepted unixsock");
-	connectingsock->status = accepting->status = status_t::CONNECTED;
+	connectingsock->status = accepting->status = sockstatus_t::CONNECTED;
 	connectingsock->othersock = accepting;
 	accepting->othersock = connectingsock;
 
@@ -297,7 +295,7 @@ void unixsock::queue_connect(shared_ptr<unixsock> connectingsock)
 
 shared_ptr<fd_t> unixsock::sock_accept(cloudabi_sa_family_t family, void *, size_t *address_len)
 {
-	if(status != status_t::LISTENING) {
+	if(status != sockstatus_t::LISTENING) {
 		error = EINVAL;
 		return nullptr;
 	}
@@ -315,7 +313,7 @@ shared_ptr<fd_t> unixsock::sock_accept(cloudabi_sa_family_t family, void *, size
 	deallocate(item);
 
 	assert(accepting->type == type);
-	assert(accepting->status == status_t::CONNECTED || accepting->status == status_t::SHUTDOWN);
+	assert(accepting->status == sockstatus_t::CONNECTED || accepting->status == sockstatus_t::SHUTDOWN);
 
 	error = 0;
 	if(address_len != nullptr) {
@@ -326,7 +324,7 @@ shared_ptr<fd_t> unixsock::sock_accept(cloudabi_sa_family_t family, void *, size
 
 void unixsock::sock_shutdown(cloudabi_sdflags_t how)
 {
-	if(status != status_t::CONNECTED) {
+	if(status != sockstatus_t::CONNECTED) {
 		error = ENOTCONN;
 		return;
 	}
@@ -335,7 +333,7 @@ void unixsock::sock_shutdown(cloudabi_sdflags_t how)
 		other->sock_shutdown(CLOUDABI_SHUT_WR);
 	}
 	if(how & CLOUDABI_SHUT_WR) {
-		status = status_t::SHUTDOWN;
+		status = sockstatus_t::SHUTDOWN;
 	}
 	error = 0;
 }
@@ -344,13 +342,13 @@ void unixsock::sock_stat_get(cloudabi_sockstat_t* buf, cloudabi_ssflags_t flags)
 {
 	assert(buf);
 	buf->ss_sockname.sa_family = CLOUDABI_AF_UNIX;
-	if(status == status_t::CONNECTING || status == status_t::CONNECTED || status == status_t::SHUTDOWN) {
+	if(status == sockstatus_t::CONNECTING || status == sockstatus_t::CONNECTED || status == sockstatus_t::SHUTDOWN) {
 		buf->ss_peername.sa_family = CLOUDABI_AF_UNIX;
 	} else {
 		buf->ss_peername.sa_family = CLOUDABI_AF_UNSPEC;
 	}
 	buf->ss_error = error;
-	buf->ss_state = status == status_t::LISTENING ? CLOUDABI_SOCKSTATE_ACCEPTCONN : 0;
+	buf->ss_state = status == sockstatus_t::LISTENING ? CLOUDABI_SOCKSTATE_ACCEPTCONN : 0;
 
 	if(flags & CLOUDABI_SOCKSTAT_CLEAR_ERROR) {
 		error = 0;
@@ -359,7 +357,7 @@ void unixsock::sock_stat_get(cloudabi_sockstat_t* buf, cloudabi_ssflags_t flags)
 
 void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 {
-	if(status != status_t::CONNECTED && status != status_t::SHUTDOWN) {
+	if(status != sockstatus_t::CONNECTED && status != sockstatus_t::SHUTDOWN) {
 		error = ENOTCONN;
 		return;
 	}
@@ -374,10 +372,10 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 		assert(other);
 		assert(other->othersock.lock());
 
-		assert(other->status == status_t::CONNECTED || other->status == status_t::SHUTDOWN);
+		assert(other->status == sockstatus_t::CONNECTED || other->status == sockstatus_t::SHUTDOWN);
 
 		// wait until there is at least one more message
-		while(other->status == status_t::CONNECTED && recv_messages == nullptr) {
+		while(other->status == sockstatus_t::CONNECTED && recv_messages == nullptr) {
 			recv_messages_cv.wait();
 		}
 
@@ -515,11 +513,11 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 
 void unixsock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *out)
 {
-	if(status == status_t::SHUTDOWN) {
+	if(status == sockstatus_t::SHUTDOWN) {
 		error = EPIPE;
 		return;
 	}
-	if(status != status_t::CONNECTED) {
+	if(status != sockstatus_t::CONNECTED) {
 		error = ENOTCONN;
 		return;
 	}

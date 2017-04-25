@@ -1,5 +1,5 @@
 #pragma once
-#include <fd/fd.hpp>
+#include <fd/sock.hpp>
 #include <oslibc/list.hpp>
 #include <fd/process_fd.hpp>
 
@@ -36,16 +36,9 @@ private:
 	unixsock_list *socks = nullptr;
 };
 
-struct unixsock : public fd_t, public enable_shared_from_this<unixsock> {
+struct unixsock : public sock_t, public enable_shared_from_this<unixsock> {
 	unixsock(cloudabi_filetype_t sockettype, const char *n);
 	~unixsock() override;
-
-	enum status_t {
-		// If this socket is in SHUTDOWN, it cannot send() anymore, but
-		// can still recv(). If othersock->status is SHUTDOWN, we can
-		// send(), but the other side can't.
-		IDLE, BOUND, LISTENING, CONNECTING, CONNECTED, SHUTDOWN
-	};
 
 	void socketpair(shared_ptr<unixsock> other);
 
@@ -62,7 +55,6 @@ struct unixsock : public fd_t, public enable_shared_from_this<unixsock> {
 	void sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *out) override;
 
 private:
-	status_t status = status_t::IDLE;
 	weak_ptr<unixsock> othersock;
 
 	/* if BOUND / LISTENING */
