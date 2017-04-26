@@ -13,5 +13,6 @@ if(BAREMETAL_ENABLED)
 		pseudo_fd.cpp pseudo_fd.hpp
 		sock.cpp sock.hpp
 		unixsock.cpp unixsock.hpp
+		ifstoresock.cpp ifstoresock.hpp
 	)
 endif()

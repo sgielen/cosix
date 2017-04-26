@@ -71,3 +71,36 @@ strncat(char *s1, const char *s2, size_t n) {
 	strncpy(s1 + s1len, s2, n);
 	return s1;
 }
+
+size_t
+strlcat(char *dst, const char *src, size_t n) {
+	size_t dstlen = strlen(dst);
+	size_t srclen = strlen(src);
+
+	size_t to_copy = n - dstlen; /* including space for nullbyte */
+	if(to_copy > srclen + 1 /* nullbyte */) {
+		to_copy = srclen + 1;
+	}
+
+	for(size_t i = 0; i < to_copy; ++i) {
+		dst[dstlen + i] = src[i];
+	}
+	dst[dstlen + to_copy - 1] = 0;
+
+	// return 'intended' size of the new string
+	return dstlen + srclen;
+}
+
+char *
+strsplit(char *str, char delim) {
+	if(str == 0) {
+		return 0;
+	}
+	for(char *res = str; res[0] != 0; ++res) {
+		if(res[0] == delim) {
+			res[0] = 0; /* end of str */
+			return res + 1 /* beginning of res */;
+		}
+	}
+	return 0;
+}

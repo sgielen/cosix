@@ -1,0 +1,276 @@
+#include <fd/ifstoresock.hpp>
+#include <fd/scheduler.hpp>
+#include <oslibc/string.h>
+#include <oslibc/numeric.h>
+#include <net/interface_store.hpp>
+#include <net/interface.hpp>
+#include <fd/unixsock.hpp>
+#include <fd/pseudo_fd.hpp>
+
+using namespace cloudos;
+
+ifstoresock::ifstoresock(const char *n)
+: sock_t(CLOUDABI_FILETYPE_SOCKET_DGRAM, n)
+{
+	status = sockstatus_t::CONNECTED;
+}
+
+ifstoresock::~ifstoresock()
+{
+}
+
+void ifstoresock::sock_shutdown(cloudabi_sdflags_t how)
+{
+	// ignore CLOUDABI_SHUT_RD
+	if(how & CLOUDABI_SHUT_WR) {
+		status = sockstatus_t::SHUTDOWN;
+	}
+	error = 0;
+}
+
+void ifstoresock::sock_stat_get(cloudabi_sockstat_t* buf, cloudabi_ssflags_t flags)
+{
+	assert(buf);
+	buf->ss_peername.sa_family = CLOUDABI_AF_UNIX;
+	buf->ss_error = error;
+	buf->ss_state = 0;
+
+	if(flags & CLOUDABI_SOCKSTAT_CLEAR_ERROR) {
+		error = 0;
+	}
+}
+
+void ifstoresock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
+{
+	while(!has_message) {
+		read_cv.wait();
+	}
+
+	// TODO: a generic function to copy iovecs/linked-list-of-buffers over
+	// iovecs
+	char *buffer = reinterpret_cast<char*>(message_buf.ptr);
+	size_t datalen = 0;
+	size_t buffer_size_remaining = message_buf.size;
+	for(size_t i = 0; i < in->ri_data_len; ++i) {
+		auto &iovec = in->ri_data[i];
+		if(iovec.buf_len < buffer_size_remaining) {
+			memcpy(iovec.buf, buffer, iovec.buf_len);
+			datalen += iovec.buf_len;
+			buffer += iovec.buf_len;
+			buffer_size_remaining -= iovec.buf_len;
+		} else {
+			memcpy(iovec.buf, buffer, buffer_size_remaining);
+			datalen += buffer_size_remaining;
+			buffer_size_remaining = 0;
+			break;
+		}
+	}
+
+	if(buffer_size_remaining > 0) {
+		// TODO: message is truncated
+	}
+
+	size_t fds_set = 0;
+	if(message_fds != nullptr) {
+		auto process = get_scheduler()->get_running_thread()->get_process();
+		while(message_fds != nullptr) {
+			if(fds_set < in->ri_fds_len) {
+				fd_mapping_t &fd_map = message_fds->data;
+				in->ri_fds[fds_set] = process->add_fd(fd_map.fd, fd_map.rights_base, fd_map.rights_inheriting);
+				fds_set++;
+			}
+			auto d = message_fds;
+			message_fds = message_fds->next;
+			deallocate(d);
+		}
+	}
+
+	// TODO: what if fds are truncated? move to next message?
+	out->ro_datalen = datalen;
+	out->ro_fdslen = fds_set;
+	out->ro_sockname.sa_family = CLOUDABI_AF_UNIX;
+	out->ro_peername.sa_family = CLOUDABI_AF_UNIX;
+	out->ro_flags = 0;
+
+	deallocate(message_buf);
+	has_message = false;
+	write_cv.notify();
+	error = 0;
+}
+
+void ifstoresock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *out)
+{
+	if(status == sockstatus_t::SHUTDOWN) {
+		error = EPIPE;
+		return;
+	}
+	assert(status == sockstatus_t::CONNECTED);
+
+	while(has_message) {
+		write_cv.wait();
+	}
+
+	char message[80];
+
+	size_t read = 0;
+	for(size_t i = 0; i < in->si_data_len; ++i) {
+		size_t remaining = sizeof(message) - read - 1 /* terminator */;
+		size_t buf_len = in->si_data[i].buf_len;
+		if(buf_len > remaining) {
+			error = EMSGSIZE;
+			return;
+		}
+		memcpy(message + read, in->si_data[i].buf, buf_len);
+		read += buf_len;
+	}
+
+	assert(read < sizeof(message));
+	out->so_datalen = read;
+	message[read] = 0;
+
+	char *command = message;
+	char *arg = strsplit(command, ' ');
+	char *arg2 = strsplit(arg, ' ');
+
+	char response[160];
+	response[0] = 0;
+
+	interface *iface = nullptr;
+
+	// Commands without arguments
+	if(strcmp(command, "LIST") == 0) {
+		// List all interfaces
+		auto *ifaces = get_interface_store()->get_interfaces();
+		iterate(ifaces, [&](interface_list *item) {
+			strlcat(response, item->data->get_name(), sizeof(response));
+			strlcat(response, "\n", sizeof(response));
+		});
+		goto send;
+	} else if(strcmp(command, "PSEUDOPAIR") == 0) {
+		// Request a reverse/pseudo socketpair
+		auto my_reverse = make_shared<unixsock>(CLOUDABI_FILETYPE_SOCKET_STREAM, "my_reverse");
+		auto their_reverse = make_shared<unixsock>(CLOUDABI_FILETYPE_SOCKET_STREAM, "their_reverse");
+		my_reverse->socketpair(their_reverse);
+		assert(my_reverse->error == 0);
+		assert(their_reverse->error == 0);
+
+		cloudabi_rights_t all_rights = -1;
+		auto process = get_scheduler()->get_running_thread()->get_process();
+		int reverse_fd = process->add_fd(their_reverse, all_rights, all_rights);
+
+		auto pseudo = make_shared<pseudo_fd>(0, my_reverse, CLOUDABI_FILETYPE_DIRECTORY, "pseudo");
+		int pseudo_fd = process->add_fd(pseudo, all_rights, all_rights);
+
+		fd_mapping_t *fd_mapping;
+		error = process->get_fd(&fd_mapping, reverse_fd, 0);
+		if(error != 0) {
+			strncpy(response, "ERROR", sizeof(response));
+			goto send;
+		}
+		assert(message_fds == nullptr);
+		message_fds = allocate<linked_list<fd_mapping_t>>(*fd_mapping);
+		error = process->get_fd(&fd_mapping, pseudo_fd, 0);
+		if(error != 0) {
+			strncpy(response, "ERROR", sizeof(response));
+			goto send;
+		}
+		message_fds->next = allocate<linked_list<fd_mapping_t>>(*fd_mapping);
+
+		strncpy(response, "OK", sizeof(response));
+		goto send;
+	}
+
+	// Commands with interface as arg
+	if(arg[0] == 0) {
+		strncpy(response, "ERROR", sizeof(response));
+		goto send;
+	}
+
+	iface = get_interface_store()->get_interface(arg);
+
+	if(iface == nullptr) {
+		strncpy(response, "NOIFACE", sizeof(response));
+		goto send;
+	}
+
+	if(strcmp(command, "MAC") == 0) {
+		// Return MAC address of this interface
+		size_t mac_size = 0;
+		const char *mac = iface->get_mac(&mac_size);
+		strncpy(response, mac, sizeof(mac_size));
+		goto send;
+	} else if(strcmp(command, "ADDRV4") == 0) {
+		// Return IPv4 addresses of this interface
+		auto *list = iface->get_ipv4addr_list();
+		iterate(list, [&](ipv4addr_list *item) {
+			char addr[18];
+			addr[0] = 0;
+			for(uint8_t i = 0; i < 4; ++i) {
+				if(i > 0) {
+					strlcat(addr, ".", sizeof(addr));
+				}
+				char byte = item->data[i];
+				char number[4];
+				strlcat(addr, uitoa_s(byte, number, sizeof(number), 10), sizeof(addr));
+			}
+			strlcat(addr, "\n", sizeof(addr));
+			strlcat(response, addr, sizeof(response));
+		});
+		goto send;
+	} else if(strcmp(command, "ADDRV6") == 0) {
+		// Return IPv6 addresses of this interface
+		auto *list = iface->get_ipv6addr_list();
+		iterate(list, [&](ipv6addr_list *item) {
+			char addr[42];
+			addr[0] = 0;
+			for(uint8_t i = 0; i < 8; ++i) {
+				if(i > 0) {
+					strlcat(addr, ":", sizeof(addr));
+				}
+				char byte = item->data[i * 2];
+				char byte2 = item->data[i * 2 + 1];
+				char number[4];
+				strlcat(addr, uitoa_s(byte, number, sizeof(number), 16), sizeof(addr));
+				strlcat(addr, uitoa_s(byte2, number, sizeof(number), 16), sizeof(addr));
+			}
+			strlcat(addr, "\n", sizeof(addr));
+			strlcat(response, addr, sizeof(response));
+		});
+		goto send;
+	} else if(strcmp(command, "RAWSOCK") == 0) {
+		// TODO: get a raw socket to this interface
+		strncpy(response, "TODO", sizeof(response));
+		goto send;
+	}
+
+	// Commands with address as arg2
+	if(arg2[0] == 0) {
+		strncpy(response, "ERROR", sizeof(response));
+		goto send;
+	}
+
+	if(strcmp(command, "ADD_ADDRV4") == 0) {
+		// TODO: Add IPv4 address to this interface
+		strncpy(response, "TODO", sizeof(response));
+		goto send;
+	} else if(strcmp(command, "ADD_ADDRV6") == 0) {
+		// TODO: Add IPv6 address to this interface
+		strncpy(response, "TODO", sizeof(response));
+		goto send;
+	}
+
+send:
+	if(response[0] == 0) {
+		strncpy(response, "ERROR", sizeof(response));
+	} else if(strlen(response) == sizeof(response) + 1) {
+		// full response may not have fit, error
+		// TODO: this could happen if we have too many interfaces or
+		// too many addresses on an interface
+		strncpy(response, "EMSGSIZE\n", sizeof(response));
+	}
+	message_buf = allocate(strlen(response) + 1);
+	memcpy(message_buf.ptr, response, message_buf.size);
+	has_message = true;
+	error = 0;
+	read_cv.notify();
+}

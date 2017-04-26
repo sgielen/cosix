@@ -15,6 +15,7 @@
 #include <userland/vdso_support.h>
 #include <elf.h>
 #include <concur/cv.hpp>
+#include <fd/ifstoresock.hpp>
 
 using namespace cloudos;
 
@@ -104,62 +105,8 @@ void process_fd::add_initial_fds() {
 		CLOUDABI_RIGHT_FILE_OPEN |
 		CLOUDABI_RIGHT_PROC_EXEC);
 
-	auto my_reverse = make_shared<unixsock>(CLOUDABI_FILETYPE_SOCKET_STREAM, "my_reverse");
-	auto their_reverse = make_shared<unixsock>(CLOUDABI_FILETYPE_SOCKET_STREAM, "their_reverse");
-	my_reverse->socketpair(their_reverse);
-	assert(my_reverse->error == 0);
-	assert(their_reverse->error == 0);
-
-	auto sock_rights = CLOUDABI_RIGHT_POLL_FD_READWRITE
-			| CLOUDABI_RIGHT_FD_WRITE
-			| CLOUDABI_RIGHT_FD_READ
-			| CLOUDABI_RIGHT_SOCK_SHUTDOWN
-			| CLOUDABI_RIGHT_SOCK_STAT_GET;
-	add_fd(their_reverse, sock_rights);
-
-	auto pseudo = make_shared<pseudo_fd>(0, my_reverse, CLOUDABI_FILETYPE_DIRECTORY, "pseudo_root");
-	add_fd(pseudo,
-		/* base rights */
-		CLOUDABI_RIGHT_FILE_CREATE_DIRECTORY |
-		CLOUDABI_RIGHT_FILE_CREATE_FIFO |
-		CLOUDABI_RIGHT_FILE_CREATE_FILE |
-		CLOUDABI_RIGHT_FILE_LINK_SOURCE |
-		CLOUDABI_RIGHT_FILE_LINK_TARGET |
-		CLOUDABI_RIGHT_FILE_OPEN |
-		CLOUDABI_RIGHT_FILE_READDIR |
-		CLOUDABI_RIGHT_FILE_STAT_GET |
-		CLOUDABI_RIGHT_FILE_UNLINK |
-		CLOUDABI_RIGHT_SOCK_BIND_DIRECTORY |
-		CLOUDABI_RIGHT_SOCK_CONNECT_DIRECTORY,
-		/* inherited rights */
-		CLOUDABI_RIGHT_FD_DATASYNC |
-		CLOUDABI_RIGHT_FD_READ |
-		CLOUDABI_RIGHT_FD_SEEK |
-		CLOUDABI_RIGHT_FD_STAT_PUT_FLAGS |
-		CLOUDABI_RIGHT_FD_SYNC |
-		CLOUDABI_RIGHT_FD_TELL |
-		CLOUDABI_RIGHT_FD_WRITE |
-		CLOUDABI_RIGHT_FILE_ADVISE |
-		CLOUDABI_RIGHT_FILE_ALLOCATE |
-		CLOUDABI_RIGHT_FILE_CREATE_DIRECTORY |
-		CLOUDABI_RIGHT_FILE_CREATE_FIFO |
-		CLOUDABI_RIGHT_FILE_CREATE_FILE |
-		CLOUDABI_RIGHT_FILE_LINK_SOURCE |
-		CLOUDABI_RIGHT_FILE_LINK_TARGET |
-		CLOUDABI_RIGHT_FILE_OPEN |
-		CLOUDABI_RIGHT_FILE_READDIR |
-		CLOUDABI_RIGHT_FILE_STAT_FGET |
-		CLOUDABI_RIGHT_FILE_STAT_FPUT_SIZE |
-		CLOUDABI_RIGHT_FILE_STAT_FPUT_TIMES |
-		CLOUDABI_RIGHT_FILE_STAT_GET |
-		CLOUDABI_RIGHT_FILE_UNLINK |
-		CLOUDABI_RIGHT_MEM_MAP |
-		CLOUDABI_RIGHT_MEM_MAP_EXEC |
-		CLOUDABI_RIGHT_POLL_FD_READWRITE |
-		CLOUDABI_RIGHT_PROC_EXEC |
-		CLOUDABI_RIGHT_SOCK_BIND_DIRECTORY |
-		CLOUDABI_RIGHT_SOCK_CONNECT_DIRECTORY
-	);
+	auto ifstore = make_shared<ifstoresock>("ifstoresock");
+	add_fd(ifstore, -1, -1);
 }
 
 cloudabi_fd_t process_fd::add_fd(shared_ptr<fd_t> fd, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting) {

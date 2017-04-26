@@ -28,6 +28,12 @@ strncpy(char *dst, const char *src, size_t n);
 char *
 strncat(char *s1, const char *s2, size_t n);
 
+size_t
+strlcat(char *dst, const char *src, size_t n);
+
+char *
+strsplit(char *str, char delim);
+
 #if defined(__cplusplus)
 }
 #endif

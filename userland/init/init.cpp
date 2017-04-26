@@ -14,12 +14,17 @@
 #include <dirent.h>
 #include <vector>
 #include <string>
+#include <sstream>
+#include <sys/socket.h>
+#include <sys/capsicum.h>
+#include <cloudabi_syscalls.h>
 
 int stdout;
 int procfs;
 int bootfs;
 int reversefd;
 int pseudofd;
+int ifstore;
 
 void allocation_tracker_cmd(char cmd) {
 	int alltrackfd = openat(procfs, "kernel/alloctracker", O_WRONLY);
@@ -168,13 +173,124 @@ void program_main(const argdata_t *) {
 	stdout = 0;
 	procfs = 2;
 	bootfs = 3;
-	reversefd = 4;
-	pseudofd = 5;
+	ifstore = 4;
+
 	dprintf(stdout, "Init starting up.\n");
 
 	// reconfigure stderr
 	FILE *out = fdopen(stdout, "w");
 	fswap(stderr, out);
+
+	write(ifstore, "LIST", 4);
+	char buf[200];
+	size_t size = read(ifstore, buf, sizeof(buf));
+	buf[size] = 0;
+
+	// TODO: move this to a networkd
+	std::stringstream ss;
+	ss << buf;
+	std::string iface;
+	dprintf(stdout, "Interfaces:\n");
+	while(ss >> iface) {
+		dprintf(stdout, "* %s\n", iface.c_str());
+
+		std::string cmd = "ADDRV4 " + iface;
+		write(ifstore, cmd.c_str(), cmd.length());
+		size = read(ifstore, buf, sizeof(buf));
+		buf[size] = 0;
+		std::stringstream ips;
+		ips << buf;
+		std::string ip;
+		while(ips >> ip) {
+			dprintf(stdout, "  IPv4: %s\n", ip.c_str());
+		}
+	}
+
+	// get a pseudopair
+	write(ifstore, "PSEUDOPAIR", 10);
+	{
+		buf[0] = 0;
+		struct iovec iov = {.iov_base = buf, .iov_len = sizeof(buf)};
+		alignas(struct cmsghdr) char control[CMSG_SPACE(2 * sizeof(int))];
+		struct msghdr msg = {
+			.msg_iov = &iov, .msg_iovlen = 1,
+			.msg_control = control, .msg_controllen = sizeof(control),
+		};
+		if(recvmsg(ifstore, &msg, 0) < 0 || strncmp(buf, "OK", 2) != 0) {
+			perror("Failed to retrieve pseudopair from ifstore");
+			exit(1);
+		}
+		struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+		if(cmsg == nullptr || cmsg->cmsg_level != SOL_SOCKET || cmsg->cmsg_len != CMSG_LEN(2 * sizeof(int))) {
+			dprintf(stdout, "Pseudopair requested, but not given\n");
+			exit(1);
+		}
+		int *fdbuf = reinterpret_cast<int*>(CMSG_DATA(cmsg));
+		reversefd = fdbuf[0];
+		pseudofd = fdbuf[1];
+		cloudabi_fdstat_t fsb = {
+			.fs_rights_base =
+				CLOUDABI_RIGHT_POLL_FD_READWRITE |
+				CLOUDABI_RIGHT_FD_WRITE |
+				CLOUDABI_RIGHT_FD_READ |
+				CLOUDABI_RIGHT_SOCK_SHUTDOWN |
+				CLOUDABI_RIGHT_SOCK_STAT_GET,
+			.fs_rights_inheriting = 0,
+		};
+		if(cloudabi_sys_fd_stat_put(reversefd, &fsb, CLOUDABI_FDSTAT_RIGHTS) != 0) {
+			dprintf(stdout, "Failed to limit rights on reverse FD");
+		}
+
+		fsb.fs_rights_base =
+			CLOUDABI_RIGHT_FILE_CREATE_DIRECTORY |
+			CLOUDABI_RIGHT_FILE_CREATE_FIFO |
+			CLOUDABI_RIGHT_FILE_CREATE_FILE |
+			CLOUDABI_RIGHT_FILE_LINK_SOURCE |
+			CLOUDABI_RIGHT_FILE_LINK_TARGET |
+			CLOUDABI_RIGHT_FILE_OPEN |
+			CLOUDABI_RIGHT_FILE_READDIR |
+			CLOUDABI_RIGHT_FILE_STAT_GET |
+			CLOUDABI_RIGHT_FILE_UNLINK |
+			CLOUDABI_RIGHT_SOCK_BIND_DIRECTORY |
+			CLOUDABI_RIGHT_SOCK_CONNECT_DIRECTORY;
+		fsb.fs_rights_inheriting =
+			CLOUDABI_RIGHT_FD_DATASYNC |
+			CLOUDABI_RIGHT_FD_READ |
+			CLOUDABI_RIGHT_FD_SEEK |
+			CLOUDABI_RIGHT_FD_STAT_PUT_FLAGS |
+			CLOUDABI_RIGHT_FD_SYNC |
+			CLOUDABI_RIGHT_FD_TELL |
+			CLOUDABI_RIGHT_FD_WRITE |
+			CLOUDABI_RIGHT_FILE_ADVISE |
+			CLOUDABI_RIGHT_FILE_ALLOCATE |
+			CLOUDABI_RIGHT_FILE_CREATE_DIRECTORY |
+			CLOUDABI_RIGHT_FILE_CREATE_FIFO |
+			CLOUDABI_RIGHT_FILE_CREATE_FILE |
+			CLOUDABI_RIGHT_FILE_LINK_SOURCE |
+			CLOUDABI_RIGHT_FILE_LINK_TARGET |
+			CLOUDABI_RIGHT_FILE_OPEN |
+			CLOUDABI_RIGHT_FILE_READDIR |
+			CLOUDABI_RIGHT_FILE_STAT_FGET |
+			CLOUDABI_RIGHT_FILE_STAT_FPUT_SIZE |
+			CLOUDABI_RIGHT_FILE_STAT_FPUT_TIMES |
+			CLOUDABI_RIGHT_FILE_STAT_GET |
+			CLOUDABI_RIGHT_FILE_UNLINK |
+			CLOUDABI_RIGHT_MEM_MAP |
+			CLOUDABI_RIGHT_MEM_MAP_EXEC |
+			CLOUDABI_RIGHT_POLL_FD_READWRITE |
+			CLOUDABI_RIGHT_PROC_EXEC |
+			CLOUDABI_RIGHT_SOCK_BIND_DIRECTORY |
+			CLOUDABI_RIGHT_SOCK_CONNECT_DIRECTORY;
+		if(cloudabi_sys_fd_stat_put(pseudofd, &fsb, CLOUDABI_FDSTAT_RIGHTS) != 0) {
+			dprintf(stdout, "Failed to limit rights on pseudo FD");
+		}
+	}
+
+	// sleep for a bit after this
+	{
+		struct timespec ts = {.tv_sec = 5, .tv_nsec = 0};
+		clock_nanosleep(CLOCK_MONOTONIC, 0, &ts);
+	}
 
 	start_binary("exec_test");
 	start_binary("thread_test");
