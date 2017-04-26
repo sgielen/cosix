@@ -60,6 +60,7 @@ add_external_binary(tmptest)
 add_external_binary(unixsock_test)
 add_external_binary(mmap_test)
 add_external_binary(forkfork_test)
+add_external_binary(networkd)
 
 set(CLOUDABI_UNITTEST_BINARY "" CACHE FILEPATH "Path to the CloudABI unittest binary, will be run by init if given")
 if(CLOUDABI_UNITTEST_BINARY AND BAREMETAL_ENABLED)

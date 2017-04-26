@@ -178,6 +178,23 @@ void ifstoresock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *o
 
 		strncpy(response, "OK", sizeof(response));
 		goto send;
+	} else if(strcmp(command, "COPY") == 0) {
+		// Return a new socket to myself
+		auto process = get_scheduler()->get_running_thread()->get_process();
+		auto ifstore = make_shared<ifstoresock>("ifstoresock");
+		auto ifstorefd = process->add_fd(ifstore, -1, -1);
+
+		fd_mapping_t *fd_mapping;
+		error = process->get_fd(&fd_mapping, ifstorefd, 0);
+		if(error != 0) {
+			strncpy(response, "ERROR", sizeof(response));
+			goto send;
+		}
+		assert(message_fds == nullptr);
+		message_fds = allocate<linked_list<fd_mapping_t>>(*fd_mapping);
+
+		strncpy(response, "OK", sizeof(response));
+		goto send;
 	}
 
 	// Commands with interface as arg
