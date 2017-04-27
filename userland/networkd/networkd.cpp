@@ -10,12 +10,80 @@
 #include <cloudabi_syscalls.h>
 #include <thread>
 #include "client.hpp"
+#include <vector>
+#include <fcntl.h>
 
 int stdout;
+int bootfs;
 int rootfs;
 int ifstore;
 
 using namespace networkd;
+
+std::string send_ifstore_command(std::string command) {
+	write(ifstore, command.c_str(), command.length());
+	char buf[200];
+	size_t size = read(ifstore, buf, sizeof(buf));
+	return std::string(buf, size);
+}
+
+std::vector<std::string> split_words(std::string str) {
+	std::stringstream ss;
+	ss << str;
+	std::vector<std::string> res;
+	while(ss >> str) {
+		res.push_back(str);
+	}
+	return res;
+}
+
+std::vector<std::string> get_interfaces() {
+	return split_words(send_ifstore_command("LIST"));
+}
+
+std::string get_hwtype(std::string iface) {
+	return send_ifstore_command("HWTYPE " + iface);
+}
+
+std::string get_mac(std::string iface) {
+	return send_ifstore_command("MAC " + iface);
+}
+
+std::vector<std::string> get_addr_v4(std::string iface) {
+	return split_words(send_ifstore_command("ADDRV4 " + iface));
+}
+
+void start_dhclient(std::string iface) {
+	int bfd = openat(bootfs, "dhclient", O_RDONLY);
+	if(bfd < 0) {
+		dprintf(stdout, "Failed to open dhclient: %s\n", strerror(errno));
+		return;
+	}
+
+	int networkfd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if(networkfd < 0) {
+		perror("networkfd");
+		exit(1);
+	}
+	if(connectat(networkfd, rootfs, "networkd") < 0) {
+		perror("connect");
+		exit(1);
+	}
+
+	argdata_t *keys[] = {argdata_create_str_c("stdout"), argdata_create_str_c("networkd"), argdata_create_str_c("interface")};
+	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(networkfd), argdata_create_str_c(iface.c_str())};
+	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
+
+	int pfd = program_spawn(bfd, ad);
+	if(pfd < 0) {
+		dprintf(stdout, "dhclient failed to spawn: %s\n", strerror(errno));
+	} else {
+		dprintf(stdout, "dhclient spawned for interface %s\n", iface.c_str());
+	}
+
+	close(bfd);
+	close(networkfd);
+}
 
 void program_main(const argdata_t *ad) {
 	argdata_map_iterator_t it;
@@ -30,6 +98,8 @@ void program_main(const argdata_t *ad) {
 
 		if(strcmp(keystr, "stdout") == 0) {
 			argdata_get_fd(value, &stdout);
+		} else if(strcmp(keystr, "bootfs") == 0) {
+			argdata_get_fd(value, &bootfs);
 		} else if(strcmp(keystr, "rootfs") == 0) {
 			argdata_get_fd(value, &rootfs);
 		} else if(strcmp(keystr, "ifstore") == 0) {
@@ -40,48 +110,6 @@ void program_main(const argdata_t *ad) {
 	dprintf(stdout, "Networkd started!\n");
 	FILE *out = fdopen(stdout, "w");
 	fswap(stderr, out);
-
-	// TODO: enumerate interfaces
-	// TODO: if an interface is type ethernet, start a DHCP client on it
-	// TODO: routing table
-	// TODO: offer an interface to get UDP or TCP sockets via rootfs
-
-	write(ifstore, "LIST", 4);
-	char buf[200];
-	size_t size = read(ifstore, buf, sizeof(buf));
-	buf[size] = 0;
-
-	// TODO: move this to a networkd
-	std::stringstream ss;
-	ss << buf;
-	std::string iface;
-	dprintf(stdout, "Interfaces:\n");
-	while(ss >> iface) {
-		std::string cmd = "HWTYPE " + iface;
-		write(ifstore, cmd.c_str(), cmd.length());
-		size = read(ifstore, buf, sizeof(buf));
-		buf[size] = 0;
-		std::string type = buf;
-
-		cmd = "MAC " + iface;
-		write(ifstore, cmd.c_str(), cmd.length());
-		size = read(ifstore, buf, sizeof(buf));
-		buf[size] = 0;
-		std::string mac = buf;
-
-		dprintf(stdout, "* %s (type %s, MAC %s)\n", iface.c_str(), type.c_str(), mac.c_str());
-
-		cmd = "ADDRV4 " + iface;
-		write(ifstore, cmd.c_str(), cmd.length());
-		size = read(ifstore, buf, sizeof(buf));
-		buf[size] = 0;
-		std::stringstream ips;
-		ips << buf;
-		std::string ip;
-		while(ips >> ip) {
-			dprintf(stdout, "  IPv4: %s\n", ip.c_str());
-		}
-	}
 
 	int listenfd = socket(AF_UNIX, SOCK_STREAM, 0);
 	if(listenfd < 0) {
@@ -95,6 +123,20 @@ void program_main(const argdata_t *ad) {
 	if(listen(listenfd, SOMAXCONN) < 0) {
 		perror("listen");
 		exit(1);
+	}
+
+	for(auto &iface : get_interfaces()) {
+		std::string hwtype = get_hwtype(iface);
+		std::string mac = get_mac(iface);
+
+		dprintf(stdout, "* %s (type %s, MAC %s)\n", iface.c_str(), hwtype.c_str(), mac.c_str());
+		for(auto &ip : get_addr_v4(iface)) {
+			dprintf(stdout, "  IPv4: %s\n", ip.c_str());
+		}
+
+		if(hwtype == "ETHERNET") {
+			start_dhclient(iface);
+		}
 	}
 
 	while(1) {

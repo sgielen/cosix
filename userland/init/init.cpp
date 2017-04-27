@@ -154,8 +154,8 @@ void start_networkd() {
 	}
 
 	dprintf(stdout, "Running networkd...\n");
-	argdata_t *keys[] = {argdata_create_string("stdout"), argdata_create_string("rootfs"), argdata_create_string("ifstore")};
-	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(pseudofd), argdata_create_fd(new_ifstorefd)};
+	argdata_t *keys[] = {argdata_create_string("stdout"), argdata_create_string("rootfs"), argdata_create_string("bootfs"), argdata_create_string("ifstore")};
+	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(pseudofd), argdata_create_fd(bootfs), argdata_create_fd(new_ifstorefd)};
 	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 
 	int pfd = program_spawn(bfd, ad);
