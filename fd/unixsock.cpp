@@ -105,6 +105,7 @@ size_t unixsock::read(void *dest, size_t count)
 
 	cloudabi_recv_out_t recv_out[1];
 	recv_out[0].ro_datalen = 0;
+	recv_out[0].ro_fdslen = 0;
 
 	sock_recv(recv_in, recv_out);
 	assert(recv_out[0].ro_fdslen == 0);
@@ -366,11 +367,13 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 	    || type == CLOUDABI_FILETYPE_SOCKET_STREAM);
 
 	if(recv_messages == nullptr) {
-		// we will have to wait for messages, so the othersock must be alive
-
 		auto other = othersock.lock();
-		assert(other);
-		assert(other->othersock.lock());
+		if(!other) {
+			// othersock is already destroyed
+			error = ECONNRESET;
+			return;
+		}
+		assert(other->othersock.lock().get() == this);
 
 		assert(other->status == sockstatus_t::CONNECTED || other->status == sockstatus_t::SHUTDOWN);
 
