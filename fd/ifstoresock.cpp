@@ -308,7 +308,7 @@ send:
 		// too many addresses on an interface
 		strncpy(response, "EMSGSIZE\n", sizeof(response));
 	}
-	message_buf = allocate(strlen(response) + 1);
+	message_buf = allocate(strlen(response));
 	memcpy(message_buf.ptr, response, message_buf.size);
 	has_message = true;
 	error = 0;
