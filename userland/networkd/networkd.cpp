@@ -57,9 +57,21 @@ void program_main(const argdata_t *ad) {
 	std::string iface;
 	dprintf(stdout, "Interfaces:\n");
 	while(ss >> iface) {
-		dprintf(stdout, "* %s\n", iface.c_str());
+		std::string cmd = "HWTYPE " + iface;
+		write(ifstore, cmd.c_str(), cmd.length());
+		size = read(ifstore, buf, sizeof(buf));
+		buf[size] = 0;
+		std::string type = buf;
 
-		std::string cmd = "ADDRV4 " + iface;
+		cmd = "MAC " + iface;
+		write(ifstore, cmd.c_str(), cmd.length());
+		size = read(ifstore, buf, sizeof(buf));
+		buf[size] = 0;
+		std::string mac = buf;
+
+		dprintf(stdout, "* %s (type %s, MAC %s)\n", iface.c_str(), type.c_str(), mac.c_str());
+
+		cmd = "ADDRV4 " + iface;
 		write(ifstore, cmd.c_str(), cmd.length());
 		size = read(ifstore, buf, sizeof(buf));
 		buf[size] = 0;

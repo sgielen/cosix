@@ -8,8 +8,9 @@
 
 using namespace cloudos;
 
-interface::interface()
-: ipv4_addrs(nullptr)
+interface::interface(hwtype_t h)
+: hwtype(h)
+, ipv4_addrs(nullptr)
 , ipv6_addrs(nullptr)
 {
 	name[0] = 0;

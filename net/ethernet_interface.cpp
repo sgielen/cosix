@@ -9,7 +9,9 @@
 using namespace cloudos;
 
 ethernet_interface::ethernet_interface(ethernet_device *d)
-: device(d) {}
+: interface(hwtype_t::ethernet)
+, device(d)
+{}
 
 cloudabi_errno_t ethernet_interface::send_packet(uint8_t *packet, size_t length) {
 	char mac[6];

@@ -214,7 +214,30 @@ void ifstoresock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *o
 		// Return MAC address of this interface
 		size_t mac_size = 0;
 		const char *mac = iface->get_mac(&mac_size);
-		strncpy(response, mac, sizeof(mac_size));
+		for(uint8_t i = 0; i < mac_size; ++i) {
+			if(i > 0) {
+				strlcat(response, ":", sizeof(response));
+			}
+			char number[4];
+			strlcat(response, uitoa_s(mac[i], number, sizeof(number), 16), sizeof(response));
+		}
+		if(mac_size == 0) {
+			// device has no MAC, return a fake one
+			strlcat(response, "00:00:00:00:00:00", sizeof(response));
+		}
+		goto send;
+	} else if(strcmp(command, "HWTYPE") == 0) {
+		// Return interface type of this interface
+		auto hwtype = iface->get_hwtype();
+		switch(hwtype) {
+		case interface::hwtype_t::loopback:
+			strncpy(response, "LOOPBACK", sizeof(response));
+			goto send;
+		case interface::hwtype_t::ethernet:
+			strncpy(response, "ETHERNET", sizeof(response));
+			goto send;
+		}
+		strncpy(response, "UNKNOWN", sizeof(response));
 		goto send;
 	} else if(strcmp(command, "ADDRV4") == 0) {
 		// Return IPv4 addresses of this interface
@@ -261,7 +284,7 @@ void ifstoresock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *o
 	}
 
 	// Commands with address as arg2
-	if(arg2[0] == 0) {
+	if(!arg2 || arg2[0] == 0) {
 		strncpy(response, "ERROR", sizeof(response));
 		goto send;
 	}

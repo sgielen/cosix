@@ -25,7 +25,12 @@ typedef linked_list<ipv6addr_t> ipv6addr_list;
  * interface.
  */
 struct interface {
-	interface();
+	enum hwtype_t {
+		loopback,
+		ethernet,
+	};
+
+	interface(hwtype_t);
 	virtual ~interface() {}
 
 	/**
@@ -35,6 +40,13 @@ struct interface {
 	 */
 	inline const char *get_name() {
 		return name;
+	}
+
+	/**
+	 * This method returns the interface hardware / lower level type.
+	 */
+	inline hwtype_t get_hwtype() {
+		return hwtype;
 	}
 
 	/**
@@ -101,6 +113,7 @@ private:
 	void set_name(const char *name);
 
 	friend struct interface_store;
+	hwtype_t hwtype;
 	char name[8];
 	ipv4addr_list *ipv4_addrs;
 	ipv6addr_list *ipv6_addrs;
