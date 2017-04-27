@@ -8,10 +8,14 @@
 #include <sys/socket.h>
 #include <sys/capsicum.h>
 #include <cloudabi_syscalls.h>
+#include <thread>
+#include "client.hpp"
 
 int stdout;
 int rootfs;
 int ifstore;
+
+using namespace networkd;
 
 void program_main(const argdata_t *ad) {
 	argdata_map_iterator_t it;
@@ -38,7 +42,7 @@ void program_main(const argdata_t *ad) {
 	fswap(stderr, out);
 
 	// TODO: enumerate interfaces
-	// TODO: if an interface doesn't have an IP, start a DHCP client on it
+	// TODO: if an interface is type ethernet, start a DHCP client on it
 	// TODO: routing table
 	// TODO: offer an interface to get UDP or TCP sockets via rootfs
 
@@ -67,5 +71,30 @@ void program_main(const argdata_t *ad) {
 		}
 	}
 
-	exit(0);
+	int listenfd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if(listenfd < 0) {
+		perror("socket");
+		exit(1);
+	}
+	if(bindat(listenfd, rootfs, "networkd") < 0) {
+		perror("bindat");
+		exit(1);
+	}
+	if(listen(listenfd, SOMAXCONN) < 0) {
+		perror("listen");
+		exit(1);
+	}
+
+	while(1) {
+		int client = accept(listenfd, NULL, NULL);
+		if(client < 0) {
+			perror("accept");
+			exit(1);
+		}
+		std::thread clientthread([client](){
+			networkd::client c(stdout, client);
+			c.run();
+		});
+		clientthread.detach();
+	}
 }
