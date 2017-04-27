@@ -218,6 +218,9 @@ void ifstoresock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *o
 			if(i > 0) {
 				strlcat(response, ":", sizeof(response));
 			}
+			if(mac[i] < 0x10) {
+				strlcat(response, "0", sizeof(response));
+			}
 			char number[4];
 			strlcat(response, uitoa_s(mac[i], number, sizeof(number), 16), sizeof(response));
 		}
@@ -299,10 +302,10 @@ void ifstoresock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *o
 		goto send;
 	}
 
+	strncpy(response, "ERROR", sizeof(response));
+
 send:
-	if(response[0] == 0) {
-		strncpy(response, "ERROR", sizeof(response));
-	} else if(strlen(response) == sizeof(response) + 1) {
+	if(strlen(response) == sizeof(response) - 1) {
 		// full response may not have fit, error
 		// TODO: this could happen if we have too many interfaces or
 		// too many addresses on an interface
