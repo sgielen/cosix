@@ -35,6 +35,10 @@ cloudabi_errno_t ethernet_interface::send_packet(uint8_t *packet, size_t length)
 	frame[length + 16] = 0;
 	frame[length + 17] = 0;
 
+	return send_frame(frame, frame_size);
+}
+
+cloudabi_errno_t ethernet_interface::send_frame(uint8_t *frame, size_t frame_size) {
 	return device->send_ethernet_frame(frame, frame_size);
 }
 

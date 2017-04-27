@@ -6,6 +6,7 @@
 #include <net/interface.hpp>
 #include <fd/unixsock.hpp>
 #include <fd/pseudo_fd.hpp>
+#include <fd/rawsock.hpp>
 
 using namespace cloudos;
 
@@ -281,8 +282,21 @@ void ifstoresock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *o
 		});
 		goto send;
 	} else if(strcmp(command, "RAWSOCK") == 0) {
-		// TODO: get a raw socket to this interface
-		strncpy(response, "TODO", sizeof(response));
+		auto process = get_scheduler()->get_running_thread()->get_process();
+		auto sock = make_shared<rawsock>(iface, "rawsock to ");
+		strlcat(sock->name, iface->get_name(), sizeof(sock->name));
+		auto rawsockfd = process->add_fd(sock, -1, -1);
+
+		fd_mapping_t *fd_mapping;
+		error = process->get_fd(&fd_mapping, rawsockfd, 0);
+		if(error != 0) {
+			strncpy(response, "ERROR", sizeof(response));
+			goto send;
+		}
+		assert(message_fds == nullptr);
+		message_fds = allocate<linked_list<fd_mapping_t>>(*fd_mapping);
+
+		strncpy(response, "OK", sizeof(response));
 		goto send;
 	}
 

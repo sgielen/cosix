@@ -14,5 +14,6 @@ if(BAREMETAL_ENABLED)
 		sock.cpp sock.hpp
 		unixsock.cpp unixsock.hpp
 		ifstoresock.cpp ifstoresock.hpp
+		rawsock.cpp rawsock.hpp
 	)
 endif()

@@ -6,13 +6,17 @@
 #include "net/protocol_store.hpp"
 #include "oslibc/error.h"
 #include "oslibc/list.hpp"
+#include "memory/smart_ptr.hpp"
 
 namespace cloudos {
 
 struct interface_store;
+struct rawsock;
 
 typedef linked_list<ipv4addr_t> ipv4addr_list;
 typedef linked_list<ipv6addr_t> ipv6addr_list;
+
+typedef linked_list<weak_ptr<rawsock>> rawsock_list;
 
 /**
  * An interface is used for IP communication. It is an abstract concept with
@@ -88,6 +92,17 @@ struct interface {
 	 */
 	virtual cloudabi_errno_t send_packet(uint8_t *packet, size_t length) = 0;
 
+	/**
+	 * This method is used to send a frame to this interface, including the
+	 * lower-level frame.
+	 */
+	virtual cloudabi_errno_t send_frame(uint8_t *packet, size_t length) = 0;
+
+	/**
+	 * This method is used to subscribe for incoming IP packets to this interface.
+	 */
+	void subscribe(weak_ptr<rawsock> sock);
+
 	cloudabi_errno_t add_ipv4_addr(uint8_t const ip[4]);
 
 protected:
@@ -119,6 +134,7 @@ private:
 	ipv6addr_list *ipv6_addrs;
 	char mac[16];
 	size_t mac_size = 0;
+	rawsock_list *subscribed_sockets = nullptr;
 };
 
 }

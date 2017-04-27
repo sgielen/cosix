@@ -19,6 +19,7 @@ struct ethernet_interface : public interface
 	}
 
 	virtual cloudabi_errno_t send_packet(uint8_t *packet, size_t length) override;
+	virtual cloudabi_errno_t send_frame(uint8_t *packet, size_t length) override;
 
 private:
 	friend struct ethernet_device;

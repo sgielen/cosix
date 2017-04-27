@@ -164,12 +164,13 @@ void client::run() {
 			if(!success) {
 				return;
 			}
-		} else if(command == "raw") {
+		} else if(command == "rawsock") {
 			int raw = get_raw_socket(iface);
 			if(raw < 0) {
 				if(!send_error("Couldn't obtain raw socket")) {
 					return;
 				}
+				continue;
 			}
 			argdata_t *keys[] = {argdata_create_str_c("fd")};
 			argdata_t *values[] = {argdata_create_fd(raw)};
