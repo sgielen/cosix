@@ -17,15 +17,51 @@ int stdout;
 int bootfs;
 int rootfs;
 int ifstore;
+std::mutex ifstore_mtx;
 
 using namespace networkd;
 
 std::string send_ifstore_command(std::string command) {
+	std::lock_guard<std::mutex> lock(ifstore_mtx);
+
 	write(ifstore, command.c_str(), command.length());
 	char buf[200];
-	size_t size = read(ifstore, buf, sizeof(buf));
+	ssize_t size = read(ifstore, buf, sizeof(buf));
+	if(size < 0) {
+		perror("Failed to read from ifstore");
+		exit(1);
+	}
 	return std::string(buf, size);
 }
+
+int get_raw_socket(std::string iface) {
+	std::lock_guard<std::mutex> lock(ifstore_mtx);
+
+	std::string command = "RAWSOCK " + iface;
+	write(ifstore, command.c_str(), command.length());
+
+	char buf[20];
+	struct iovec iov = {.iov_base = buf, .iov_len = sizeof(buf)};
+	alignas(struct cmsghdr) char control[CMSG_SPACE(sizeof(int))];
+	struct msghdr msg = {
+		.msg_iov = &iov, .msg_iovlen = 1,
+		.msg_control = control, .msg_controllen = sizeof(control),
+	};
+	if(recvmsg(ifstore, &msg, 0) < 0) {
+		perror("Failed to retrieve rawsock from ifstore");
+		exit(1);
+	}
+	if(strncmp(buf, "OK", sizeof(buf)) != 0) {
+		return -1;
+	}
+	struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+	if(cmsg == nullptr || cmsg->cmsg_level != SOL_SOCKET || cmsg->cmsg_len != CMSG_LEN(sizeof(int))) {
+		return -1;
+	}
+	int *fdbuf = reinterpret_cast<int*>(CMSG_DATA(cmsg));
+	return fdbuf[0];
+}
+
 
 std::vector<std::string> split_words(std::string str) {
 	std::stringstream ss;
