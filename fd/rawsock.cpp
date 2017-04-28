@@ -42,12 +42,14 @@ void rawsock::sock_stat_get(cloudabi_sockstat_t* buf, cloudabi_ssflags_t flags)
 
 void rawsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 {
-	while(messages != nullptr) {
+	while(messages == nullptr) {
 		read_cv.wait();
 	}
 
-	Blk message_buf = messages->data;
-	messages = messages->next;
+	auto *message = messages;
+	messages = message->next;
+	Blk message_buf = message->data;
+	deallocate(message);
 
 	// TODO: a generic function to copy iovecs/linked-list-of-buffers over
 	// iovecs

@@ -286,6 +286,7 @@ void ifstoresock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *o
 		auto sock = make_shared<rawsock>(iface, "rawsock to ");
 		strlcat(sock->name, iface->get_name(), sizeof(sock->name));
 		auto rawsockfd = process->add_fd(sock, -1, -1);
+		sock->init();
 
 		fd_mapping_t *fd_mapping;
 		error = process->get_fd(&fd_mapping, rawsockfd, 0);
