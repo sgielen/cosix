@@ -44,6 +44,7 @@ inline uint64_t align_up(uint64_t value, uint64_t alignment) {
 struct page_allocator {
 	page_allocator(void *handout_start, memory_map_entry *mmap, size_t memory_map_bytes);
 
+	Blk allocate_contiguous_phys(size_t num);
 	Blk allocate_phys();
 	void deallocate_phys(Blk b);
 	static const int PAGE_SIZE = 4096 /* bytes */;
@@ -51,6 +52,7 @@ struct page_allocator {
 private:
 	page_list *used_pages;
 	page_list *free_pages;
+	page_list *free_pages_tail;
 };
 
 }

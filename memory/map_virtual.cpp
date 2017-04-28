@@ -6,6 +6,16 @@ extern uint32_t _kernel_virtual_base;
 
 using namespace cloudos;
 
+#ifndef NDEBUG
+// In debug mode, fill all allocated pages with 0xda, a marker for use
+// of uninitialized memory.
+// TODO: I should test regularly with various values for this member,
+// since different values may lead to various kinds of bugs when memory
+// is not initialized correctly.
+//static const char debug_page_filler = 0xad;
+static const char debug_page_filler = 0xda;
+#endif
+
 map_virtual::map_virtual(page_allocator *p)
 : pa(p)
 {
@@ -17,27 +27,8 @@ map_virtual::map_virtual(page_allocator *p)
 	}
 
 	/* NOTE: these are physical memory Blks */
-	Blk vmem_bitmap_allocs, last_vmem_alloc;
-	assert(num_vmem_buf_pages > 0);
-	for(size_t i = 0; i < num_vmem_buf_pages; ++i) {
-		Blk alloc = pa->allocate_phys();
-		if(alloc.ptr == 0) {
-			kernel_panic("Failed to allocate vmem bitmap buffer");
-		}
-
-		if(i == 0) {
-			vmem_bitmap_allocs = alloc;
-		} else {
-			char *last_ptr = reinterpret_cast<char*>(last_vmem_alloc.ptr);
-			char *next_ptr = reinterpret_cast<char*>(alloc.ptr);
-			if(last_ptr + PAGE_SIZE != next_ptr) {
-				kernel_panic("Page allocator did not hand out contiguous pages while allocating vmem bitmap buffer");
-			}
-		}
-
-		last_vmem_alloc = alloc;
-	}
-	vmem_bitmap_allocs.size = num_vmem_buf_pages * PAGE_SIZE;
+	Blk vmem_bitmap_allocs = pa->allocate_contiguous_phys(num_vmem_buf_pages);
+	assert(vmem_bitmap_allocs.size == vmem_buf_size);
 
 	uint8_t *bitmap_buffer = reinterpret_cast<uint8_t*>(vmem_bitmap_allocs.ptr) + _kernel_virtual_base;
 	memset(bitmap_buffer, 0, vmem_bitmap_allocs.size);
@@ -130,6 +121,45 @@ static int num_pages_for_size(size_t size) {
 	return size % map_virtual::PAGE_SIZE ? n + 1 : n;
 }
 
+Blk map_virtual::allocate_contiguous_phys(size_t size) {
+	size_t num_pages = num_pages_for_size(size);
+	size_t bit;
+	if(!vmem_bitmap.get_contiguous_free(num_pages, bit)) {
+		get_vga_stream() << "allocate_contiguous_phys() called, but there is no virtual address space left\n";
+		return {};
+	}
+
+	Blk phys_alloc = pa->allocate_contiguous_phys(num_pages);
+	if(phys_alloc.ptr == 0) {
+		get_vga_stream() << "allocate_contiguous_phys() called, but no physical contiguous block could be found\n";
+		return {};
+	}
+
+	void *first_ptr = nullptr;
+	for(size_t i = 0; i < num_pages; ++i) {
+		size_t page = bit + i;
+		size_t table = page / PAGING_TABLE_SIZE;
+		size_t entrynum = page % PAGING_TABLE_SIZE;
+
+		assert(table < NUM_KERNEL_PAGE_TABLES);
+
+		uint32_t &entry = kernel_page_tables[table][entrynum];
+		assert(entry == 0);
+		uint64_t ptr = reinterpret_cast<uint64_t>(phys_alloc.ptr) + i * PAGE_SIZE;
+		entry = ptr | 0x03;
+		if(i == 0) {
+			table += KERNEL_PAGE_OFFSET;
+			first_ptr = reinterpret_cast<void*>(table * PAGING_TABLE_SIZE * PAGE_SIZE + entrynum * PAGE_SIZE);
+		}
+	}
+
+#ifndef NDEBUG
+	memset(first_ptr, debug_page_filler, size);
+#endif
+
+	return {first_ptr, size};
+}
+
 Blk map_virtual::allocate(size_t size) {
 	size_t num_pages = num_pages_for_size(size);
 	size_t bit;
@@ -164,13 +194,7 @@ Blk map_virtual::allocate(size_t size) {
 	}
 
 #ifndef NDEBUG
-	// In debug mode, fill all allocated pages with 0xda, a marker for use
-	// of uninitialized memory.
-	// TODO: I should test regularly with various values for this member,
-	// since different values may lead to various kinds of bugs when memory
-	// is not initialized correctly.
-	//memset(first_ptr, 0xad, size);
-	memset(first_ptr, 0xda, size);
+	memset(first_ptr, debug_page_filler, size);
 #endif
 
 	return {first_ptr, size};

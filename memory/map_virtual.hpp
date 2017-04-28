@@ -24,6 +24,7 @@ struct map_virtual {
 	// for userland and kernel data
 	void *to_physical_address(process_fd*, const void*);
 
+	Blk allocate_contiguous_phys(size_t bytes);
 	Blk allocate(size_t bytes);
 	void deallocate(Blk b);
 	void unmap_page_only(void *logical_address);

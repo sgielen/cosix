@@ -13,7 +13,6 @@ page_allocator::page_allocator(void *h, memory_map_entry *mmap, size_t mmap_size
 	uint64_t physical_handout = reinterpret_cast<uint64_t>(h) - _kernel_virtual_base;
 
 	// Convert memory map into list of aligned pages + their physical address
-	page_list *free_pages_tail = 0;
 	iterate_through_mem_map(mmap, mmap_size, [&](memory_map_entry *entry) {
 		// only add pages for available memory
 		if(entry->mem_type != 1) {
@@ -45,7 +44,8 @@ page_allocator::page_allocator(void *h, memory_map_entry *mmap, size_t mmap_size
 			if(free_pages == 0) {
 				free_pages = free_pages_tail = page_entry;
 			} else {
-				append(&free_pages_tail, page_entry);
+				assert(free_pages_tail->next == nullptr);
+				free_pages_tail->next = page_entry;
 				free_pages_tail = page_entry;
 			}
 		}
@@ -64,6 +64,9 @@ Blk page_allocator::allocate_phys() {
 	}
 
 	page_list *page = free_pages;
+	if(free_pages == free_pages_tail) {
+		free_pages_tail = page->next;
+	}
 	free_pages = page->next;
 
 	page->next = used_pages;
@@ -72,15 +75,52 @@ Blk page_allocator::allocate_phys() {
 	return {reinterpret_cast<void*>(page->data), PAGE_SIZE};
 }
 
+Blk page_allocator::allocate_contiguous_phys(size_t num) {
+	assert(num > 0);
+	// TODO: sort free_pages by ptr until we have a large enough range
+
+	page_list **head_ptr = &free_pages;
+	page_list *head = free_pages, *last = free_pages;
+	size_t num_found = 1;
+
+	while(num_found < num) {
+		if(last->next == nullptr) {
+			get_vga_stream() << __PRETTY_FUNCTION__ << " - there are no pages left\n";
+			return {};
+		}
+
+		uint64_t last_ptr = last->data;
+		uint64_t next_ptr = last->next->data;
+
+		if(last_ptr + PAGE_SIZE == next_ptr) {
+			last = last->next;
+			num_found++;
+		} else {
+			// not contiguous, start over
+			head_ptr = &(last->next);
+			head = last = last->next;
+			num_found = 1;
+		}
+	}
+
+	*head_ptr = last->next;
+	last->next = used_pages;
+	used_pages = head;
+	return {reinterpret_cast<void*>(head->data), num * PAGE_SIZE};
+}
+
 void page_allocator::deallocate_phys(Blk b) {
 	assert(!empty(used_pages));
 	assert((reinterpret_cast<uint32_t>(b.ptr) & 0xfff) == 0);
-	assert(b.size == PAGE_SIZE);
+	assert((b.size % PAGE_SIZE) == 0);
 
-	page_list *item = used_pages;
-	used_pages = item->next;
+	int num = b.size / PAGE_SIZE;
+	for(int i = 0; i < num; ++i) {
+		page_list *item = used_pages;
+		used_pages = item->next;
 
-	item->data = reinterpret_cast<uint32_t>(b.ptr);
-	item->next = free_pages;
-	free_pages = item;
+		item->data = reinterpret_cast<uint32_t>(b.ptr) + i * PAGE_SIZE;
+		item->next = free_pages_tail;
+		free_pages_tail = item;
+	}
 }
