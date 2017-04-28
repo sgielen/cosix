@@ -12,10 +12,6 @@ void cloudos::dump_interfaces(vga_stream &stream, interface_store *store)
 	stream << "Interfaces:\n";
 	iterate(store->get_interfaces(), [&stream](interface_list *item){
 		stream << "* " << item->data->get_name() << "\n";
-		iterate(item->data->get_ipv4addr_list(), [&stream](ipv4addr_list *addr_item){
-			uint8_t *a = addr_item->data;
-			stream << "  IPv4: " << dec << a[0] << "." << a[1] << "." << a[2] << "." << a[3] << "\n";
-		});
 	});
 }
 

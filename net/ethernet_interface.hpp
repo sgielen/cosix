@@ -18,7 +18,6 @@ struct ethernet_interface : public interface
 		return device->get_mac_address(mac);
 	}
 
-	virtual cloudabi_errno_t send_packet(uint8_t *packet, size_t length) override;
 	virtual cloudabi_errno_t send_frame(uint8_t *packet, size_t length) override;
 
 private:

@@ -180,9 +180,6 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	REGISTER_DRIVER(pci_driver);
 	REGISTER_DRIVER(virtio_net_driver);
 
-	global.protocol_store = get_allocator()->allocate<protocol_store>();
-	new(global.protocol_store) protocol_store();
-
 	global.interface_store = get_allocator()->allocate<interface_store>();
 	new(global.interface_store) interface_store();
 
@@ -191,8 +188,6 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	if(global.interface_store->register_interface_fixed_name(loopback, "lo") != 0) {
 		kernel_panic("Failed to register loopback interface");
 	}
-
-	loopback->add_ipv4_addr(reinterpret_cast<const uint8_t*>("\x7f\x00\x00\x01"));
 
 	global.root_device = get_allocator()->allocate<root_device>();
 	new(global.root_device) root_device();

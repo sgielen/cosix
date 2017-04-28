@@ -130,7 +130,7 @@ void rawsock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *out)
 	deallocate(message_blk);
 }
 
-void rawsock::interface_recv(uint8_t *frame, size_t frame_length, protocol_t, size_t)
+void rawsock::frame_received(uint8_t *frame, size_t frame_length)
 {
 	Blk b = allocate(frame_length);
 	memcpy(b.ptr, frame, frame_length);

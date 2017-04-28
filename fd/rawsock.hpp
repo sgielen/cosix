@@ -21,7 +21,7 @@ struct rawsock : public sock_t, public enable_shared_from_this<rawsock> {
 	void sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out) override;
 	void sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *out) override;
 
-	void interface_recv(uint8_t *frame, size_t frame_length, protocol_t frame_type, size_t ip_hdr_offset);
+	void frame_received(uint8_t *frame, size_t frame_length);
 
 private:
 	// TODO: make this a weak ptr

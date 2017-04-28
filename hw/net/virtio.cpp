@@ -5,8 +5,6 @@
 #include "memory/page_allocator.hpp"
 #include "oslibc/error.h"
 #include "oslibc/string.h"
-#include "net/protocol_store.hpp"
-#include "net/dhcp.hpp" // TODO remove
 
 extern uint32_t _kernel_virtual_base;
 
@@ -307,10 +305,7 @@ cloudabi_errno_t virtio_net_device::eth_init()
 	}
 
 	outb(device_status, 4); /* driver ready */
-
-	// TODO: make something other than the ethernet_device responsible for starting
-	// the DHCP client
-	return get_protocol_store()->dhcp->start_dhcp_discover_for(get_interface());
+	return 0;
 }
 
 cloudabi_errno_t virtio_net_device::check_new_packets() {

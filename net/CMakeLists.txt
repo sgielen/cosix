@@ -3,15 +3,6 @@ add_library(net
 	ethernet_interface.hpp ethernet_interface.cpp
 	loopback_interface.hpp
 	interface_store.hpp interface_store.cpp
-	ethernet.cpp ethernet.hpp
-	arp.cpp arp.hpp
-	ip.cpp ip.hpp
-	udp.cpp udp.hpp
-	tcp.cpp tcp.hpp
-	icmp.cpp icmp.hpp
-	dhcp.cpp dhcp.hpp
-	protocol_store.cpp protocol_store.hpp
-	elfrun.cpp elfrun.hpp
 	)
 list(APPEND net_tests)
 target_link_libraries(net oslibc)

@@ -1,7 +1,6 @@
 #include "process_fd.hpp"
 #include <oslibc/string.h>
 #include <hw/vga_stream.hpp>
-#include <net/elfrun.hpp> /* for elf_endian */
 #include <memory/allocator.hpp>
 #include <memory/page_allocator.hpp>
 #include <global.hpp>

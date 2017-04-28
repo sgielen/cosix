@@ -131,7 +131,6 @@ void ifstoresock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *o
 
 	char *command = message;
 	char *arg = strsplit(command, ' ');
-	char *arg2 = strsplit(arg, ' ');
 
 	char response[160];
 	response[0] = 0;
@@ -243,44 +242,6 @@ void ifstoresock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *o
 		}
 		strncpy(response, "UNKNOWN", sizeof(response));
 		goto send;
-	} else if(strcmp(command, "ADDRV4") == 0) {
-		// Return IPv4 addresses of this interface
-		auto *list = iface->get_ipv4addr_list();
-		iterate(list, [&](ipv4addr_list *item) {
-			char addr[18];
-			addr[0] = 0;
-			for(uint8_t i = 0; i < 4; ++i) {
-				if(i > 0) {
-					strlcat(addr, ".", sizeof(addr));
-				}
-				char byte = item->data[i];
-				char number[4];
-				strlcat(addr, uitoa_s(byte, number, sizeof(number), 10), sizeof(addr));
-			}
-			strlcat(addr, "\n", sizeof(addr));
-			strlcat(response, addr, sizeof(response));
-		});
-		goto send;
-	} else if(strcmp(command, "ADDRV6") == 0) {
-		// Return IPv6 addresses of this interface
-		auto *list = iface->get_ipv6addr_list();
-		iterate(list, [&](ipv6addr_list *item) {
-			char addr[42];
-			addr[0] = 0;
-			for(uint8_t i = 0; i < 8; ++i) {
-				if(i > 0) {
-					strlcat(addr, ":", sizeof(addr));
-				}
-				char byte = item->data[i * 2];
-				char byte2 = item->data[i * 2 + 1];
-				char number[4];
-				strlcat(addr, uitoa_s(byte, number, sizeof(number), 16), sizeof(addr));
-				strlcat(addr, uitoa_s(byte2, number, sizeof(number), 16), sizeof(addr));
-			}
-			strlcat(addr, "\n", sizeof(addr));
-			strlcat(response, addr, sizeof(response));
-		});
-		goto send;
 	} else if(strcmp(command, "RAWSOCK") == 0) {
 		auto process = get_scheduler()->get_running_thread()->get_process();
 		auto sock = make_shared<rawsock>(iface, "rawsock to ");
@@ -298,22 +259,6 @@ void ifstoresock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *o
 		message_fds = allocate<linked_list<fd_mapping_t>>(*fd_mapping);
 
 		strncpy(response, "OK", sizeof(response));
-		goto send;
-	}
-
-	// Commands with address as arg2
-	if(!arg2 || arg2[0] == 0) {
-		strncpy(response, "ERROR", sizeof(response));
-		goto send;
-	}
-
-	if(strcmp(command, "ADD_ADDRV4") == 0) {
-		// TODO: Add IPv4 address to this interface
-		strncpy(response, "TODO", sizeof(response));
-		goto send;
-	} else if(strcmp(command, "ADD_ADDRV6") == 0) {
-		// TODO: Add IPv6 address to this interface
-		strncpy(response, "TODO", sizeof(response));
 		goto send;
 	}
 

@@ -12,6 +12,7 @@
 #include "client.hpp"
 #include <vector>
 #include <fcntl.h>
+#include <map>
 
 int stdout;
 int bootfs;
@@ -85,8 +86,24 @@ std::string get_mac(std::string iface) {
 	return send_ifstore_command("MAC " + iface);
 }
 
+std::map<std::string, std::vector<std::string>> ips_per_iface;
+
 std::vector<std::string> get_addr_v4(std::string iface) {
-	return split_words(send_ifstore_command("ADDRV4 " + iface));
+	auto it = ips_per_iface.find(iface);
+	if(it == ips_per_iface.end()) {
+		return {};
+	} else {
+		return it->second;
+	}
+}
+
+void add_addr_v4(std::string iface, std::string ip) {
+	auto it = ips_per_iface.find(iface);
+	if(it == ips_per_iface.end()) {
+		ips_per_iface[iface] = {ip};
+	} else {
+		it->second.push_back(ip);
+	}
 }
 
 void start_dhclient(std::string iface) {
@@ -119,6 +136,18 @@ void start_dhclient(std::string iface) {
 
 	close(bfd);
 	close(networkfd);
+}
+
+void dump_interfaces() {
+	for(auto &iface : get_interfaces()) {
+		std::string hwtype = get_hwtype(iface);
+		std::string mac = get_mac(iface);
+
+		dprintf(stdout, "* %s (type %s, MAC %s)\n", iface.c_str(), hwtype.c_str(), mac.c_str());
+		for(auto &ip : get_addr_v4(iface)) {
+			dprintf(stdout, "  IPv4: %s\n", ip.c_str());
+		}
+	}
 }
 
 void program_main(const argdata_t *ad) {
@@ -161,17 +190,14 @@ void program_main(const argdata_t *ad) {
 		exit(1);
 	}
 
+	dump_interfaces();
 	for(auto &iface : get_interfaces()) {
 		std::string hwtype = get_hwtype(iface);
-		std::string mac = get_mac(iface);
-
-		dprintf(stdout, "* %s (type %s, MAC %s)\n", iface.c_str(), hwtype.c_str(), mac.c_str());
-		for(auto &ip : get_addr_v4(iface)) {
-			dprintf(stdout, "  IPv4: %s\n", ip.c_str());
-		}
 
 		if(hwtype == "ETHERNET") {
 			start_dhclient(iface);
+		} else if(hwtype == "LOOPBACK") {
+			add_addr_v4(iface, "127.0.0.1");
 		}
 	}
 

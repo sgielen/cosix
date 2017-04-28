@@ -85,6 +85,7 @@ void client::run() {
 
 		std::string command;
 		std::string iface;
+		std::string arg;
 
 		argdata_map_iterator_t it;
 		const argdata_t *key;
@@ -104,6 +105,9 @@ void client::run() {
 			} else if(strcmp(keystr, "interface") == 0) {
 				argdata_get_str(value, &cstr, &len);
 				iface.assign(cstr, len);
+			} else if(strcmp(keystr, "arg") == 0) {
+				argdata_get_str(value, &cstr, &len);
+				arg.assign(cstr, len);
 			}
 		}
 
@@ -118,7 +122,19 @@ void client::run() {
 			}
 		}
 
-		if(command == "mac") {
+		if(command == "dump") {
+			dump_interfaces();
+			argdata_t *keys[] = {argdata_create_str_c("dumped")};
+			argdata_t *values[] = {argdata_create_str_c("ok")};
+			argdata_t *response = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
+			bool success = send_response(response);
+			argdata_free(keys[0]);
+			argdata_free(values[0]);
+			argdata_free(response);
+			if(!success) {
+				return;
+			}
+		} else if(command == "mac") {
 			std::string mac = get_mac(iface);
 
 			argdata_t *keys[] = {argdata_create_str_c("mac")};
@@ -158,6 +174,18 @@ void client::run() {
 			for(size_t i = 0; i < ipv4.size(); ++i) {
 				argdata_free(addresses[i]);
 			}
+			argdata_free(keys[0]);
+			argdata_free(values[0]);
+			argdata_free(response);
+			if(!success) {
+				return;
+			}
+		} else if(command == "add_addrv4") {
+			add_addr_v4(iface, arg);
+			argdata_t *keys[] = {argdata_create_str_c("added")};
+			argdata_t *values[] = {argdata_create_str_c("ok")};
+			argdata_t *response = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
+			bool success = send_response(response);
 			argdata_free(keys[0]);
 			argdata_free(values[0]);
 			argdata_free(response);
