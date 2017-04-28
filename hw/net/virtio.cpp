@@ -10,6 +10,8 @@ extern uint32_t _kernel_virtual_base;
 
 using namespace cloudos;
 
+#define PAGE_SIZE 4096
+
 namespace cloudos {
 
 struct virtq_buffer {
@@ -62,14 +64,12 @@ struct virtq {
 		/* availability list */
 		iovirtq_bytes += 2 + queue_size * 2;
 		/* pad to the next page */
-		padding_used = 4096 - (iovirtq_bytes % 4096);
+		padding_used = PAGE_SIZE - (iovirtq_bytes % PAGE_SIZE);
 		iovirtq_bytes += padding_used;
 		/* used list */
 		iovirtq_bytes += 2 + queue_size * 8;
-		data = reinterpret_cast<uint8_t*>(get_allocator()->allocate_aligned(iovirtq_bytes, 4096));
-		for(size_t i = 0; i < iovirtq_bytes; ++i) {
-			data[i] = 0;
-		}
+		data = reinterpret_cast<uint8_t*>(get_map_virtual()->allocate_contiguous_phys(iovirtq_bytes).ptr);
+		memset(data, 0, iovirtq_bytes);
 	}
 
 	uint16_t get_queue_select() {
@@ -209,7 +209,7 @@ cloudabi_errno_t virtio_net_device::eth_init()
 	// acknowledge device
 	outb(device_status, 0); /* reset device */
 	outb(device_status, 1); /* device acknowledged */
-	outb(device_status, 2); /* driver available */
+	outb(device_status, 3); /* driver available */
 
 	uint64_t sup_features = inl(device_features);
 	sup_features |= uint64_t(inl(device_features + 1)) << 32;
@@ -250,6 +250,8 @@ cloudabi_errno_t virtio_net_device::eth_init()
 	outl(driver_features + 1, drv_features >> 32);
 	get_vga_stream() << "Driver features: 0x" << hex << inl(driver_features) << dec << "\n";
 
+	outb(device_status, 11); /* features OK */
+
 	mac[0] = inb(mem_base + 0x14);
 	mac[1] = inb(mem_base + 0x15);
 	mac[2] = inb(mem_base + 0x16);
@@ -257,7 +259,7 @@ cloudabi_errno_t virtio_net_device::eth_init()
 	mac[4] = inb(mem_base + 0x18);
 	mac[5] = inb(mem_base + 0x19);
 
-	get_vga_stream() << "MAC address: " << hex << mac[0] << ":" << mac[1] << ":" << mac[2] << ":" << mac[3] << ":" << mac[4] << ":" << mac[5] << "\n";
+	get_vga_stream() << "MAC address: " << hex << mac[0] << ":" << mac[1] << ":" << mac[2] << ":" << mac[3] << ":" << mac[4] << ":" << mac[5] << dec << "\n";
 
 	for(int queue = 0; queue < 2; ++queue) {
 		outw(queue_select, queue);
@@ -267,8 +269,8 @@ cloudabi_errno_t virtio_net_device::eth_init()
 		new(q) virtq(queue, number_of_entries);
 
 		uint64_t virtq_addr_phys = reinterpret_cast<uint64_t>(q->get_virtq_addr_phys());
-		if((virtq_addr_phys % 4096) != 0) {
-			get_vga_stream() << "Failed to allocate descriptor table aligned to 4096 bytes\n";
+		if((virtq_addr_phys % PAGE_SIZE) != 0) {
+			get_vga_stream() << "Failed to allocate descriptor table aligned to a page\n";
 			return ENOMEM;
 		}
 		outl(queue_address, virtq_addr_phys >> 12);
@@ -284,8 +286,8 @@ cloudabi_errno_t virtio_net_device::eth_init()
 		auto buffer = readq->get_virtq_buffer(i);
 
 		// TODO: use MTU instead of fixed size
-		buffer->len = 2048;
-		void *address = get_allocator()->allocate(buffer->len);
+		buffer->len = PAGE_SIZE;
+		void *address = get_map_virtual()->allocate(PAGE_SIZE).ptr;
 		buffer->addr = reinterpret_cast<uint64_t>(get_map_virtual()->to_physical_address(address));
 		buffer->flags = VIRTQ_DESC_F_WRITE;
 		buffer->next = 0;
@@ -304,7 +306,7 @@ cloudabi_errno_t virtio_net_device::eth_init()
 		}
 	}
 
-	outb(device_status, 4); /* driver ready */
+	outb(device_status, 15); /* driver ready */
 	return 0;
 }
 
@@ -328,9 +330,7 @@ cloudabi_errno_t virtio_net_device::check_new_packets() {
 			kernel_panic("Did not find logical address for physical kernel address of nethdr");
 		}
 		uint8_t *nethdr = reinterpret_cast<uint8_t*>(found->data->logical);
-		if(reinterpret_cast<uint32_t>(nethdr) < _kernel_virtual_base) {
-			kernel_panic("Virtio frame ptr is too low");
-		}
+		assert(reinterpret_cast<uint32_t>(nethdr) >= _kernel_virtual_base);
 		auto res = ethernet_frame_received(nethdr + 12, length - 12);
 
 		last_readq_used_idx++;
