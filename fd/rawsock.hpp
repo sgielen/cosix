@@ -3,6 +3,7 @@
 #include <fd/process_fd.hpp>
 #include <oslibc/list.hpp>
 #include <net/interface.hpp>
+#include <concur/condition.hpp>
 
 namespace cloudos {
 
@@ -11,6 +12,9 @@ struct rawsock : public sock_t, public enable_shared_from_this<rawsock> {
 	~rawsock() override;
 
 	void init();
+
+	bool has_messages() const;
+	cloudabi_errno_t get_read_signaler(thread_condition_signaler **s) override;
 
 	void sock_shutdown(cloudabi_sdflags_t how) override;
 	void sock_stat_get(cloudabi_sockstat_t* buf, cloudabi_ssflags_t flags) override;
@@ -22,6 +26,8 @@ struct rawsock : public sock_t, public enable_shared_from_this<rawsock> {
 private:
 	// TODO: make this a weak ptr
 	interface *iface;
+
+	thread_condition_signaler read_signaler;
 
 	linked_list<Blk> *messages = nullptr;
 	cv_t read_cv;

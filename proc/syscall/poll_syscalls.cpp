@@ -150,13 +150,21 @@ cloudabi_errno_t cloudos::syscall_poll(syscall_context &c)
 			}
 			break;
 		}
-		case CLOUDABI_EVENTTYPE_FD_READ:
-			// TODO: on sockets in listen mode: wait on the event queue?
-			// This is done in BSD sockets, not defined for CloudABI sockets
-			get_vga_stream() << "Unimplemented fd-read eventtype, failing\n";
-			userdata->error = ENOSYS;
-			signaler = &null_signaler;
+		case CLOUDABI_EVENTTYPE_FD_READ: {
+			auto fdnum = i.fd_readwrite.fd;
+			fd_mapping_t *proc_mapping;
+			auto res = c.process()->get_fd(&proc_mapping, fdnum, CLOUDABI_RIGHT_POLL_FD_READWRITE | CLOUDABI_RIGHT_FD_READ);
+			if(res != 0) {
+				userdata->error = res;
+				signaler = &null_signaler;
+			}
+			res = proc_mapping->fd->get_read_signaler(&signaler);
+			if(res != 0) {
+				userdata->error = res;
+				signaler = &null_signaler;
+			}
 			break;
+		}
 		case CLOUDABI_EVENTTYPE_FD_WRITE:
 			get_vga_stream() << "Unimplemented fd-write eventtype, failing\n";
 			userdata->error = ENOSYS;

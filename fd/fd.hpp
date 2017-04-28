@@ -10,6 +10,8 @@
 
 namespace cloudos {
 
+struct thread_condition_signaler;
+
 inline vga_stream &operator<<(vga_stream &s, cloudabi_filetype_t type) {
 	switch(type) {
 #define FT(N) case CLOUDABI_FILETYPE_##N: s << #N; break
@@ -67,6 +69,11 @@ struct fd_t {
 	}
 	virtual void putstring(const char * /*str*/, size_t /*count*/) {
 		error = EINVAL;
+	}
+
+	virtual cloudabi_errno_t get_read_signaler(thread_condition_signaler **s) {
+		*s = nullptr;
+		return EINVAL;
 	}
 
 	/* For directories */

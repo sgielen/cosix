@@ -3,11 +3,17 @@
 
 using namespace cloudos;
 
+static bool rawsock_is_readable(void *r, thread_condition*) {
+	auto *rawsock = reinterpret_cast<struct rawsock*>(r);
+	return rawsock->has_messages();
+}
+
 rawsock::rawsock(interface *i, const char *n)
 : sock_t(CLOUDABI_FILETYPE_SOCKET_DGRAM, n)
 , iface(i)
 {
 	status = sockstatus_t::CONNECTED;
+	read_signaler.set_already_satisfied_function(rawsock_is_readable, this);
 }
 
 rawsock::~rawsock()
@@ -17,6 +23,11 @@ rawsock::~rawsock()
 void rawsock::init()
 {
 	iface->subscribe(weak_from_this());
+}
+
+bool rawsock::has_messages() const
+{
+	return messages != nullptr;
 }
 
 void rawsock::sock_shutdown(cloudabi_sdflags_t how)
@@ -125,5 +136,12 @@ void rawsock::interface_recv(uint8_t *frame, size_t frame_length, protocol_t, si
 	memcpy(b.ptr, frame, frame_length);
 	linked_list<Blk> *item = allocate<linked_list<Blk>>(b);
 	append(&messages, item);
+	read_signaler.condition_broadcast();
 	read_cv.notify();
+}
+
+cloudabi_errno_t rawsock::get_read_signaler(thread_condition_signaler **s)
+{
+	*s = &read_signaler;
+	return 0;
 }
