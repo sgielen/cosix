@@ -50,7 +50,7 @@ void x86_pit_clock::tick() {
 	time += get_resolution();
 
 	while(signalers) {
-		assert(signalers->next == nullptr || signalers->next->data->timeout > signalers->data->timeout);
+		assert(signalers->next == nullptr || signalers->next->data->timeout >= signalers->data->timeout);
 		if(signalers->data->timeout > time) {
 			break;
 		}
