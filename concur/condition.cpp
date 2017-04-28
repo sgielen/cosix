@@ -31,12 +31,12 @@ void thread_condition::satisfy()
 
 void thread_condition::cancel()
 {
-	signaler->cancel_condition(this);
 	reset();
 }
 
 void thread_condition::reset()
 {
+	signaler->remove_condition(this);
 	signaler = nullptr;
 	thread.reset();
 }
@@ -79,12 +79,8 @@ void thread_condition_signaler::subscribe_condition(thread_condition *c)
 	append(&conditions, item);
 }
 
-void thread_condition_signaler::cancel_condition(thread_condition *c)
+void thread_condition_signaler::remove_condition(thread_condition *c)
 {
-	if(c->satisfied) {
-		kernel_panic("Condition is cancelled, but already satisfied");
-	}
-
 	remove_one(&conditions, [&](thread_condition_list *item){
 		return item->data == c;
 	});
@@ -92,16 +88,21 @@ void thread_condition_signaler::cancel_condition(thread_condition *c)
 
 void thread_condition_signaler::condition_notify() {
 	if(conditions) {
-		thread_condition_list *item = conditions;
-		conditions = item->next;
-		item->data->satisfy();
-		deallocate(item);
+		auto *c = conditions;
+		conditions->data->satisfy();
+		// satisfy will call remove_condition(), which will call
+		// remove_one(), assert that the first condition changed
+		assert(conditions != c);
 	}
 }
 
 void thread_condition_signaler::condition_broadcast() {
 	while(conditions) {
-		condition_notify();
+		auto *c = conditions;
+		conditions->data->satisfy();
+		// satisfy will call remove_condition(), which will call
+		// remove_one(), assert that the first condition changed
+		assert(conditions != c);
 	}
 }
 

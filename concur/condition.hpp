@@ -60,7 +60,7 @@ struct thread_condition_signaler {
 
 	bool already_satisfied(thread_condition *c);
 	void subscribe_condition(thread_condition *c);
-	void cancel_condition(thread_condition *c);
+	void remove_condition(thread_condition *c);
 
 	void condition_notify();
 	void condition_broadcast();
