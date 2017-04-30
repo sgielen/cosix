@@ -125,7 +125,8 @@ void page_allocator::deallocate_phys(Blk b) {
 		used_pages = item->next;
 
 		item->data = reinterpret_cast<uint32_t>(b.ptr) + i * PAGE_SIZE;
-		item->next = free_pages_tail;
+		item->next = nullptr;
+		free_pages_tail->next = item;
 		free_pages_tail = item;
 	}
 }
