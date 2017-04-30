@@ -10,10 +10,7 @@ struct boot_info;
 
 struct memory_map_entry {
 	uint32_t entry_size;
-	union {
-		void *addr; // this will fail if sizeof(void*) > 8
-		uint64_t _field_size;
-	} mem_base;
+	uint64_t mem_base;
 	uint64_t mem_length;
 	uint32_t mem_type;
 }; // packed struct, but aligned by itself

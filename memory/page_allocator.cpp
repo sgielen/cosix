@@ -19,7 +19,7 @@ page_allocator::page_allocator(void *h, memory_map_entry *mmap, size_t mmap_size
 			return;
 		}
 
-		uint64_t begin_addr = reinterpret_cast<uint64_t>(entry->mem_base.addr);
+		uint64_t begin_addr = entry->mem_base;
 		uint64_t end_addr = begin_addr + entry->mem_length;
 
 		if(begin_addr < physical_handout + sizeof(page_list)) {
@@ -30,6 +30,11 @@ page_allocator::page_allocator(void *h, memory_map_entry *mmap, size_t mmap_size
 		begin_addr = align_up(begin_addr, PAGE_SIZE);
 
 		while(begin_addr + PAGE_SIZE <= end_addr) {
+			// if the address cannot be represented as a pointer, nevermind
+			if(begin_addr >= (uint64_t(1) << 32)) {
+				break;
+			}
+
 			// another page fits in this memory block, so allocate an entry
 			// TODO: this assumes the first memory block in mmap is large enough to hold the page list;
 			// we should probably at least check for this, and ideally, use an initial allocator for

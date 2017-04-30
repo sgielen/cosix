@@ -67,7 +67,7 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	iterate_through_mem_map(mmap, memory_map_bytes, [&](memory_map_entry *e) {
 		memory_map_entry &entry = *e;
 
-		uint64_t begin_addr = reinterpret_cast<uint64_t>(entry.mem_base.addr);
+		uint64_t begin_addr = entry.mem_base;
 		uint64_t end_addr = begin_addr + entry.mem_length;
 
 		stream  << "* Addr 0x" << hex << begin_addr
