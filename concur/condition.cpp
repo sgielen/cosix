@@ -36,6 +36,7 @@ void thread_condition::cancel()
 
 void thread_condition::reset()
 {
+	assert(signaler != nullptr);
 	signaler->remove_condition(this);
 	signaler = nullptr;
 	thread.reset();
@@ -175,28 +176,14 @@ void thread_condition_waiter::wait() {
 }
 
 thread_condition_list *thread_condition_waiter::finish() {
-	// find the first thread condition that is satisfied, then
-	// set its 'next' ptr to the next one continuously
-
-	thread_condition_list *head = nullptr;
-	thread_condition_list *tail = nullptr;
-
-	iterate(conditions, [&](thread_condition_list *item) {
-		if(!item->data->satisfied) {
-			return;
-		}
-		if(!head) {
-			head = tail = item;
-		} else {
-			tail->next = item;
-			tail = item;
-		}
+	// remove all unsatisfied conditions
+	remove_all(&conditions, [&](thread_condition_list *item) {
+		return !item->data->satisfied;
 	});
 
-	if(tail == nullptr) {
-		kernel_panic("Condition waiter is finishing, but has no satisfied thread conditions");
-	}
-	tail->next = nullptr;
+	assert(conditions != nullptr); /* no satisfied conditions? */
+
+	thread_condition_list *i = conditions;
 	conditions = nullptr;
-	return head;
+	return i;
 }
