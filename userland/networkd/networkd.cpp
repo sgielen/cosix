@@ -13,6 +13,10 @@
 #include <vector>
 #include <fcntl.h>
 #include <map>
+#include "interface.hpp"
+#include "networkd.hpp"
+#include "arp.hpp"
+#include "util.hpp"
 
 int stdout;
 int bootfs;
@@ -74,7 +78,7 @@ std::vector<std::string> split_words(std::string str) {
 	return res;
 }
 
-std::vector<std::string> get_interfaces() {
+std::vector<std::string> get_ifstore_interfaces() {
 	return split_words(send_ifstore_command("LIST"));
 }
 
@@ -86,24 +90,53 @@ std::string get_mac(std::string iface) {
 	return send_ifstore_command("MAC " + iface);
 }
 
-std::map<std::string, std::vector<std::string>> ips_per_iface;
+using networkd::interface;
+
+std::map<std::string, std::shared_ptr<interface>> interfaces;
+
+std::vector<std::shared_ptr<interface>> get_interfaces() {
+	std::vector<std::shared_ptr<interface>> res;
+	for(auto &ifpair : interfaces) {
+		res.push_back(ifpair.second);
+	}
+	return res;
+}
+
+std::shared_ptr<interface> get_interface(std::string name) {
+	auto it = interfaces.find(name);
+	if(it != interfaces.end()) {
+		return it->second;
+	} else {
+		throw std::runtime_error("No such interface: " + name);
+	}
+}
 
 std::vector<std::string> get_addr_v4(std::string iface) {
-	auto it = ips_per_iface.find(iface);
-	if(it == ips_per_iface.end()) {
-		return {};
+	auto it = interfaces.find(iface);
+	if(it != interfaces.end()) {
+		std::vector<std::string> res;
+		for(auto &addr : it->second->get_ipv4addrs()) {
+			res.push_back(ipv4_ntop(std::string(addr.ip, 4)));
+		}
+		return res;
 	} else {
-		return it->second;
+		return {};
 	}
 }
 
 void add_addr_v4(std::string iface, std::string ip) {
-	auto it = ips_per_iface.find(iface);
-	if(it == ips_per_iface.end()) {
-		ips_per_iface[iface] = {ip};
-	} else {
-		it->second.push_back(ip);
-	}
+	auto interface = get_interface(iface);
+	std::string ip_packed = ipv4_pton(ip);
+	int cidr_prefix = 24; /* TODO, get this from the client */
+	interface->add_ipv4addr(ip_packed.c_str(), cidr_prefix);
+	/* TODO: add a route for this subnet */
+}
+
+using networkd::arp;
+
+arp a;
+arp &get_arp() {
+	return a;
 }
 
 void start_dhclient(std::string iface) {
@@ -140,12 +173,31 @@ void start_dhclient(std::string iface) {
 
 void dump_interfaces() {
 	for(auto &iface : get_interfaces()) {
-		std::string hwtype = get_hwtype(iface);
-		std::string mac = get_mac(iface);
+		std::string name = iface->get_name();
+		std::string hwtype = iface->get_hwtype();
+		std::string mac = mac_ntop(iface->get_mac());
 
-		dprintf(stdout, "* %s (type %s, MAC %s)\n", iface.c_str(), hwtype.c_str(), mac.c_str());
-		for(auto &ip : get_addr_v4(iface)) {
-			dprintf(stdout, "  IPv4: %s\n", ip.c_str());
+		dprintf(stdout, "* %s (type %s, MAC %s)\n", name.c_str(), hwtype.c_str(), mac.c_str());
+		for(auto &ip : iface->get_ipv4addrs()) {
+			std::string ip_show = ipv4_ntop(std::string(ip.ip, 4));
+			dprintf(stdout, "  IPv4: %s\n", ip_show.c_str());
+		}
+
+		// TODO: remove this
+		if(name == "eth0") {
+			dprintf(stdout, "  Performing ARP lookup for 10.0.2.2...");
+			std::string ip(4, 0);
+			ip[0] = 10;
+			ip[1] = 0;
+			ip[2] = 2;
+			ip[3] = 2;
+			auto rmac = get_arp().mac_for_ip(iface, ip, 1 * 1000 * 1000 * 1000 /* wait 1 second */);
+			if(!rmac) {
+				dprintf(stdout, " Failed to find MAC\n");
+			} else {
+				std::string rmacd = mac_ntop(*rmac);
+				dprintf(stdout, " Got MAC: %s\n", rmacd.c_str());
+			}
 		}
 	}
 }
@@ -191,8 +243,14 @@ void program_main(const argdata_t *ad) {
 	}
 
 	dump_interfaces();
-	for(auto &iface : get_interfaces()) {
+	for(auto &iface : get_ifstore_interfaces()) {
+		std::string mac = get_mac(iface);
 		std::string hwtype = get_hwtype(iface);
+		int rawsock = get_raw_socket(iface);
+
+		auto interface = std::make_shared<networkd::interface>(iface, mac_pton(mac), hwtype, rawsock);
+		interfaces[iface] = interface;
+		interface->start();
 
 		if(hwtype == "ETHERNET") {
 			start_dhclient(iface);

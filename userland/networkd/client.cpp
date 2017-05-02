@@ -3,6 +3,7 @@
 #include <argdata.h>
 #include <unistd.h>
 #include <sys/socket.h>
+#include "interface.hpp"
 
 using namespace networkd;
 
@@ -135,7 +136,13 @@ void client::run() {
 				return;
 			}
 		} else if(command == "mac") {
-			std::string mac = get_mac(iface);
+			std::string mac;
+			try {
+				auto interface = get_interface(iface);
+				mac = interface->get_mac();
+			} catch(std::runtime_error&) {
+				mac = "ERROR";
+			}
 
 			argdata_t *keys[] = {argdata_create_str_c("mac")};
 			argdata_t *values[] = {argdata_create_str_c(mac.c_str())};
@@ -148,7 +155,13 @@ void client::run() {
 				return;
 			}
 		} else if(command == "hwtype") {
-			std::string hwtype = get_hwtype(iface);
+			std::string hwtype;
+			try {
+				auto interface = get_interface(iface);
+				hwtype = interface->get_hwtype();
+			} catch(std::runtime_error&) {
+				hwtype = "ERROR";
+			}
 
 			argdata_t *keys[] = {argdata_create_str_c("hwtype")};
 			argdata_t *values[] = {argdata_create_str_c(hwtype.c_str())};
