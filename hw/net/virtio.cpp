@@ -241,7 +241,7 @@ cloudabi_errno_t virtio_net_device::eth_init()
 		return ENOTSUP;
 	}
 
-	uint64_t drv_features = sup_features & (VIRTIO_NET_F_MAC
+	drv_features = sup_features & (VIRTIO_NET_F_MAC
 			| VIRTIO_NET_F_STATUS
 			| VIRTIO_NET_F_CSUM
 			| VIRTIO_NET_F_MRG_RXBUF
@@ -357,15 +357,26 @@ cloudabi_errno_t virtio_net_device::get_mac_address(char m[6]) {
 }
 
 cloudabi_errno_t virtio_net_device::send_ethernet_frame(uint8_t *frame, size_t length) {
-	uint8_t net_hdr[] = {
-		0x01, /* needs checksum */
-		0x00, /* no segmentation */
-		0x00, 0x00, /* header length */
-		0x00, 0x00, /* segment size */
-		0x00, 0x00, /* checksum start */
-		0x00, 0x00, /* checksum offset */
-		0x00, 0x00, /* buffer count */
+	struct virtio_net_hdr {
+		uint8_t flags;
+		uint8_t gso_type;
+		uint16_t hdr_len;
+		uint16_t gso_size;
+		uint16_t csum_start;
+		uint16_t csum_off;
+		uint16_t buff_count;
 	};
+	virtio_net_hdr net_hdr;
+	memset(&net_hdr, 0, sizeof(net_hdr));
+	/*
+	if(drv_features & VIRTIO_NET_F_CSUM) {
+		// checksum offloading is supported, try it, otherwise
+		// leave the packet unchecksummed
+		net_hdr.flags = 1; // needs checksum
+		net_hdr.csum_start = 0;
+		net_hdr.csum_off = length;
+	}
+	*/
 
 	size_t first_desc = last_writeq_idx++;
 	size_t second_desc = last_writeq_idx++;
@@ -387,7 +398,7 @@ cloudabi_errno_t virtio_net_device::send_ethernet_frame(uint8_t *frame, size_t l
 	address_mapping_list *mappingl0 = get_allocator()->allocate<address_mapping_list>();
 	address_mapping *mapping1 = get_allocator()->allocate<address_mapping>();
 	address_mapping_list *mappingl1 = get_allocator()->allocate<address_mapping_list>();
-	mapping0->logical = net_hdr;
+	mapping0->logical = &net_hdr;
 	mapping0->physical = get_map_virtual()->to_physical_address(mapping0->logical);
 	mappingl0->data = mapping0;
 	mappingl0->next = mappingl1;

@@ -37,6 +37,7 @@ private:
 	int bus_device;
 	int last_readq_used_idx;
 	int last_writeq_idx;
+	uint64_t drv_features = 0;
 	virtq *readq;
 	virtq *writeq;
 	address_mapping_list *mappings;

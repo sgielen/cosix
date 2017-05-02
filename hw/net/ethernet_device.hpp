@@ -16,6 +16,7 @@ struct ethernet_device : public device
 
 	virtual cloudabi_errno_t eth_init() = 0;
 	virtual cloudabi_errno_t get_mac_address(char mac[6]) = 0;
+	// Give an ethernet frame, but excluding its checksum
 	virtual cloudabi_errno_t send_ethernet_frame(uint8_t *frame, size_t length) = 0;
 
 protected:
