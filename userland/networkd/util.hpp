@@ -2,6 +2,7 @@
 #include <cloudabi_syscalls.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <string>
 
 inline cloudabi_timestamp_t monotime() {
 	cloudabi_timestamp_t ts = 0;

@@ -36,7 +36,7 @@ std::list<routing_entry> routing_table::copy_table()
 	return res;
 }
 
-mstd::optional<std::pair<std::string, std::weak_ptr<interface>>>
+mstd::optional<std::pair<std::string, std::shared_ptr<interface>>>
 routing_table::routing_rule_for_ip(std::string ip)
 {
 	if(ip.length() != 4) {
@@ -47,7 +47,7 @@ routing_table::routing_rule_for_ip(std::string ip)
 
 	int best_cidr_prefix = -2;
 	std::string gateway_ip;
-	std::weak_ptr<interface> interface;
+	std::shared_ptr<interface> iface;
 
 	for(auto it = table.begin(); it != table.end();) {
 		if(!entry_valid(*it)) {
@@ -63,9 +63,12 @@ routing_table::routing_rule_for_ip(std::string ip)
 			if(best_cidr_prefix != -2) {
 				continue;
 			}
-			best_cidr_prefix = -1;
-			gateway_ip = entry.gateway_ip;
-			interface = entry.iface;
+			std::shared_ptr<interface> locked_iface = entry.iface.lock();
+			if(locked_iface) {
+				best_cidr_prefix = -1;
+				gateway_ip = entry.gateway_ip;
+				iface = locked_iface;
+			}
 			continue;
 		}
 
@@ -77,9 +80,15 @@ routing_table::routing_rule_for_ip(std::string ip)
 			uint32_t matching_ip = *reinterpret_cast<uint32_t const*>(ip.c_str());
 			if(cidr_ip_matches(entry.cidr_prefix, rule_ip, matching_ip)) {
 				// IP matches, replace rule
-				best_cidr_prefix = entry.cidr_prefix;
-				gateway_ip = entry.gateway_ip;
-				interface = entry.iface;
+				std::shared_ptr<interface> locked_iface = entry.iface.lock();
+				// it's possible that entry.iface expired since
+				// the check to entry_valid, so only use this
+				// entry if the interface is still valid
+				if(locked_iface) {
+					iface = locked_iface;
+					best_cidr_prefix = entry.cidr_prefix;
+					gateway_ip = entry.gateway_ip;
+				}
 			}
 		}
 	}
@@ -88,7 +97,7 @@ routing_table::routing_rule_for_ip(std::string ip)
 		// no matches
 		return {};
 	} else {
-		return std::make_pair(gateway_ip, interface);
+		return std::make_pair(gateway_ip, iface);
 	}
 }
 

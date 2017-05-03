@@ -18,6 +18,8 @@
 #include "arp.hpp"
 #include "util.hpp"
 #include "routing_table.hpp"
+#include "ip.hpp"
+#include "udp_socket.hpp"
 
 int stdout;
 int bootfs;
@@ -152,6 +154,13 @@ routing_table &get_routing_table() {
 	return r;
 }
 
+using networkd::ip;
+
+ip i;
+ip &get_ip() {
+	return i;
+}
+
 void start_dhclient(std::string iface) {
 	int bfd = openat(bootfs, "dhclient", O_RDONLY);
 	if(bfd < 0) {
@@ -278,6 +287,14 @@ void program_main(const argdata_t *ad) {
 	if(listen(listenfd, SOMAXCONN) < 0) {
 		perror("listen");
 		exit(1);
+	}
+
+	// Add a DHCP dumping socket to the IP stack (TODO: remove this test)
+	std::string zero(4, 0);
+	auto dhcp_dumper = std::make_shared<udp_socket>(std::string(4, 0), 67, std::string(), 68, 0);
+	auto res = get_ip().register_socket(dhcp_dumper);
+	if(res != 0) {
+		dprintf(stdout, "Failed to register DHCP dumper: %s\n", strerror(res));
 	}
 
 	dump_interfaces();

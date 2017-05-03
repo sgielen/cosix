@@ -7,6 +7,14 @@ namespace networkd {
 struct interface;
 struct arp;
 struct routing_table;
+struct ip;
+
+enum transport_proto {
+	icmp = 0x01,
+	tcp = 0x06,
+	udp = 0x11,
+};
+
 }
 
 std::string send_ifstore_command(std::string command);
@@ -22,3 +30,4 @@ void dump_routing_table();
 std::shared_ptr<networkd::interface> get_interface(std::string);
 networkd::arp &get_arp();
 networkd::routing_table &get_routing_table();
+networkd::ip &get_ip();

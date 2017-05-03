@@ -32,7 +32,7 @@ struct routing_table {
 
 	// Find the most specific matching routing entry for the given IP
 	// address (packed format), if any.
-	mstd::optional<std::pair<std::string, std::weak_ptr<interface>>> routing_rule_for_ip(std::string ip);
+	mstd::optional<std::pair<std::string, std::shared_ptr<interface>>> routing_rule_for_ip(std::string ip);
 
 	// Add a routing entry to the table.
 	void add_entry(std::shared_ptr<interface> iface, std::string ip, int cidr_prefix, std::string gateway_ip);

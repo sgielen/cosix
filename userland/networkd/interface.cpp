@@ -1,6 +1,7 @@
 #include "interface.hpp"
 #include "networkd.hpp"
 #include "arp.hpp"
+#include "ip.hpp"
 #include <unistd.h>
 #include <cassert>
 #include <cloudabi_types.h>
@@ -8,6 +9,8 @@
 #include <arpa/inet.h>
 
 using namespace networkd;
+
+#define IP_ARP_TIMEOUT 5 * 1000 * 1000 * 1000 /* 5 seconds */
 
 interface::interface(std::string n, std::string m, std::string h, int r)
 : name(n)
@@ -44,6 +47,35 @@ void interface::add_ipv4addr(const char *ip, uint8_t cidr_prefix)
 	ipv4addrs.emplace_back(std::move(a));
 }
 
+cloudabi_errno_t interface::send_ip_packet(std::vector<iovec> const &in_vecs, std::string ip_hop)
+{
+	auto opt_mac = get_arp().mac_for_ip(shared_from_this(), ip_hop, IP_ARP_TIMEOUT);
+	if(!opt_mac) {
+		// don't know how to address this IP
+		return ETIMEDOUT;
+	}
+
+	char eth_frm[14];
+	const size_t hwlen = 6;
+	assert(opt_mac->length() == hwlen);
+	assert(get_mac().length() == hwlen);
+
+	memcpy(eth_frm,         opt_mac->c_str(),   hwlen);
+	memcpy(eth_frm + hwlen, get_mac().c_str(),  hwlen);
+	eth_frm[12] = 0x08;
+	eth_frm[13] = 0x00; /* IPv4 */
+
+	std::vector<iovec> vecs(in_vecs.size()+1);
+	vecs[0].iov_base = eth_frm;
+	vecs[0].iov_len = sizeof(eth_frm);
+	for(size_t i = 0; i < in_vecs.size(); ++i) {
+		vecs[i+1] = in_vecs[i];
+	}
+
+	send_frame(vecs);
+	return 0;
+}
+
 void interface::send_frame(std::vector<iovec> const &iov) {
 	cloudabi_send_in_t in;
 	in.si_data = const_cast<cloudabi_ciovec_t*>(
@@ -62,6 +94,8 @@ void interface::send_frame(std::vector<iovec> const &iov) {
 }
 
 void interface::run() {
+	std::shared_ptr<interface> that = shared_from_this();
+	assert(that != nullptr);
 	while(rawsock >= 0) {
 		// TODO: get MTU for interface instead of hardcoding
 		const int mtu = 1500;
@@ -95,6 +129,7 @@ void interface::run() {
 		// hwtype-specific interface implementations for receive_frame()
 		if(hwtype == "LOOPBACK") {
 			// immediately forward to IP stack
+			get_ip().handle_packet(that, frame, datalen, 0);
 			continue;
 		} else if(hwtype == "ETHERNET") {
 			struct ethernet_frame {
@@ -109,10 +144,11 @@ void interface::run() {
 			auto *eth_frame = reinterpret_cast<ethernet_frame*>(frame);
 			uint16_t eth_type = ntohs(eth_frame->type);
 			if(eth_type == 0x0806 /* ARP */) {
-				get_arp().handle_arp_frame(shared_from_this(), frame, datalen, sizeof(ethernet_frame));
+				get_arp().handle_arp_frame(that, frame, datalen, sizeof(ethernet_frame));
+			} else if(eth_type == 0x0800 /* IPv4 */) {
+				get_ip().handle_packet(that, frame, datalen, sizeof(ethernet_frame));
 			}
-			// didn't understand eth_type
-			// TODO: IP
+			// didn't understand eth_type, drop
 			continue;
 		} else {
 			assert(!"Unknown hardware type");
