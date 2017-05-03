@@ -95,15 +95,17 @@ mstd::optional<std::string> arp::mac_for_ip(std::shared_ptr<interface> iface, st
 	cloudabi_timestamp_t stoptime = monotime() + timeout;
 	cloudabi_timestamp_t now;
 	while((now = monotime()) && now < stoptime) {
-		for(auto it = arp_table.begin(); it != arp_table.end(); ++it) {
+		for(auto it = arp_table.begin(); it != arp_table.end();) {
 			if(!entry_valid(*it, now)) {
 				// remove invalid entry
 				it = arp_table.erase(it);
+				continue;
 			}
 			auto iface_shared = it->iface.lock();
 			if(iface_shared && iface_shared == iface && memcmp(it->ip, ip.c_str(), 4) == 0) {
 				return std::string(it->mac, 6);
 			}
+			++it;
 		}
 
 		send_arp_request(iface, ip);
@@ -138,6 +140,7 @@ void arp::add_entry(std::shared_ptr<interface> iface, std::string ip, std::strin
 			// update MAC and validity
 			memcpy(it->mac, mac.c_str(), sizeof(it->mac));
 			it->valid_until = monotime() + validity;
+			table_cv.notify_all();
 			return;
 		}
 

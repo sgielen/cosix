@@ -30,7 +30,7 @@ interface::~interface()
 
 void interface::start()
 {
-	assert(rawsock>= 0);
+	assert(rawsock >= 0);
 	thr = std::thread([this](){
 		run();
 	});

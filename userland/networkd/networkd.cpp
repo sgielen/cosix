@@ -17,6 +17,7 @@
 #include "networkd.hpp"
 #include "arp.hpp"
 #include "util.hpp"
+#include "routing_table.hpp"
 
 int stdout;
 int bootfs;
@@ -52,11 +53,12 @@ int get_raw_socket(std::string iface) {
 		.msg_iov = &iov, .msg_iovlen = 1,
 		.msg_control = control, .msg_controllen = sizeof(control),
 	};
-	if(recvmsg(ifstore, &msg, 0) < 0) {
+	ssize_t size = recvmsg(ifstore, &msg, 0);
+	if(size < 0) {
 		perror("Failed to retrieve rawsock from ifstore");
 		exit(1);
 	}
-	if(strncmp(buf, "OK", sizeof(buf)) != 0) {
+	if(strncmp(buf, "OK", size) != 0) {
 		return -1;
 	}
 	struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
@@ -124,12 +126,16 @@ std::vector<std::string> get_addr_v4(std::string iface) {
 	}
 }
 
-void add_addr_v4(std::string iface, std::string ip) {
+void add_addr_v4(std::string iface, std::string ip, int cidr_prefix, std::string gateway_ip) {
 	auto interface = get_interface(iface);
 	std::string ip_packed = ipv4_pton(ip);
-	int cidr_prefix = 24; /* TODO, get this from the client */
 	interface->add_ipv4addr(ip_packed.c_str(), cidr_prefix);
-	/* TODO: add a route for this subnet */
+	get_routing_table().add_link_route(interface, ip_packed, cidr_prefix);
+
+	if(!gateway_ip.empty()) {
+		std::string gateway = ipv4_pton(gateway_ip);
+		get_routing_table().add_default_gateway(interface, gateway);
+	}
 }
 
 using networkd::arp;
@@ -137,6 +143,13 @@ using networkd::arp;
 arp a;
 arp &get_arp() {
 	return a;
+}
+
+using networkd::routing_table;
+
+routing_table r;
+routing_table &get_routing_table() {
+	return r;
 }
 
 void start_dhclient(std::string iface) {
@@ -202,6 +215,31 @@ void dump_interfaces() {
 	}
 }
 
+void dump_routing_table() {
+	auto table = get_routing_table().copy_table();
+	dprintf(stdout, "IP Subnet          Gateway         Device\n");
+	for(auto &entry : table) {
+		auto iface = entry.iface.lock();
+		if(!iface) {
+			continue;
+		}
+		std::string dev = iface->get_name();
+		std::string ipd;
+		if(entry.ip.empty()) {
+			ipd = "default";
+		} else {
+			ipd = ipv4_ntop(entry.ip) + "/" + std::to_string(entry.cidr_prefix);
+		}
+		int spaces = 19 - ipd.size();
+		std::string space(spaces, ' ');
+		dprintf(stdout, "%s%s", ipd.c_str(), space.c_str());
+		ipd = ipv4_ntop(entry.gateway_ip);
+		spaces = 16 - ipd.size();
+		space.resize(spaces, ' ');
+		dprintf(stdout, "%s%s%s\n", ipd.c_str(), space.c_str(), dev.c_str());
+	}
+}
+
 void program_main(const argdata_t *ad) {
 	argdata_map_iterator_t it;
 	const argdata_t *key;
@@ -248,6 +286,11 @@ void program_main(const argdata_t *ad) {
 		std::string hwtype = get_hwtype(iface);
 		int rawsock = get_raw_socket(iface);
 
+		if(rawsock < 0) {
+			dprintf(stdout, "Failed to get a raw socket to interface %s, skipping\n", iface.c_str());
+			continue;
+		}
+
 		auto interface = std::make_shared<networkd::interface>(iface, mac_pton(mac), hwtype, rawsock);
 		interfaces[iface] = interface;
 		interface->start();
@@ -255,7 +298,7 @@ void program_main(const argdata_t *ad) {
 		if(hwtype == "ETHERNET") {
 			start_dhclient(iface);
 		} else if(hwtype == "LOOPBACK") {
-			add_addr_v4(iface, "127.0.0.1");
+			add_addr_v4(iface, "127.0.0.1", 8);
 		}
 	}
 

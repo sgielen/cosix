@@ -12,6 +12,7 @@ add_executable(networkd
 	client.hpp client.cpp
 	interface.hpp interface.cpp
 	arp.hpp arp.cpp
+	routing_table.hpp routing_table.cpp
 )
 
 install(TARGETS networkd RUNTIME DESTINATION bin)

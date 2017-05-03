@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include "interface.hpp"
+#include "util.hpp"
 
 using namespace networkd;
 
@@ -125,6 +126,7 @@ void client::run() {
 
 		if(command == "dump") {
 			dump_interfaces();
+			dump_routing_table();
 			argdata_t *keys[] = {argdata_create_str_c("dumped")};
 			argdata_t *values[] = {argdata_create_str_c("ok")};
 			argdata_t *response = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
@@ -139,7 +141,7 @@ void client::run() {
 			std::string mac;
 			try {
 				auto interface = get_interface(iface);
-				mac = interface->get_mac();
+				mac = mac_ntop(interface->get_mac());
 			} catch(std::runtime_error&) {
 				mac = "ERROR";
 			}
@@ -177,6 +179,7 @@ void client::run() {
 			auto ipv4 = get_addr_v4(iface);
 			argdata_t *addresses[ipv4.size()];
 			for(size_t i = 0; i < ipv4.size(); ++i) {
+				ipv4[i] = ipv4_ntop(ipv4[i]);
 				addresses[i] = argdata_create_str_c(ipv4[i].c_str());
 			}
 
@@ -194,7 +197,7 @@ void client::run() {
 				return;
 			}
 		} else if(command == "add_addrv4") {
-			add_addr_v4(iface, arg);
+			add_addr_v4(iface, arg, 24 /* TODO get this from the client */, "10.0.2.2" /* TODO get this from the client */);
 			argdata_t *keys[] = {argdata_create_str_c("added")};
 			argdata_t *values[] = {argdata_create_str_c("ok")};
 			argdata_t *response = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));

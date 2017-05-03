@@ -1,3 +1,4 @@
+#pragma once
 #include "interface.hpp"
 #include <memory>
 #include <thread>
