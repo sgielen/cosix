@@ -10,13 +10,13 @@ using reverse_proto::pseudofd_t;
 using reverse_proto::reverse_request_t;
 using reverse_proto::reverse_response_t;
 
-struct filesystem;
+struct reverse_handler;
 
-void handle_request(reverse_request_t *request, reverse_response_t *response, filesystem *fs);
-void handle_requests(int reversefd, filesystem *fs);
+void handle_request(reverse_request_t *request, reverse_response_t *response, reverse_handler *h);
+void handle_requests(int reversefd, reverse_handler *h);
 
-struct filesystem_error : public std::runtime_error {
-	filesystem_error(cloudabi_errno_t e);
+struct cloudabi_system_error : public std::runtime_error {
+	cloudabi_system_error(cloudabi_errno_t e);
 
 	cloudabi_errno_t error;
 };
@@ -35,11 +35,11 @@ struct file_entry {
 	cloudabi_filetype_t type = 0;
 };
 
-/** An abstract filesystem implementation.
+/** An implementation of something that can handle reverse requests.
  */
-struct filesystem {
-	filesystem(cloudabi_device_t device_id);
-	virtual ~filesystem();
+struct reverse_handler {
+	reverse_handler();
+	virtual ~reverse_handler();
 
 	virtual file_entry lookup(pseudofd_t pseudo, const char *path, size_t len, cloudabi_lookupflags_t lookupflags) = 0;
 
@@ -52,11 +52,6 @@ struct filesystem {
 	virtual size_t readdir(pseudofd_t pseudo, char *buffer, size_t buflen, cloudabi_dircookie_t &cookie);
 	virtual void stat_get(pseudofd_t pseudo, cloudabi_lookupflags_t flags, char *path, size_t len, cloudabi_filestat_t *statbuf);
 
-	inline cloudabi_device_t get_device() {
-		return device;
-	}
-
-private:
 	cloudabi_device_t device;
 };
 

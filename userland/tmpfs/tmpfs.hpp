@@ -3,7 +3,7 @@
 #include <map>
 #include <string>
 #include <stdexcept>
-#include <cosix/filesystem.hpp>
+#include <cosix/reverse.hpp>
 #include <memory>
 #include <vector>
 
@@ -24,7 +24,7 @@ typedef std::shared_ptr<pseudo_fd_entry> pseudo_fd_ptr;
 
 /** A temporary filesystem implementation.
  */
-struct tmpfs : public cosix::filesystem {
+struct tmpfs : public cosix::reverse_handler {
 	tmpfs(cloudabi_device_t);
 
 	typedef cosix::file_entry file_entry;

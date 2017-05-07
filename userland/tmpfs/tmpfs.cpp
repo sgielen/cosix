@@ -6,13 +6,14 @@
 using namespace cosix;
 
 tmpfs::tmpfs(cloudabi_device_t d)
-: filesystem(d)
 {
+	device = d;
+
 	// make directory entry /
 	file_entry_ptr root(new tmpfs_file_entry);
 	cloudabi_inode_t root_inode = reinterpret_cast<cloudabi_inode_t>(root.get());
 
-	root->device = get_device();
+	root->device = device;
 	root->inode = root_inode;
 	root->type = CLOUDABI_FILETYPE_DIRECTORY;
 	inodes[root_inode] = root;
@@ -32,7 +33,7 @@ file_entry tmpfs::lookup(pseudofd_t pseudo, const char *path, size_t len, clouda
 	std::string filename = normalize_path(directory, path, len, lookupflags);
 	auto it = directory->files.find(filename);
 	if(it == directory->files.end()) {
-		throw filesystem_error(ENOENT);
+		throw cloudabi_system_error(ENOENT);
 	} else {
 		return *it->second;
 	}
@@ -55,7 +56,7 @@ void tmpfs::unlink(pseudofd_t pseudo, const char *path, size_t len, cloudabi_ulf
 	std::string filename = normalize_path(directory, path, len, 0 /* TODO: lookupflags */);
 	auto it = directory->files.find(filename);
 	if(it == directory->files.end()) {
-		throw filesystem_error(ENOENT);
+		throw cloudabi_system_error(ENOENT);
 	}
 
 	bool removedir = unlinkflags & CLOUDABI_UNLINK_REMOVEDIR;
@@ -63,16 +64,16 @@ void tmpfs::unlink(pseudofd_t pseudo, const char *path, size_t len, cloudabi_ulf
 	auto entry = it->second;
 	if(entry->type == CLOUDABI_FILETYPE_DIRECTORY) {
 		if(!removedir) {
-			throw filesystem_error(EISDIR);
+			throw cloudabi_system_error(EISDIR);
 		}
 		for(auto &file : entry->files) {
 			if(file.first != "." && file.first != "..") {
-				throw filesystem_error(ENOTEMPTY);
+				throw cloudabi_system_error(ENOTEMPTY);
 			}
 		}
 	} else {
 		if(removedir) {
-			throw filesystem_error(ENOTDIR);
+			throw cloudabi_system_error(ENOTDIR);
 		}
 	}
 
@@ -89,12 +90,12 @@ cloudabi_inode_t tmpfs::create(pseudofd_t pseudo, const char *path, size_t len, 
 	auto it = directory->files.find(filename);
 	if(it != directory->files.end()) {
 		// TODO: only for directories, or if O_CREAT and O_EXCL are given?
-		throw filesystem_error(EEXIST);
+		throw cloudabi_system_error(EEXIST);
 	}
 
 	file_entry_ptr entry(new tmpfs_file_entry);
 	cloudabi_inode_t inode = reinterpret_cast<cloudabi_inode_t>(entry.get());
-	entry->device = get_device();
+	entry->device = device;
 	entry->inode = inode;
 	entry->type = type;
 
@@ -114,7 +115,7 @@ void tmpfs::close(pseudofd_t pseudo)
 	if(it != pseudo_fds.end()) {
 		pseudo_fds.erase(it);
 	} else {
-		throw filesystem_error(EBADF);
+		throw cloudabi_system_error(EBADF);
 	}
 }
 
@@ -122,7 +123,7 @@ size_t tmpfs::pread(pseudofd_t pseudo, off_t offset, char *dest, size_t requeste
 {
 	auto entry = get_file_entry_from_pseudo(pseudo);
 	if(offset > entry->contents.size()) {
-		throw filesystem_error(EINVAL /* The specified file offset is invalid */);
+		throw cloudabi_system_error(EINVAL /* The specified file offset is invalid */);
 	}
 
 	size_t remaining = entry->contents.size() - offset;
@@ -137,7 +138,7 @@ void tmpfs::pwrite(pseudofd_t pseudo, off_t offset, const char *buf, size_t leng
 	auto entry = get_file_entry_from_pseudo(pseudo);
 	if(offset > entry->contents.size()) {
 		// TODO: should we increase to this size?
-		throw filesystem_error(EINVAL /* The specified file offset is invalid */);
+		throw cloudabi_system_error(EINVAL /* The specified file offset is invalid */);
 	}
 
 	if(entry->contents.size() < offset + length) {
@@ -155,7 +156,7 @@ size_t tmpfs::readdir(pseudofd_t pseudo, char *buffer, size_t buflen, cloudabi_d
 {
 	auto directory = get_file_entry_from_pseudo(pseudo);
 	if(directory->type != CLOUDABI_FILETYPE_DIRECTORY) {
-		throw filesystem_error(ENOTDIR);
+		throw cloudabi_system_error(ENOTDIR);
 	}
 
 	// cookie is the index into the files map
@@ -194,7 +195,7 @@ void tmpfs::stat_get(pseudofd_t pseudo, cloudabi_lookupflags_t flags, char *path
 	std::string filename = normalize_path(directory, path, len, flags);
 	auto it = directory->files.find(filename);
 	if(it == directory->files.end()) {
-		throw filesystem_error(ENOENT);
+		throw cloudabi_system_error(ENOENT);
 	}
 
 	auto entry = it->second;
@@ -222,16 +223,16 @@ void tmpfs::stat_get(pseudofd_t pseudo, cloudabi_lookupflags_t flags, char *path
 std::string tmpfs::normalize_path(file_entry_ptr &directory, const char *p, size_t len, cloudabi_lookupflags_t lookupflags)
 {
 	if(directory->type != CLOUDABI_FILETYPE_DIRECTORY) {
-		throw filesystem_error(ENOTDIR);
+		throw cloudabi_system_error(ENOTDIR);
 	}
 
 	if(len == 0) {
-		throw filesystem_error(ENOENT);
+		throw cloudabi_system_error(ENOENT);
 	}
 
 	if(p[0] == '/') {
 		// no absolute paths allowed
-		throw filesystem_error(ENOTCAPABLE);
+		throw cloudabi_system_error(ENOTCAPABLE);
 	}
 
 	std::string path(p, len);
@@ -250,7 +251,7 @@ std::string tmpfs::normalize_path(file_entry_ptr &directory, const char *p, size
 			// filename component.
 			if(path == ".." && depth == 0) {
 				// allow "foo/..", but not "foo/../.."
-				throw filesystem_error(ENOTCAPABLE);
+				throw cloudabi_system_error(ENOTCAPABLE);
 			}
 			if(lookupflags & CLOUDABI_LOOKUP_SYMLINK_FOLLOW) {
 				auto it = directory->files.find(path);
@@ -275,23 +276,23 @@ std::string tmpfs::normalize_path(file_entry_ptr &directory, const char *p, size
 		}
 		auto it = directory->files.find(component);
 		if(it == directory->files.end()) {
-			throw filesystem_error(ENOENT);
+			throw cloudabi_system_error(ENOENT);
 		}
 		auto entry = it->second;
 		if(entry->type == CLOUDABI_FILETYPE_SYMBOLIC_LINK) {
 			// TODO: follow symlinks
 			// if we followed too many symlinks (e.g. 30) return ELOOP
 			// for now, symlinks aren't supported, so just throw ENOTDIR
-			throw filesystem_error(ENOTDIR);
+			throw cloudabi_system_error(ENOTDIR);
 		}
 		if(entry->type != CLOUDABI_FILETYPE_DIRECTORY) {
-			throw filesystem_error(ENOTDIR);
+			throw cloudabi_system_error(ENOTDIR);
 		}
 		directory = entry;
 		if(component == "..") {
 			if(depth == 0) {
 				// don't allow going outside of the file descriptor
-				throw filesystem_error(ENOTCAPABLE);
+				throw cloudabi_system_error(ENOTCAPABLE);
 			}
 			depth--;
 		} else {
@@ -310,7 +311,7 @@ file_entry_ptr tmpfs::get_file_entry_from_inode(cloudabi_inode_t inode)
 	if(it != inodes.end()) {
 		return it->second;
 	} else {
-		throw filesystem_error(ENOENT);
+		throw cloudabi_system_error(ENOENT);
 	}
 }
 
@@ -320,6 +321,6 @@ file_entry_ptr tmpfs::get_file_entry_from_pseudo(pseudofd_t pseudo)
 	if(it != pseudo_fds.end()) {
 		return it->second->file;
 	} else {
-		throw filesystem_error(EBADF);
+		throw cloudabi_system_error(EBADF);
 	}
 }

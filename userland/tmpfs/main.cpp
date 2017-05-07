@@ -9,7 +9,7 @@
 #include <errno.h>
 #include <string.h>
 #include <cassert>
-#include <cosix/filesystem.hpp>
+#include <cosix/reverse.hpp>
 #include "tmpfs.hpp"
 
 int device = -1;
@@ -40,7 +40,7 @@ void program_main(const argdata_t *ad) {
 	FILE *out = fdopen(stdout, "w");
 	fswap(stderr, out);
 
-	cosix::filesystem *fs = new tmpfs(device);
+	cosix::reverse_handler *fs = new tmpfs(device);
 
 	dprintf(stdout, "[tmpfs] spawned -- awaiting requests on reverse FD %d\n", reversefd);
 
