@@ -184,6 +184,34 @@ int start_binary(const char *name) {
 	return r;
 }
 
+int start_networked_binary(const char *name) {
+	int bfd = openat(bootfs, name, O_RDONLY);
+	if(bfd < 0) {
+		dprintf(stdout, "Failed to open %s: %s\n", name, strerror(errno));
+		return 1;
+	}
+
+	dprintf(stdout, "Init going to program_spawn() %s...\n", name);
+
+	int networkfd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if(networkfd < 0) {
+		perror("networkfd");
+		exit(1);
+	}
+	if(connectat(networkfd, pseudofd, "networkd") < 0) {
+		perror("connect");
+		exit(1);
+	}
+
+	argdata_t *keys[] = {argdata_create_string("stdout"), argdata_create_string("tmpdir"), argdata_create_string("networkd")};
+	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(pseudofd), argdata_create_fd(networkfd)};
+	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
+
+	auto r = program_run(name, bfd, ad);
+	close(bfd);
+	return r;
+}
+
 void rm_rf_contents(DIR *d) {
 	struct dirent *ent;
 	std::vector<std::string> files;
@@ -323,6 +351,8 @@ void program_main(const argdata_t *) {
 		struct timespec ts = {.tv_sec = 5, .tv_nsec = 0};
 		clock_nanosleep(CLOCK_MONOTONIC, 0, &ts);
 	}
+
+	start_networked_binary("udptest");
 
 	uint32_t num_success = 0;
 	uint32_t num_failures = 0;

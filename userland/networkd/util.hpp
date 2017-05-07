@@ -3,6 +3,7 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <string>
+#include <sstream>
 
 inline cloudabi_timestamp_t monotime() {
 	cloudabi_timestamp_t ts = 0;
@@ -22,6 +23,22 @@ inline std::string ipv4_pton(std::string ip) {
 	} else {
 		throw std::runtime_error("ipv4_pton failed");
 	}
+}
+
+inline std::pair<std::string, uint16_t> ipv4_port_pton(std::string ip_port) {
+	size_t location = ip_port.find(':');
+	if(location == std::string::npos) {
+		throw std::runtime_error("ipv4_port_pton: no port");
+	}
+	std::string ip = ip_port.substr(0, location);
+	std::string port = ip_port.substr(location + 1);
+	std::stringstream ss;
+	ss << port;
+	uint16_t portnum;
+	if(!(ss >> portnum)) {
+		throw std::runtime_error("ipv4_port_pton: wrong port");
+	}
+	return std::make_pair(ipv4_pton(ip), portnum);
 }
 
 inline std::string mac_ntop(std::string mac) {

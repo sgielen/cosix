@@ -25,34 +25,38 @@ reverse_handler::reverse_handler()
 
 reverse_handler::~reverse_handler() {}
 
+file_entry reverse_handler::lookup(pseudofd_t, const char*, size_t, cloudabi_lookupflags_t) {
+	throw cloudabi_system_error(EINVAL);
+}
+
 pseudofd_t reverse_handler::open(cloudabi_inode_t, int) {
-	throw cloudabi_system_error(ENOSYS);
+	throw cloudabi_system_error(EINVAL);
 }
 
 void reverse_handler::unlink(pseudofd_t, const char*, size_t, cloudabi_ulflags_t) {
-	throw cloudabi_system_error(ENOSYS);
+	throw cloudabi_system_error(EINVAL);
 }
 
 cloudabi_inode_t reverse_handler::create(pseudofd_t, const char*, size_t, cloudabi_filetype_t) {
-	throw cloudabi_system_error(ENOSYS);
+	throw cloudabi_system_error(EINVAL);
 }
 
 void reverse_handler::close(pseudofd_t) {
-	throw cloudabi_system_error(ENOSYS);
+	throw cloudabi_system_error(EINVAL);
 }
 
 size_t reverse_handler::pread(pseudofd_t, off_t, char*, size_t) {
-	throw cloudabi_system_error(ENOSYS);
+	throw cloudabi_system_error(EINVAL);
 }
 
 void reverse_handler::pwrite(pseudofd_t, off_t, const char*, size_t) {
-	throw cloudabi_system_error(ENOSYS);
+	throw cloudabi_system_error(EINVAL);
 }
 
 size_t reverse_handler::readdir(pseudofd_t, char*, size_t, cloudabi_dircookie_t&) {
-	throw cloudabi_system_error(ENOSYS);
+	throw cloudabi_system_error(EINVAL);
 }
 
 void reverse_handler::stat_get(pseudofd_t, cloudabi_lookupflags_t, char*, size_t, cloudabi_filestat_t*) {
-	throw cloudabi_system_error(ENOSYS);
+	throw cloudabi_system_error(EINVAL);
 }

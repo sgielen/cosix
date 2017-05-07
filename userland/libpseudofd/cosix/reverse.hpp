@@ -41,7 +41,7 @@ struct reverse_handler {
 	reverse_handler();
 	virtual ~reverse_handler();
 
-	virtual file_entry lookup(pseudofd_t pseudo, const char *path, size_t len, cloudabi_lookupflags_t lookupflags) = 0;
+	virtual file_entry lookup(pseudofd_t pseudo, const char *path, size_t len, cloudabi_lookupflags_t lookupflags);
 
 	virtual pseudofd_t open(cloudabi_inode_t inode, int flags);
 	virtual void unlink(pseudofd_t pseudo, const char *path, size_t len, cloudabi_ulflags_t unlinkflags);

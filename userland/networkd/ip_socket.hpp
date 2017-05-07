@@ -1,12 +1,16 @@
 #pragma once
 #include "networkd.hpp"
 #include <string>
+#include <memory>
+#include <cosix/reverse.hpp>
 
 namespace networkd {
 
-struct ip_socket {
+struct ip_socket : public cosix::reverse_handler, std::enable_shared_from_this<ip_socket> {
 	ip_socket(transport_proto proto, std::string local_ip, uint16_t local_port, std::string peer_ip, uint16_t peer_port, int fd);
 	virtual ~ip_socket();
+
+	void start();
 
 	inline transport_proto get_transport_proto() { return proto; }
 
@@ -19,14 +23,15 @@ struct ip_socket {
 	inline std::string get_local_ip() { return local_ip; }
 	inline uint16_t get_local_port() { return local_port; }
 
-	// empty if accepting packets from anywhere
+	// empty if not connected: cannot send, but accept packets from anywhere
 	inline std::string get_peer_ip() { return peer_ip; }
 	inline uint16_t get_peer_port() { return peer_port; }
 
 	virtual bool handle_packet(std::shared_ptr<interface> iface, const char *frame, size_t framelen, size_t ip_offset, size_t payload_offset, size_t payload_length) = 0;
-	virtual void start() = 0;
 
 private:
+	void run();
+
 	transport_proto proto;
 
 	std::string local_ip;

@@ -24,6 +24,9 @@ int get_raw_socket(std::string iface);
 std::vector<std::string> get_addr_v4(std::string iface);
 void add_addr_v4(std::string iface, std::string ip, int cidr_prefix, std::string gateway_ip = std::string());
 
+/* reverse, pseudo */
+std::pair<int, int> open_pseudo();
+
 void dump_interfaces();
 void dump_routing_table();
 
