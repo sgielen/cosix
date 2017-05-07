@@ -49,6 +49,11 @@ void interface::add_ipv4addr(const char *ip, uint8_t cidr_prefix)
 
 cloudabi_errno_t interface::send_ip_packet(std::vector<iovec> const &in_vecs, std::string ip_hop)
 {
+	if(get_hwtype() == "LOOPBACK") {
+		send_frame(in_vecs);
+		return 0;
+	}
+
 	auto opt_mac = get_arp().mac_for_ip(shared_from_this(), ip_hop, IP_ARP_TIMEOUT);
 	if(!opt_mac) {
 		// don't know how to address this IP
@@ -76,7 +81,23 @@ cloudabi_errno_t interface::send_ip_packet(std::vector<iovec> const &in_vecs, st
 	return 0;
 }
 
-void interface::send_frame(std::vector<iovec> const &iov) {
+void interface::send_frame(std::vector<iovec> iov) {
+	// Ethernet trailer & check sum
+	// Ethernet packets must be a minimum of 60 bytes, plus a check-sum at the end.
+	// The checksum is computed in the kernel (because it can be offloaded to hardware).
+	char trailer[64];
+	memset(trailer, 0, sizeof(trailer));
+
+	size_t packet_size = 0;
+	for(size_t i = 0; i < iov.size(); ++i) {
+		packet_size += iov[i].iov_len;
+	}
+	size_t traileridx = iov.size();
+	iov.resize(traileridx + 1);
+	iov[traileridx].iov_base = trailer;
+	iov[traileridx].iov_len = (packet_size < 60 ? 60 - packet_size : 0) + 4;
+	assert(iov[traileridx].iov_len <= sizeof(trailer));
+
 	cloudabi_send_in_t in;
 	in.si_data = const_cast<cloudabi_ciovec_t*>(
 		reinterpret_cast<const cloudabi_ciovec_t*>(iov.data()));

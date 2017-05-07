@@ -287,7 +287,7 @@ void send_dhcp_packet(uint8_t *bootp, size_t bootp_size) {
 	frame[13] = 0x00; // TODO: have upper layer communicate what kind of (IP?) packet this is
 	memcpy(frame + 14, packet, ip_length);
 
-	// TODO: ethernet CRC
+	// Leave space for ethernet CRC
 	frame[ip_length + 14] = 0;
 	frame[ip_length + 15] = 0;
 	frame[ip_length + 16] = 0;

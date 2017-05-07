@@ -5,6 +5,7 @@
 #include "memory/page_allocator.hpp"
 #include "oslibc/error.h"
 #include "oslibc/string.h"
+#include "oslibc/checksum.h"
 
 extern uint32_t _kernel_virtual_base;
 
@@ -368,15 +369,17 @@ cloudabi_errno_t virtio_net_device::send_ethernet_frame(uint8_t *frame, size_t l
 	};
 	virtio_net_hdr net_hdr;
 	memset(&net_hdr, 0, sizeof(net_hdr));
-	/*
-	if(drv_features & VIRTIO_NET_F_CSUM) {
-		// checksum offloading is supported, try it, otherwise
-		// leave the packet unchecksummed
+
+	// Length contains 4 bytes left over for an Ethernet CRC
+	if(0 /* untested */ && drv_features & VIRTIO_NET_F_CSUM) {
+		// checksum offloading is supported
 		net_hdr.flags = 1; // needs checksum
 		net_hdr.csum_start = 0;
-		net_hdr.csum_off = length;
+		net_hdr.csum_off = length - 4;
+	} else {
+		uint32_t *checksum = reinterpret_cast<uint32_t*>(frame + (length - 4));
+		*checksum = crc_32(frame, length - 4);
 	}
-	*/
 
 	size_t first_desc = last_writeq_idx++;
 	size_t second_desc = last_writeq_idx++;

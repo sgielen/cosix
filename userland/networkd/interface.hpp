@@ -32,7 +32,7 @@ struct interface : public std::enable_shared_from_this<interface> {
 	void add_ipv4addr(const char *ip, uint8_t cidr_prefix);
 
 	cloudabi_errno_t send_ip_packet(std::vector<iovec> const&, std::string ip_hop);
-	void send_frame(std::vector<iovec> const&);
+	void send_frame(std::vector<iovec>);
 
 private:
 	/* Read frames from the rawsock, hand them to the right protocol implementation */
