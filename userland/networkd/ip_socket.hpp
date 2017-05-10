@@ -7,7 +7,7 @@
 namespace networkd {
 
 struct ip_socket : public cosix::reverse_handler, std::enable_shared_from_this<ip_socket> {
-	ip_socket(transport_proto proto, std::string local_ip, uint16_t local_port, std::string peer_ip, uint16_t peer_port, int fd);
+	ip_socket(transport_proto proto, std::string local_ip, uint16_t local_port, std::string peer_ip, uint16_t peer_port, cosix::pseudofd_t pseudofd, int reversefd);
 	virtual ~ip_socket();
 
 	void start();
@@ -29,6 +29,10 @@ struct ip_socket : public cosix::reverse_handler, std::enable_shared_from_this<i
 
 	virtual bool handle_packet(std::shared_ptr<interface> iface, const char *frame, size_t framelen, size_t ip_offset, size_t payload_offset, size_t payload_length) = 0;
 
+protected:
+	inline cosix::pseudofd_t get_pseudo_fd() { return pseudofd; }
+	inline int get_reverse_fd() { return reversefd; }
+
 private:
 	void run();
 
@@ -40,7 +44,8 @@ private:
 	std::string peer_ip;
 	uint16_t peer_port;
 
-	int fd;
+	cosix::pseudofd_t pseudofd;
+	int reversefd;
 };
 
 }

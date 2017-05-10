@@ -2,14 +2,15 @@
 #include "interface.hpp"
 #include <arpa/inet.h>
 #include "ip.hpp"
+#include <cassert>
 
 using namespace cosix;
 using namespace networkd;
 
 #define MAX_UDP_PACKETS 64
 
-udp_socket::udp_socket(std::string l_ip, uint16_t l_p, std::string p_ip, uint16_t p_p, int fd)
-: ip_socket(transport_proto::udp, l_ip, l_p, p_ip, p_p, fd)
+udp_socket::udp_socket(std::string l_ip, uint16_t l_p, std::string p_ip, uint16_t p_p, pseudofd_t ps, int r)
+: ip_socket(transport_proto::udp, l_ip, l_p, p_ip, p_p, ps, r)
 {
 }
 
@@ -17,7 +18,7 @@ udp_socket::~udp_socket()
 {
 }
 
-bool udp_socket::handle_packet(std::shared_ptr<interface> iface, const char *frame, size_t /*framelen*/, size_t /*ip_offset*/, size_t udp_offset, size_t udp_length)
+bool udp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, size_t framelen, size_t ip_offset, size_t udp_offset, size_t udp_length)
 {
 	if(udp_length < sizeof(udp_header)) {
 		// UDP header doesn't fit
@@ -29,40 +30,51 @@ bool udp_socket::handle_packet(std::shared_ptr<interface> iface, const char *fra
 		return false;
 	}
 
-	if(htons(hdr->source_port) != get_peer_port()
+	if((!get_peer_ip().empty() && htons(hdr->source_port) != get_peer_port())
 	|| htons(hdr->dest_port) != get_local_port()) {
 		// not meant for us
 		return false;
 	}
 
-	const char *payload = frame + udp_offset + sizeof(udp_header);
 	size_t payload_length = udp_length - sizeof(udp_header);
-
-	dprintf(0, "Got a %d byte packet from %s\n", payload_length, iface->get_name().c_str());
 
 	std::lock_guard<std::mutex> lock(wm_mtx);
 	if(waiting_messages.size() < MAX_UDP_PACKETS) {
-		waiting_messages.emplace(payload, payload_length);
+		udp_message m;
+		m.frame = std::string(frame, framelen);
+		m.ip_offset = ip_offset;
+		m.udp_offset = udp_offset;
+		m.payload_offset = udp_offset + sizeof(udp_header);
+		m.payload_length = payload_length;
+		waiting_messages.emplace(std::move(m));
+		wm_cv.notify_all();
 	}
 	return true;
 }
 
-void udp_socket::pwrite(pseudofd_t p, off_t, const char *msg, size_t len)
+std::shared_ptr<udp_socket> udp_socket::get_child(cosix::pseudofd_t ps)
 {
-	if(p != 0) {
-		throw cloudabi_system_error(EINVAL);
+	std::lock_guard<std::mutex> lock(child_sockets_mtx);
+	auto childit = child_sockets.find(ps);
+	if(childit == child_sockets.end()) {
+		throw cloudabi_system_error(EBADF);
+	}
+	assert(childit->second->get_pseudo_fd() == ps);
+	return childit->second;
+}
+
+void udp_socket::pwrite(pseudofd_t p, off_t o, const char *msg, size_t len)
+{
+	// I may receive calls for pseudo-sockets I accept()ed, forward them
+	if(p != get_pseudo_fd()) {
+		get_child(p)->pwrite(p, o, msg, len);
+		return;
 	}
 
 	if(get_peer_ip().empty()) {
 		// not connected, cannot send
 		throw cloudabi_system_error(EDESTADDRREQ);
 	}
-
-	dprintf(0, "Got a %d byte packet, forwarding onwards.\n", len);
-	dprintf(0, "Local port: %d, peer port: %d\n", get_local_port(), get_peer_port());
-	std::string ld = ipv4_ntop(get_local_ip());
-	std::string pd = ipv4_ntop(get_peer_ip());
-	dprintf(0, "Local IP: %s, peer IP: %s\n", ld.c_str(), pd.c_str());
 
 	struct udp_header udp_hdr;
 	udp_hdr.source_port = htons(get_local_port());
@@ -113,14 +125,13 @@ void udp_socket::pwrite(pseudofd_t p, off_t, const char *msg, size_t len)
 	}
 }
 
-size_t udp_socket::pread(pseudofd_t p, off_t, char *dest, size_t requested)
+size_t udp_socket::pread(pseudofd_t p, off_t o, char *dest, size_t requested)
 {
-	dprintf(0, "Pread() size %zu\n", requested);
-	if(p != 0) {
-		throw cloudabi_system_error(EINVAL);
+	if(p != get_pseudo_fd()) {
+		return get_child(p)->pread(p, o, dest, requested);
 	}
 
-	std::string message;
+	udp_message message;
 	{
 		std::unique_lock<std::mutex> lock(wm_mtx);
 		while(waiting_messages.empty()) {
@@ -130,8 +141,71 @@ size_t udp_socket::pread(pseudofd_t p, off_t, char *dest, size_t requested)
 		waiting_messages.pop();
 	}
 
-	auto res = std::min(message.size(), requested);
-	memcpy(dest, message.c_str(), res);
-	dprintf(0, "pread(): Returning a %zu size message\n", res);
+	auto res = std::min(message.payload_length, requested);
+	memcpy(dest, message.frame.c_str() + message.payload_offset, res);
 	return res;
+}
+
+pseudofd_t udp_socket::sock_accept(pseudofd_t pseudo, cloudabi_sockstat_t *ss)
+{
+	// only the root UDP socket may accept()
+	if(pseudo != 0) {
+		throw cloudabi_system_error(EINVAL);
+	}
+	assert(get_pseudo_fd() == 0);
+
+	// TODO: send all existing traffic towards newly accepted sockets?
+	// for now, just create a new socket for every message
+	udp_message message;
+	pseudofd_t subsocket;
+	{
+		std::unique_lock<std::mutex> lock(wm_mtx);
+		while(waiting_messages.empty()) {
+			wm_cv.wait(lock);
+		}
+		message = waiting_messages.front();
+		waiting_messages.pop();
+		subsocket = ++last_subsocket;
+	}
+
+	auto *ip_hdr = reinterpret_cast<ip_header const*>(message.frame.c_str() + message.ip_offset);
+	auto *udp_hdr = reinterpret_cast<udp_header const*>(message.frame.c_str() + message.udp_offset);
+	std::string local_ip = std::string(reinterpret_cast<char const*>(&ip_hdr->dest_ip), sizeof(ip_hdr->dest_ip));
+	std::string peer_ip = std::string(reinterpret_cast<char const*>(&ip_hdr->source_ip), sizeof(ip_hdr->source_ip));
+	uint16_t peer_port = htons(udp_hdr->source_port);
+
+	assert(get_local_ip() == std::string(4, 0) || local_ip == get_local_ip());
+	assert(get_local_ip() != std::string(4, 0) || local_ip != get_local_ip());
+	assert(get_local_port() == htons(udp_hdr->dest_port));
+
+	std::shared_ptr<udp_socket> socket = std::make_shared<udp_socket>(
+		local_ip, get_local_port(), peer_ip, peer_port, subsocket, get_reverse_fd());
+	socket->waiting_messages.emplace(std::move(message));
+
+	{
+		std::lock_guard<std::mutex> lock(child_sockets_mtx);
+		child_sockets[subsocket] = socket;
+	}
+	socket->sock_stat_get(subsocket, ss);
+	get_ip().register_socket(socket);
+
+	// do not start(), the root UDP socket will listen on the reversefd
+	return subsocket;
+}
+
+void udp_socket::sock_stat_get(cosix::pseudofd_t p, cloudabi_sockstat_t *ss)
+{
+	if(p != get_pseudo_fd()) {
+		get_child(p)->sock_stat_get(p, ss);
+		return;
+	}
+
+	ss->ss_sockname.sa_family = AF_INET;
+	memcpy(ss->ss_sockname.sa_inet.addr, get_local_ip().c_str(), sizeof(ss->ss_sockname.sa_inet.addr));
+	ss->ss_sockname.sa_inet.port = get_local_port();
+	ss->ss_peername.sa_family = AF_INET;
+	memcpy(ss->ss_peername.sa_inet.addr, get_peer_ip().c_str(), sizeof(ss->ss_peername.sa_inet.addr));
+	ss->ss_peername.sa_inet.port = get_peer_port();
+	ss->ss_error = 0; /* TODO */
+	ss->ss_state = get_peer_ip().empty() ? CLOUDABI_SOCKSTATE_ACCEPTCONN : 0;
 }

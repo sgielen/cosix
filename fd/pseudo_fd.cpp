@@ -342,3 +342,178 @@ cloudabi_errno_t pseudo_fd::lookup_device_id() {
 	}
 }
 
+void pseudo_fd::sock_bind(cloudabi_sa_family_t, shared_ptr<fd_t>, void*, size_t)
+{
+	// Can only bind to UNIX addresses, this is not supported at the moment
+	error = EINVAL;
+}
+
+void pseudo_fd::sock_connect(cloudabi_sa_family_t, shared_ptr<fd_t>, void*, size_t)
+{
+	// Can only bind to UNIX addresses, this is not supported at the moment
+	error = EINVAL;
+}
+
+void pseudo_fd::sock_listen(cloudabi_backlog_t backlog)
+{
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::sock_listen;
+	request.inode = 0;
+	request.flags = 0;
+	request.length = backlog;
+
+	reverse_response_t response;
+	if(!send_request(&request, &response) || response.result < 0) {
+		error = -response.result;
+	}
+	error = 0;
+}
+
+shared_ptr<fd_t> pseudo_fd::sock_accept(cloudabi_sa_family_t family, void *address, size_t *address_len)
+{
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::sock_accept;
+	request.inode = 0;
+	request.flags = family;
+	request.length = address_len == nullptr ? 0 : *address_len;
+
+	reverse_response_t response;
+	if(!send_request(&request, &response) || response.result < 0) {
+		error = -response.result;
+		return nullptr;
+	}
+	if(address != nullptr && address_len != nullptr) {
+		if(*address_len < sizeof(cloudabi_sockstat_t)) {
+			*address_len = 0;
+		} else {
+			if(response.length != sizeof(cloudabi_sockstat_t)) {
+				error = EIO;
+				// TODO: close pseudo FD again
+				return nullptr;
+			}
+			memcpy(address, response.buffer, response.length);
+			*address_len = response.length;
+		}
+	}
+
+	pseudofd_t new_pseudo_id = response.result;
+
+	char new_name[sizeof(name)];
+	strncpy(new_name, name, sizeof(new_name));
+	strncat(new_name, "->accepted", sizeof(new_name) - strlen(new_name) - 1);
+
+	// TODO: is filetype of the new socket always the same as that of the accepting socket?
+	auto new_fd = make_shared<pseudo_fd>(new_pseudo_id, reverse_fd, type, new_name);
+	error = 0;
+	return new_fd;
+}
+
+void pseudo_fd::sock_shutdown(cloudabi_sdflags_t how)
+{
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::sock_shutdown;
+	request.inode = 0;
+	request.flags = how;
+	request.length = 0;
+
+	reverse_response_t response;
+	if(!send_request(&request, &response) || response.result < 0) {
+		error = -response.result;
+	}
+	error = 0;
+}
+
+void pseudo_fd::sock_stat_get(cloudabi_sockstat_t *buf, cloudabi_ssflags_t flags)
+{
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::sock_stat_get;
+	request.inode = 0;
+	request.flags = flags;
+	request.length = sizeof(cloudabi_sockstat_t);
+
+	reverse_response_t response;
+	if(!send_request(&request, &response) || response.result < 0) {
+		error = -response.result;
+		return;
+	}
+	if(response.length != sizeof(cloudabi_sockstat_t)) {
+		error = EIO;
+		return;
+	}
+	memcpy(buf, response.buffer, response.length);
+	error = 0;
+}
+
+void pseudo_fd::sock_recv(const cloudabi_recv_in_t *in, cloudabi_recv_out_t *out)
+{
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::sock_recv;
+	request.inode = 0;
+	request.flags = in->ri_flags;
+	size_t length = 0;
+	for(size_t i = 0; i < in->ri_data_len; ++i) {
+		length += in->ri_data[i].buf_len;
+	}
+	if(length > sizeof(request.buffer)) {
+		// TODO: take buffer out of the struct, so any size can be sent
+		get_vga_stream() << "Cannot sock_recv of this size, failing\n";
+		error = EMSGSIZE;
+		return;
+	}
+	request.length = length;
+
+	reverse_response_t response;
+	if(!send_request(&request, &response) || response.result < 0) {
+		error = -response.result;
+		return;
+	}
+	if(response.length > request.length) {
+		error = EIO;
+		return;
+	}
+	size_t off = 0;
+	for(size_t i = 0; i < in->ri_data_len; ++i) {
+		memcpy(in->ri_data[i].buf, response.buffer + off, in->ri_data[i].buf_len);
+		off += in->ri_data[i].buf_len;
+	}
+	memset(out, 0, sizeof(cloudabi_recv_out_t));
+	out->ro_datalen = response.length;
+	error = 0;
+}
+
+void pseudo_fd::sock_send(const cloudabi_send_in_t *in, cloudabi_send_out_t *out)
+{
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::sock_send;
+	request.inode = 0;
+	request.flags = in->si_flags;
+	size_t length = 0;
+	for(size_t i = 0; i < in->si_data_len; ++i) {
+		length += in->si_data[i].buf_len;
+	}
+	if(length > sizeof(reverse_response_t::buffer)) {
+		// TODO: take buffer out of the struct, so any size can be received
+		get_vga_stream() << "Cannot sock_send of this size, failing\n";
+		error = EMSGSIZE;
+		return;
+	}
+	request.length = length;
+	size_t off = 0;
+	for(size_t i = 0; i < in->si_data_len; ++i) {
+		memcpy(request.buffer + off, in->si_data[i].buf, in->si_data[i].buf_len);
+		off += in->si_data[i].buf_len;
+	}
+
+	reverse_response_t response;
+	if(!send_request(&request, &response) || response.result < 0) {
+		error = -response.result;
+		return;
+	}
+	out->so_datalen = response.length;
+}

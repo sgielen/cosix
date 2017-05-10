@@ -60,3 +60,11 @@ size_t reverse_handler::readdir(pseudofd_t, char*, size_t, cloudabi_dircookie_t&
 void reverse_handler::stat_get(pseudofd_t, cloudabi_lookupflags_t, char*, size_t, cloudabi_filestat_t*) {
 	throw cloudabi_system_error(EINVAL);
 }
+
+pseudofd_t reverse_handler::sock_accept(pseudofd_t, cloudabi_sockstat_t*) {
+	throw cloudabi_system_error(EINVAL);
+}
+
+void reverse_handler::sock_stat_get(pseudofd_t, cloudabi_sockstat_t*) {
+	throw cloudabi_system_error(EINVAL);
+}

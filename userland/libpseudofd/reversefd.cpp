@@ -56,6 +56,7 @@ void cosix::handle_request(reverse_request_t *request, reverse_response_t *respo
 			break;
 		case op::pwrite:
 			h->pwrite(request->pseudofd, request->offset, reinterpret_cast<const char*>(request->buffer), request->length);
+			response->result = 0;
 			break;
 		case op::unlink:
 			h->unlink(request->pseudofd, reinterpret_cast<const char*>(request->buffer), request->length, request->flags);
@@ -74,8 +75,36 @@ void cosix::handle_request(reverse_request_t *request, reverse_response_t *respo
 			response->result = 0;
 			break;
 		}
-		case op::stat_put:
+		case op::sock_accept: {
+			auto ss = reinterpret_cast<cloudabi_sockstat_t*>(response->buffer);
+			response->result = h->sock_accept(request->pseudofd, ss);
+			response->length = sizeof(cloudabi_sockstat_t);
+			break;
+		}
+		case op::sock_stat_get: {
+			auto ss = reinterpret_cast<cloudabi_sockstat_t*>(response->buffer);
+			h->sock_stat_get(request->pseudofd, ss);
+			response->result = 0;
+			response->length = sizeof(cloudabi_sockstat_t);
+			break;
+		}
+		case op::sock_recv: {
+			// Implement in terms of read. This makes it impossible to do
+			// FD passing, but otherwise it's the same.
+			response->length = h->pread(request->pseudofd, 0, reinterpret_cast<char*>(response->buffer), request->length);
+			response->result = 0;
+			break;
+		}
+		case op::sock_send: {
+			// Implement in terms of write.
+			h->pwrite(request->pseudofd, 0, reinterpret_cast<const char*>(request->buffer), request->length);
+			response->result = 0;
+			break;
+		}
 		case op::rename:
+		case op::sock_listen:
+		case op::sock_shutdown:
+		case op::stat_put:
 		default:
 			response->result = -ENOSYS;
 		}

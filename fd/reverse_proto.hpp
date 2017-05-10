@@ -18,7 +18,14 @@ struct reverse_request_t {
 		unlink,
 		pread,
 		pwrite,
-		close
+		close,
+		// the calls below are for sockets; inode is 0
+		sock_listen, // length = backlog size
+		sock_accept, // flags = address family, length = address length
+		sock_shutdown,
+		sock_stat_get,
+		sock_recv,
+		sock_send
 	} op;
 	uint64_t inode;
 	uint64_t flags;

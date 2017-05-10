@@ -290,7 +290,7 @@ void client::run() {
 				// TODO: ensure port is unused
 				local_port = rand() % UINT16_MAX;
 			}
-			if(local_ip.empty()) {
+			if(!peer_ip.empty() && (local_ip.empty() || local_ip == std::string(4, 0))) {
 				// Find what interface we can use to reach the destination
 				auto rule = get_routing_table().routing_rule_for_ip(peer_ip);
 				if(!rule) {
@@ -318,7 +318,7 @@ void client::run() {
 				continue;
 			}
 
-			std::shared_ptr<ip_socket> socket = std::make_shared<udp_socket>(local_ip, local_port, peer_ip, peer_port, rev_pseu.first);
+			std::shared_ptr<ip_socket> socket = std::make_shared<udp_socket>(local_ip, local_port, peer_ip, peer_port, 0, rev_pseu.first);
 			auto res = get_ip().register_socket(socket);
 			socket->start();
 
