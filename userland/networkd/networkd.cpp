@@ -228,23 +228,6 @@ void dump_interfaces() {
 			std::string ip_show = ipv4_ntop(std::string(ip.ip, 4));
 			dprintf(stdout, "  IPv4: %s\n", ip_show.c_str());
 		}
-
-		// TODO: remove this
-		if(name == "eth0") {
-			dprintf(stdout, "  Performing ARP lookup for 10.0.2.2...");
-			std::string ip(4, 0);
-			ip[0] = 10;
-			ip[1] = 0;
-			ip[2] = 2;
-			ip[3] = 2;
-			auto rmac = get_arp().mac_for_ip(iface, ip, 1 * 1000 * 1000 * 1000 /* wait 1 second */);
-			if(!rmac) {
-				dprintf(stdout, " Failed to find MAC\n");
-			} else {
-				std::string rmacd = mac_ntop(*rmac);
-				dprintf(stdout, " Got MAC: %s\n", rmacd.c_str());
-			}
-		}
 	}
 }
 
