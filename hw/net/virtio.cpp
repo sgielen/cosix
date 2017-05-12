@@ -22,7 +22,7 @@ struct virtq_buffer {
 	uint32_t len;
 
 /* This marks a buffer as continuing via the next field. */
-#define VIRTQ_DESC_F_NEXT   1
+//#define VIRTQ_DESC_F_NEXT   1
 /* This marks a buffer as device write-only (otherwise device read-only). */
 #define VIRTQ_DESC_F_WRITE     2
 /* This means the buffer contains a list of buffer descriptors. */
@@ -381,8 +381,7 @@ cloudabi_errno_t virtio_net_device::send_ethernet_frame(uint8_t *frame, size_t l
 		*checksum = crc_32(frame, length - 4);
 	}
 
-	size_t first_desc = last_writeq_idx++;
-	size_t second_desc = last_writeq_idx++;
+	size_t desc_idx = last_writeq_idx++;
 
 	if(last_writeq_idx >= writeq->get_queue_size()) {
 		// TODO: instead of adding our buffers to the virtio NIC constantly,
@@ -394,36 +393,37 @@ cloudabi_errno_t virtio_net_device::send_ethernet_frame(uint8_t *frame, size_t l
 		kernel_panic("Trying to write more buffers to virtio device than fit in the queue, fix the virtio driver");
 	}
 
-	auto d0 = writeq->get_virtq_buffer(first_desc);
-	auto d1 = writeq->get_virtq_buffer(second_desc);
+	auto desc = writeq->get_virtq_buffer(desc_idx);
 
-	address_mapping *mapping0 = get_allocator()->allocate<address_mapping>();
-	address_mapping_list *mappingl0 = get_allocator()->allocate<address_mapping_list>();
-	address_mapping *mapping1 = get_allocator()->allocate<address_mapping>();
-	address_mapping_list *mappingl1 = get_allocator()->allocate<address_mapping_list>();
-	mapping0->logical = &net_hdr;
-	mapping0->physical = get_map_virtual()->to_physical_address(mapping0->logical);
-	mappingl0->data = mapping0;
-	mappingl0->next = mappingl1;
-	mapping1->logical = frame;
-	mapping1->physical = get_map_virtual()->to_physical_address(mapping1->logical);
-	mappingl1->data = mapping1;
-	mappingl1->next = nullptr;
-	append(&mappings, mappingl0);
+	size_t total_length = sizeof(net_hdr) + length;
+	if(total_length > PAGE_SIZE) {
+		kernel_panic("Trying to send packet larger than page size");
+	}
 
-	d0->addr = reinterpret_cast<uint64_t>(mapping0->physical);
-	d0->len = sizeof(net_hdr);
-	d0->flags = VIRTQ_DESC_F_NEXT;
-	d0->next = second_desc;
+	// TODO: use MTU instead of fixed size
+	// TODO: fix memory leaks
+	auto alloc = get_map_virtual()->allocate(PAGE_SIZE);
+	char *address = reinterpret_cast<char*>(alloc.ptr);
 
-	d1->addr = reinterpret_cast<uint64_t>(mapping1->physical);
-	d1->len = length;
-	d1->flags = 0;
-	d1->next = 0;
+	memcpy(address, &net_hdr, sizeof(net_hdr));
+	memcpy(address + sizeof(net_hdr), frame, length);
+
+	address_mapping *mapping = allocate<address_mapping>();
+	mapping->logical = address;
+	mapping->physical = get_map_virtual()->to_physical_address(address);
+
+	address_mapping_list *item = allocate<address_mapping_list>(mapping);
+	append(&mappings, item);
+
+	desc->addr = reinterpret_cast<uint64_t>(mapping->physical);
+	desc->len = total_length;
+	desc->flags = 0;
+	desc->next = 0;
 
 	auto avail = writeq->get_virtq_avail();
 	avail->flags = 0;
-	return add_buffer_to_avail(writeq, first_desc);
+	auto res = add_buffer_to_avail(writeq, desc_idx);
+	return res;
 }
 
 void virtio_net_device::timer_event() {
