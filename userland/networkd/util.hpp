@@ -41,6 +41,23 @@ inline std::pair<std::string, uint16_t> ipv4_port_pton(std::string ip_port) {
 	return std::make_pair(ipv4_pton(ip), portnum);
 }
 
+inline std::pair<std::string, uint8_t> ipv4_cidr_pton(std::string ip_cidr) {
+	size_t location = ip_cidr.find('/');
+	if(location == std::string::npos) {
+		// assuming CIDR = 32
+		return std::make_pair(ipv4_pton(ip_cidr), 32);
+	}
+	std::string ip = ip_cidr.substr(0, location);
+	std::string cidr = ip_cidr.substr(location + 1);
+	std::stringstream ss;
+	ss << cidr;
+	unsigned int cidr_prefix;
+	if(!(ss >> cidr_prefix) || cidr_prefix > 32) {
+		throw std::runtime_error("ipv4_cidr_pton: wrong cidr");
+	}
+	return std::make_pair(ipv4_pton(ip), cidr_prefix);
+}
+
 inline std::string mac_ntop(std::string mac) {
 	std::string res;
 	res.reserve(17);

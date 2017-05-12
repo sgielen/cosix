@@ -40,8 +40,12 @@ struct routing_table {
 	// Shorthand for adding a link-local route to the table.
 	void add_link_route(std::shared_ptr<interface> iface, std::string ip, int cidr_prefix);
 
-	// Shorthand for adding a default gateway to the table.
-	void add_default_gateway(std::shared_ptr<interface>, std::string gateway_ip);
+	// Shorthand for adding a setting gateway to the table. If there is already a
+	// default gateway rule, it will be replaced.
+	void set_default_gateway(std::shared_ptr<interface>, std::string gateway_ip);
+
+	// Invalidate the default gateway rule for the given interface.
+	void unset_default_gateway(std::shared_ptr<interface>);
 
 private:
 	std::mutex table_mutex;

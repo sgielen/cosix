@@ -354,6 +354,12 @@ void program_main(const argdata_t *) {
 
 	start_networked_binary("udptest");
 
+	// sleep for a bit after udptest
+	{
+		struct timespec ts = {.tv_sec = 5, .tv_nsec = 0};
+		clock_nanosleep(CLOCK_MONOTONIC, 0, &ts);
+	}
+
 	uint32_t num_success = 0;
 	uint32_t num_failures = 0;
 	while(1) {

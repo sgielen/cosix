@@ -152,16 +152,10 @@ std::vector<std::string> get_addr_v4(std::string iface) {
 	}
 }
 
-void add_addr_v4(std::string iface, std::string ip, int cidr_prefix, std::string gateway_ip) {
+void add_addr_v4(std::string iface, std::string ip, int cidr_prefix) {
 	auto interface = get_interface(iface);
-	std::string ip_packed = ipv4_pton(ip);
-	interface->add_ipv4addr(ip_packed.c_str(), cidr_prefix);
-	get_routing_table().add_link_route(interface, ip_packed, cidr_prefix);
-
-	if(!gateway_ip.empty()) {
-		std::string gateway = ipv4_pton(gateway_ip);
-		get_routing_table().add_default_gateway(interface, gateway);
-	}
+	interface->add_ipv4addr(ip.c_str(), cidr_prefix);
+	get_routing_table().add_link_route(interface, ip, cidr_prefix);
 }
 
 using networkd::arp;
@@ -183,6 +177,35 @@ using networkd::ip;
 ip i;
 ip &get_ip() {
 	return i;
+}
+
+std::mutex properties_mtx;
+std::map<std::string, std::string> properties;
+
+std::string get_property(std::string name) {
+	std::lock_guard<std::mutex> lock(properties_mtx);
+	auto it = properties.find(name);
+	if(it == properties.end()) {
+		throw std::runtime_error("No such property " + name);
+	}
+	return it->second;
+}
+
+void set_property(std::string name, std::string value) {
+	std::lock_guard<std::mutex> lock(properties_mtx);
+	properties[name] = value;
+}
+
+void unset_property(std::string name) {
+	std::lock_guard<std::mutex> lock(properties_mtx);
+	properties.erase(name);
+}
+
+void dump_properties() {
+	std::lock_guard<std::mutex> lock(properties_mtx);
+	for(auto &pair : properties) {
+		dprintf(stdout, "* \"%s\" = \"%s\"\n", pair.first.c_str(), pair.second.c_str());
+	}
 }
 
 void start_dhclient(std::string iface) {
@@ -314,7 +337,7 @@ void program_main(const argdata_t *ad) {
 		if(hwtype == "ETHERNET") {
 			start_dhclient(iface);
 		} else if(hwtype == "LOOPBACK") {
-			add_addr_v4(iface, "127.0.0.1", 8);
+			add_addr_v4(iface, ipv4_pton("127.0.0.1"), 8);
 		}
 	}
 

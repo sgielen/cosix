@@ -12,6 +12,7 @@
 #include <vector>
 #include <arpa/inet.h>
 #include <cassert>
+#include <map>
 
 int stdout;
 int networkd;
@@ -41,6 +42,23 @@ static cloudabi_timestamp_t monotime() {
 
 static cloudabi_timestamp_t monotime_after(uint64_t seconds) {
 	return monotime() + seconds * 1000000000;
+}
+
+static uint8_t mask_to_cidr(std::string ip) {
+	if(ip.length() != 4) {
+		throw std::runtime_error("Subnet mask format is incorrect");
+	}
+
+	uint8_t cidr_prefix = 0;
+	for(size_t bit = 0; bit < 32; ++bit) {
+		uint8_t byte = ip[bit / 8];
+		if(byte & uint32_t(1) << (7 - (bit % 8))) {
+			cidr_prefix++;
+		} else {
+			break;
+		}
+	}
+	return cidr_prefix;
 }
 
 size_t send_if_command(std::string command, std::string arg, char *buf, size_t bufsize, int *fd) {
@@ -123,7 +141,7 @@ std::string string_from_map(argdata_t *ad, std::string needle) {
 	return "";
 }
 
-void dump_interfaces() {
+void dump_networkd() {
 	char buf[200];
 	size_t size = send_if_command("dump", "", buf, sizeof(buf), nullptr);
 	argdata_t *response = argdata_from_buffer(buf, size);
@@ -205,6 +223,49 @@ int get_rawsock() {
 		exit(1);
 	}
 	return fd;
+}
+
+void set_property(std::string property, std::string value) {
+	argdata_t *keys[] = {argdata_create_str_c("command"), argdata_create_str_c("interface"), argdata_create_str_c("arg"), argdata_create_str_c("value")};
+	argdata_t *values[] = {argdata_create_str_c("set-property"), argdata_create_str_c(interface.c_str()), argdata_create_str_c(property.c_str()), argdata_create_str_c(value.c_str())};
+	argdata_t *req = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
+
+	size_t len;
+	argdata_serialized_length(req, &len, 0);
+
+	char rbuf[len];
+	argdata_serialize(req, rbuf, 0);
+
+	argdata_free(keys[0]);
+	argdata_free(keys[1]);
+	argdata_free(keys[2]);
+	argdata_free(keys[3]);
+	argdata_free(values[0]);
+	argdata_free(values[1]);
+	argdata_free(values[2]);
+	argdata_free(values[3]);
+	argdata_free(req);
+
+	write(networkd, rbuf, len);
+	// TODO: set non-blocking flag once kernel supports it
+	// this way, we can read until EOF instead of only 200 bytes
+	// TODO: for a generic implementation, MSG_PEEK to find the number
+	// of file descriptors
+	char buf[200];
+	struct iovec iov = {.iov_base = buf, .iov_len = sizeof(buf)};
+	struct msghdr msg = {
+		.msg_iov = &iov, .msg_iovlen = 1,
+	};
+	ssize_t size = recvmsg(networkd, &msg, 0);
+	if(size < 0) {
+		perror("read");
+		exit(1);
+	}
+	argdata_t *response = argdata_from_buffer(buf, size);
+	std::string error = string_from_map(response, "error");
+	if(!error.empty()) {
+		dprintf(stdout, "Error: %s\n", error.c_str());
+	}
 }
 
 // Parses MACs like AA-BB-CC-DD-EE-FF
@@ -479,21 +540,11 @@ void handle_rawsock_frame(uint8_t *frame, size_t size) {
 	uint16_t fragment_offset = ntohs(*reinterpret_cast<uint16_t*>(&packet[6]) & 0x1fff);
 	if(flags & IPV4_FLAG_MORE_FRAGMENTS || fragment_offset != 0) {
 		// fragmented packets currently unsupported
-		dprintf(stdout, "Fragmented IPv4 packet received, ignoring\n");
 		return;
 	}
 
 	// TODO: TTL checking
 	// TODO: checksum checking
-
-	char ip_source_display[16];
-	char ip_dest_display[16];
-	uint8_t *ip_source = packet + 12;
-	uint8_t *ip_dest = packet + 16;
-
-	dprintf(stdout, "Received IPv4 packet from %s to %s\n",
-		inet_ntop(AF_INET, ip_source, ip_source_display, sizeof(ip_source_display)),
-		inet_ntop(AF_INET, ip_dest,   ip_dest_display,   sizeof(ip_dest_display)));
 
 	uint8_t protocol = packet[9];
 	if(protocol != 17 /* UDP */) {
@@ -510,13 +561,23 @@ void handle_rawsock_frame(uint8_t *frame, size_t size) {
 		return;
 	}
 	// TODO: check checksum
-	dprintf(stdout, "  It's a UDP message from source port %d to destination port %d\n", source_port, destination_port);
 	if(destination_port != 68) {
 		return;
 	}
 
 	uint8_t *dhcp_payload = udp_payload + 8;
 	size_t dhcp_length = udp_length - 8;
+
+	char ip_source_display[16];
+	char ip_dest_display[16];
+	uint8_t *ip_source = packet + 12;
+	uint8_t *ip_dest = packet + 16;
+
+	dprintf(stdout, "Received IPv4 packet from %s to %s\n",
+		inet_ntop(AF_INET, ip_source, ip_source_display, sizeof(ip_source_display)),
+		inet_ntop(AF_INET, ip_dest,   ip_dest_display,   sizeof(ip_dest_display)));
+
+	dprintf(stdout, "  It's a UDP message from source port %d to destination port %d\n", source_port, destination_port);
 
 	/* minimal BOOTP length is 236, and DHCP also describes a 4-byte magic, so 240 */
 	if(dhcp_length < 240) {
@@ -552,8 +613,7 @@ void handle_rawsock_frame(uint8_t *frame, size_t size) {
 	size_t options_length = dhcp_length - 240;
 
 	// parse incoming options
-	uint8_t dhcp_type = 0;
-
+	std::map<uint8_t, std::string> dhcp_options;
 	while(options_length > 2) {
 		uint8_t option = options[0];
 		if(option == 0xff) {
@@ -565,19 +625,20 @@ void handle_rawsock_frame(uint8_t *frame, size_t size) {
 			dprintf(stdout, "  It's a DHCP message that ends early, dropping\n");
 			return;
 		}
-		if(option == 0x35 && option_length == 1) {
-			dhcp_type = options[2];
-		}
+		std::string value(reinterpret_cast<const char*>(options + 2), option_length);
+		dhcp_options[option] = value;
 
 		options += option_length + 2;
 		options_length -= option_length + 2;
 	}
 
-	if(dhcp_type == 0) {
+	auto dhcp_type_it = dhcp_options.find(0x35 /* DHCP message type */);
+	if(dhcp_type_it == dhcp_options.end() || dhcp_type_it->second.length() != 1) {
 		dprintf(stdout, "  It's a DHCP message without a (valid) message type, dropping\n");
 		return;
 	}
 
+	uint8_t dhcp_type = dhcp_type_it->second[0];
 	if(dhcp_type == DHCPOFFER) {
 		dprintf(stdout, "  It's a DHCP offer for the following IPs:\n");
 	} else if(dhcp_type == DHCPACK) {
@@ -613,15 +674,33 @@ void handle_rawsock_frame(uint8_t *frame, size_t size) {
 		// 2131 4.4.1 and verify that the address is not used yet. If it is
 		// used, send DHCPDECLINE and try a DHCPOFFER with another address. If
 		// it is unused, broadcast an ARP reply with new IP address.
-		// TODO: we should also take the timer information from the
-		// offer/request/ack and ensure that we request a new lease as
-		// soon as the timer expires.
+		// TODO: we should also take the timer information from the ACK
+		// (option 51 IP Address Lease Time) and ensure that we request
+		// a new lease as soon as the timer expires.
 		std::string ip(inet_ntop(AF_INET, yiaddr, ip_display, sizeof(ip_display)));
-		dprintf(stdout, "  DHCP request was accepted! Assigning IP address %s\n", ip.c_str());
 		requesting = false;
 
+		uint8_t cidr_prefix = 32;
+		auto mask = dhcp_options.find(0x01 /* Subnet Mask */);
+		if(mask == dhcp_options.end()) {
+			dprintf(stdout, "  The DHCP message has no Subnet Mask, assuming CIDR /32\n");
+		} else {
+			cidr_prefix = mask_to_cidr(mask->second);
+		}
+
+		ip += "/" + std::to_string(cidr_prefix);
+		dprintf(stdout, "  DHCP request was accepted! Assigning IP address %s\n", ip.c_str());
 		add_v4addr(ip);
-		dump_interfaces();
+
+		auto router = dhcp_options.find(0x03 /* Router */);
+		if(router != dhcp_options.end()) {
+			set_property("defaultgateway", inet_ntop(AF_INET, router->second.c_str(), ip_display, sizeof(ip_display)));
+		}
+		auto dns = dhcp_options.find(0x06 /* Domain Name Server */);
+		if(dns != dhcp_options.end()) {
+			set_property("dns", inet_ntop(AF_INET, dns->second.c_str(), ip_display, sizeof(ip_display)));
+		}
+		dump_networkd();
 		return;
 	} else if(dhcp_type == DHCPACK) {
 		dprintf(stdout, "  ...But I wasn't waiting for an ACK at the moment, so dropping.\n");

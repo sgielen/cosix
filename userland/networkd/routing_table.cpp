@@ -148,7 +148,27 @@ void routing_table::add_link_route(std::shared_ptr<interface> iface, std::string
 	add_entry(iface, ip, cidr_prefix, zero);
 }
 
-void routing_table::add_default_gateway(std::shared_ptr<interface> iface, std::string gateway_ip)
+void routing_table::set_default_gateway(std::shared_ptr<interface> iface, std::string gateway_ip)
 {
 	add_entry(iface, "", 0, gateway_ip);
+}
+
+void routing_table::unset_default_gateway(std::shared_ptr<interface> iface)
+{
+	std::lock_guard<std::mutex> lock(table_mutex);
+	for(auto it = table.begin(); it != table.end(); ) {
+		if(it->ip.empty()) {
+			auto iface_shared = it->iface.lock();
+			if(iface_shared == iface) {
+				// remove entry
+				it = table.erase(it);
+				continue;
+			}
+		}
+		if(!entry_valid(*it)) {
+			it = table.erase(it);
+		} else {
+			++it;
+		}
+	}
 }

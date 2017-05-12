@@ -22,15 +22,21 @@ std::vector<std::string> split_words(std::string str);
 std::vector<std::shared_ptr<networkd::interface>> get_interfaces();
 int get_raw_socket(std::string iface);
 std::vector<std::string> get_addr_v4(std::string iface);
-void add_addr_v4(std::string iface, std::string ip, int cidr_prefix, std::string gateway_ip = std::string());
+// ip is packed
+void add_addr_v4(std::string iface, std::string ip, int cidr_prefix);
 
 /* reverse, pseudo */
 std::pair<int, int> open_pseudo();
 
 void dump_interfaces();
 void dump_routing_table();
+void dump_properties();
 
 std::shared_ptr<networkd::interface> get_interface(std::string);
 networkd::arp &get_arp();
 networkd::routing_table &get_routing_table();
 networkd::ip &get_ip();
+
+std::string get_property(std::string name);
+void set_property(std::string name, std::string value);
+void unset_property(std::string name);

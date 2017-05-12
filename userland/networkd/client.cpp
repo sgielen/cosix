@@ -91,22 +91,23 @@ void client::run() {
 		std::string command;
 		std::string iface;
 		std::string arg;
+		std::string value;
 		std::string bind;
 		std::string connect;
 
 		argdata_map_iterator_t it;
-		const argdata_t *key;
-		const argdata_t *value;
+		const argdata_t *arg_key;
+		const argdata_t *arg_value;
 		argdata_map_iterate(message, &it);
-		while (argdata_map_next(&it, &key, &value)) {
+		while (argdata_map_next(&it, &arg_key, &arg_value)) {
 			const char *keystr;
-			if(argdata_get_str_c(key, &keystr) != 0) {
+			if(argdata_get_str_c(arg_key, &keystr) != 0) {
 				continue;
 			}
 
 			const char *cstr;
 			size_t len;
-			if(argdata_get_str(value, &cstr, &len) != 0) {
+			if(argdata_get_str(arg_value, &cstr, &len) != 0) {
 				continue;
 			}
 			if(strcmp(keystr, "command") == 0) {
@@ -115,6 +116,8 @@ void client::run() {
 				iface.assign(cstr, len);
 			} else if(strcmp(keystr, "arg") == 0) {
 				arg.assign(cstr, len);
+			} else if(strcmp(keystr, "value") == 0) {
+				value.assign(cstr, len);
 			} else if(strcmp(keystr, "bind") == 0) {
 				bind.assign(cstr, len);
 			} else if(strcmp(keystr, "connect") == 0) {
@@ -132,6 +135,7 @@ void client::run() {
 		if(command == "dump") {
 			dump_interfaces();
 			dump_routing_table();
+			dump_properties();
 			argdata_t *keys[] = {argdata_create_str_c("dumped")};
 			argdata_t *values[] = {argdata_create_str_c("ok")};
 			argdata_t *response = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
@@ -226,8 +230,112 @@ void client::run() {
 				}
 				continue;
 			}
-			add_addr_v4(iface, arg, 24 /* TODO get this from the client */, "10.0.2.2" /* TODO get this from the client */);
+			auto ip_cidr = ipv4_cidr_pton(arg);
+			add_addr_v4(iface, ip_cidr.first, ip_cidr.second);
 			argdata_t *keys[] = {argdata_create_str_c("added")};
+			argdata_t *values[] = {argdata_create_str_c("ok")};
+			argdata_t *response = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
+			bool success = send_response(response);
+			argdata_free(keys[0]);
+			argdata_free(values[0]);
+			argdata_free(response);
+			if(!success) {
+				return;
+			}
+		} else if(command == "get-property") {
+			if(arg.empty()) {
+				if(!send_error("arg is mandatory")) {
+					return;
+				}
+				continue;
+			}
+			// value may give a default to return if the property doesn't exist
+			try {
+				value = get_property(arg);
+			} catch(std::runtime_error &) {
+				if(!send_error("property is unset")) {
+					return;
+				}
+				continue;
+			}
+			argdata_t *keys[] = {argdata_create_str_c("property"), argdata_create_str_c("value")};
+			argdata_t *values[] = {argdata_create_str_c(arg.c_str()), argdata_create_str_c(value.c_str())};
+			argdata_t *response = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
+			bool success = send_response(response);
+			argdata_free(keys[0]);
+			argdata_free(keys[1]);
+			argdata_free(values[0]);
+			argdata_free(values[1]);
+			argdata_free(response);
+			if(!success) {
+				return;
+			}
+		} else if(command == "set-property") {
+			if(arg.empty()) {
+				if(!send_error("arg is mandatory")) {
+					return;
+				}
+				continue;
+			}
+
+			// on specific args, immediately take action
+			if(arg == "defaultgateway") {
+				if(iface.empty()) {
+					if(!send_error("interface is mandatory for setting defaultgateway")) {
+						return;
+					}
+					continue;
+				}
+				auto interface = get_interface(iface);
+				if(!interface) {
+					if(!send_error("interface with that name doesn't exist")) {
+						return;
+					}
+					continue;
+				}
+				std::string gateway = ipv4_pton(value);
+				get_routing_table().set_default_gateway(interface, gateway);
+			}
+
+			set_property(arg, value);
+			argdata_t *keys[] = {argdata_create_str_c("set")};
+			argdata_t *values[] = {argdata_create_str_c("ok")};
+			argdata_t *response = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
+			bool success = send_response(response);
+			argdata_free(keys[0]);
+			argdata_free(values[0]);
+			argdata_free(response);
+			if(!success) {
+				return;
+			}
+		} else if(command == "unset-property") {
+			if(arg.empty()) {
+				if(!send_error("arg is mandatory")) {
+					return;
+				}
+				continue;
+			}
+
+			// on specific args, immediately take action
+			if(arg == "defaultgateway") {
+				if(iface.empty()) {
+					if(!send_error("interface is mandatory for unsetting defaultgateway")) {
+						return;
+					}
+					continue;
+				}
+				auto interface = get_interface(iface);
+				if(!interface) {
+					if(!send_error("interface with that name doesn't exist")) {
+						return;
+					}
+					continue;
+				}
+				get_routing_table().unset_default_gateway(interface);
+			}
+
+			unset_property(arg);
+			argdata_t *keys[] = {argdata_create_str_c("unset")};
 			argdata_t *values[] = {argdata_create_str_c("ok")};
 			argdata_t *response = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 			bool success = send_response(response);
