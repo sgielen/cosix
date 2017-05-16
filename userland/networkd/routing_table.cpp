@@ -8,12 +8,16 @@ static bool entry_valid(routing_entry const &entry) {
 	return iface_shared != nullptr;
 }
 
-static bool cidr_ip_matches(uint8_t cidr_prefix, uint32_t left_ip, uint32_t right_ip) {
-	uint32_t mask = 0;
+static bool cidr_ip_matches(uint8_t cidr_prefix, std::string left, std::string right) {
+	assert(left.size() == 4);
+	assert(right.size() == 4);
 	assert(cidr_prefix <= 32);
+	uint32_t mask = 0;
 	for(size_t bit = 0; bit < cidr_prefix; ++bit) {
 		mask |= uint32_t(1) << (31 - bit);
 	}
+	uint32_t left_ip = htonl(*reinterpret_cast<uint32_t const*>(left.c_str()));
+	uint32_t right_ip = htonl(*reinterpret_cast<uint32_t const*>(right.c_str()));
 	return (left_ip & mask) == (right_ip & mask);
 }
 
@@ -76,9 +80,7 @@ routing_table::routing_rule_for_ip(std::string ip)
 		assert(entry.ip.size() == 4);
 		if(entry.cidr_prefix > best_cidr_prefix) {
 			// this might be a better rule, if the IP matches
-			uint32_t rule_ip = *reinterpret_cast<uint32_t const*>(entry.ip.c_str());
-			uint32_t matching_ip = *reinterpret_cast<uint32_t const*>(ip.c_str());
-			if(cidr_ip_matches(entry.cidr_prefix, rule_ip, matching_ip)) {
+			if(cidr_ip_matches(entry.cidr_prefix, entry.ip, ip)) {
 				// IP matches, replace rule
 				std::shared_ptr<interface> locked_iface = entry.iface.lock();
 				// it's possible that entry.iface expired since
@@ -111,6 +113,8 @@ void routing_table::add_entry(std::shared_ptr<interface> iface, std::string ip, 
 	if(!gateway_ip.empty() && gateway_ip.size() != 4) {
 		throw std::runtime_error("Gateway size must be empty or 4");
 	}
+	// 0.0.0.0 is never a valid gateway, use an empty string for 'no gateway'
+	assert(gateway_ip != std::string(4, 0));
 
 	// find existing entry for this IP + CIDR
 	std::lock_guard<std::mutex> lock(table_mutex);
@@ -144,8 +148,7 @@ void routing_table::add_entry(std::shared_ptr<interface> iface, std::string ip, 
 
 void routing_table::add_link_route(std::shared_ptr<interface> iface, std::string ip, int cidr_prefix)
 {
-	std::string zero(4, 0);
-	add_entry(iface, ip, cidr_prefix, zero);
+	add_entry(iface, ip, cidr_prefix, "");
 }
 
 void routing_table::set_default_gateway(std::shared_ptr<interface> iface, std::string gateway_ip)
