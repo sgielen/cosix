@@ -225,7 +225,7 @@ void arp::handle_arp_frame(std::shared_ptr<interface> iface, const char *frame, 
 		fill_arp(arp_frm, sizeof(arp_frm), ARP_RESPONSE, my_mac, target_ip, sender_mac, sender_ip);
 
 		char eth_frm[14];
-		fill_eth(eth_frm, sizeof(eth_frm), sender_mac);
+		fill_eth(eth_frm, sizeof(eth_frm), my_mac, sender_mac);
 
 		std::vector<iovec> vecs(2);
 		vecs[0].iov_base = eth_frm;
