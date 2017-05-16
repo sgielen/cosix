@@ -220,16 +220,13 @@ void tcp_socket::send_tcp_frame(bool syn, bool ack) {
 	tcp_hdr.checksum = ~short_sum;
 
 	struct ip_header ip_hdr;
+	memset(&ip_hdr, 0, sizeof(ip_hdr));
 	ip_hdr.ihl = 5;
 	ip_hdr.version = 4;
-	ip_hdr.tos = 0;
 	ip_hdr.total_len = htons(sizeof(ip_hdr) + sizeof(tcp_hdr) + send_buffer.size());
 	arc4random_buf(&ip_hdr.ident, sizeof(ip_hdr.ident));
-	ip_hdr.frag_offset = 0;
-	ip_hdr.flags = 0;
 	ip_hdr.ttl = 0xff;
 	ip_hdr.proto = transport_proto::tcp;
-	ip_hdr.checksum = 0;
 	ip_hdr.source_ip = source_ip;
 	ip_hdr.dest_ip = dest_ip;
 

@@ -83,16 +83,13 @@ void udp_socket::pwrite(pseudofd_t p, off_t o, const char *msg, size_t len)
 	udp_hdr.checksum = 0; /* TODO compute checksum */
 
 	struct ip_header ip_hdr;
+	memset(&ip_hdr, 0, sizeof(ip_hdr));
 	ip_hdr.ihl = 5;
 	ip_hdr.version = 4;
-	ip_hdr.tos = 0;
 	ip_hdr.total_len = htons(sizeof(ip_hdr) + sizeof(udp_hdr) + len);
 	arc4random_buf(&ip_hdr.ident, sizeof(ip_hdr.ident));
-	ip_hdr.frag_offset = 0;
-	ip_hdr.flags = 0;
 	ip_hdr.ttl = 0xff;
 	ip_hdr.proto = transport_proto::udp;
-	ip_hdr.checksum = 0;
 	ip_hdr.source_ip = *reinterpret_cast<uint32_t const*>(get_local_ip().c_str());
 	ip_hdr.dest_ip = *reinterpret_cast<uint32_t const*>(get_peer_ip().c_str());
 

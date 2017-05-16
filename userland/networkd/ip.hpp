@@ -20,8 +20,9 @@ struct ip_header {
 	uint8_t tos;
 	uint16_t total_len;
 	uint16_t ident;
-	uint16_t frag_offset : 13;
+	uint8_t frag_offset_1 : 5;
 	uint8_t flags : 3;
+	uint8_t frag_offset_2;
 	uint8_t ttl;
 	uint8_t proto;
 	uint16_t checksum;

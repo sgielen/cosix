@@ -38,7 +38,8 @@ void ip::handle_packet(std::shared_ptr<interface> iface, const char *frame, size
 		return;
 	}
 
-	if(hdr->flags & 2 /* more fragments */ || htons(hdr->frag_offset) != 0) {
+	uint16_t frag_offset = htons(hdr->frag_offset_1 << 8 | hdr->frag_offset_2);
+	if((hdr->flags & 1 /* more fragments */) || frag_offset != 0) {
 		// TODO: handle IP fragmentation
 		return;
 	}
