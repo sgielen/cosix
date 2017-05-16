@@ -396,7 +396,8 @@ void client::run() {
 
 			if(local_port == 0) {
 				// TODO: ensure port is unused
-				local_port = rand() % UINT16_MAX;
+				// IANA ephemeral ports range
+				local_port = 49152 + rand() % (65535 - 49152);
 			}
 			if(!peer_ip.empty() && (local_ip.empty() || local_ip == std::string(4, 0))) {
 				// Find what interface we can use to reach the destination
