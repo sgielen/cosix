@@ -527,13 +527,6 @@ void handle_rawsock_frame(uint8_t *frame, size_t size) {
 		return;
 	}
 
-	if(ip_length != total_length) {
-		dprintf(stdout, "Packet contains more than just header and payload, since it is %d "
-			"bytes, the IP header length is %d and the total IP length is %d\n",
-			uint32_t(ip_length), header_length, total_length);
-		// continue anyway
-	}
-
 	const uint8_t IPV4_FLAG_MORE_FRAGMENTS = 2;
 
 	uint8_t flags = packet[6] >> 5;
