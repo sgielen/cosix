@@ -132,7 +132,7 @@ void arp::add_entry(std::shared_ptr<interface> iface, std::string ip, std::strin
 	// find existing entry for this IP
 	std::lock_guard<std::mutex> lock(table_mutex);
 	auto now = monotime();
-	for(auto it = arp_table.begin(); it != arp_table.end(); ++it) {
+	for(auto it = arp_table.begin(); it != arp_table.end();) {
 		if(it->hwtype == iface->get_hwtype()
 		&& memcmp(it->ip, ip.c_str(), sizeof(it->ip)) == 0
 		&& it->iface.lock() == iface)
@@ -166,14 +166,14 @@ void arp::add_entry(std::shared_ptr<interface> iface, std::string ip, std::strin
 
 void arp::handle_arp_frame(std::shared_ptr<interface> iface, const char *frame, size_t framelen, size_t arp_offset)
 {
-	if(arp_offset + sizeof(arp_frame_header) >= framelen) {
+	if(arp_offset + sizeof(arp_frame_header) > framelen) {
 		// arp packet does not fit, drop frame
 		return;
 	}
 	auto *arp_hdr = reinterpret_cast<const arp_frame_header*>(frame + arp_offset);
 
-	size_t arp_address_length = 2 * (arp_hdr->hlen + arp_hdr->plen);
-	if(arp_offset + sizeof(arp_frame_header) + arp_address_length >= framelen) {
+	size_t arp_addresses_length = 2 * (arp_hdr->hlen + arp_hdr->plen);
+	if(arp_offset + sizeof(arp_frame_header) + arp_addresses_length > framelen) {
 		// arp addresses do not fit, drop frame
 		return;
 	}
