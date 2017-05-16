@@ -353,8 +353,9 @@ void program_main(const argdata_t *) {
 	}
 
 	start_networked_binary("udptest");
+	start_networked_binary("tcptest");
 
-	// sleep for a bit after udptest
+	// sleep for a bit after networking tests
 	{
 		struct timespec ts = {.tv_sec = 5, .tv_nsec = 0};
 		clock_nanosleep(CLOCK_MONOTONIC, 0, &ts);

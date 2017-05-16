@@ -6,6 +6,7 @@
 #include "interface.hpp"
 #include "util.hpp"
 #include "udp_socket.hpp"
+#include "tcp_socket.hpp"
 #include "ip.hpp"
 #include "routing_table.hpp"
 
@@ -370,17 +371,17 @@ void client::run() {
 			if(!success) {
 				return;
 			}
-		} else if(command == "udpsock") {
+		} else if(command == "udpsock" || command == "tcpsock") {
 			if(bind.empty() && connect.empty()) {
-				if(!send_error("Need bind and/or connect parameters to create udpsock")) {
+				if(!send_error("Need bind and/or connect parameters to create udp/tcp socket")) {
 					return;
 				}
 				continue;
 			}
 
-			std::string local_ip(4, 0); /* listen anywhere */
+			std::string local_ip(4, 0);
 			uint16_t local_port = 0;
-			std::string peer_ip; /* accept from anywhere, don't send */
+			std::string peer_ip;
 			uint16_t peer_port = 0;
 
 			if(!bind.empty()) {
@@ -427,9 +428,15 @@ void client::run() {
 				continue;
 			}
 
-			std::shared_ptr<ip_socket> socket = std::make_shared<udp_socket>(local_ip, local_port, peer_ip, peer_port, 0, rev_pseu.first);
+			std::shared_ptr<ip_socket> socket;
+			if(command == "udpsock") {
+				socket = std::make_shared<udp_socket>(local_ip, local_port, peer_ip, peer_port, 0, rev_pseu.first);
+			} else {
+				socket = std::make_shared<tcp_socket>(local_ip, local_port, peer_ip, peer_port, 0, rev_pseu.first);
+			}
+			// TODO: return EADDRINUSE if this socket is bound uniquely and something is already
+			// bound to this IP:port combination (or 0.0.0.0:port)
 			auto res = get_ip().register_socket(socket);
-			socket->start();
 
 			if(res != 0) {
 				if(!send_error("Failed to register socket")) {
@@ -437,6 +444,16 @@ void client::run() {
 				}
 				continue;
 			}
+
+			res = socket->establish();
+			if(res != 0) {
+				if(!send_error("Failed to establish connection")) {
+					return;
+				}
+				continue;
+			}
+
+			socket->start();
 
 			argdata_t *keys[] = {argdata_create_str_c("fd")};
 			argdata_t *values[] = {argdata_create_fd(rev_pseu.second)};

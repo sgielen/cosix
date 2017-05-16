@@ -1,5 +1,6 @@
 #include "ip_socket.hpp"
 #include <thread>
+#include <cassert>
 
 using namespace networkd;
 
@@ -20,6 +21,10 @@ ip_socket::~ip_socket()
 
 void ip_socket::start()
 {
+	// only root pseudo FD's may start a listening thread, otherwise multiple
+	// threads are listening on a single reverse FD
+	assert(pseudofd == 0);
+
 	auto that = shared_from_this();
 	std::thread thr([that](){
 		that->run();
