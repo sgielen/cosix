@@ -87,7 +87,7 @@ void udp_socket::pwrite(pseudofd_t p, off_t o, const char *msg, size_t len)
 	ip_hdr.version = 4;
 	ip_hdr.tos = 0;
 	ip_hdr.total_len = htons(sizeof(ip_hdr) + sizeof(udp_hdr) + len);
-	ip_hdr.ident = 0;
+	arc4random_buf(&ip_hdr.ident, sizeof(ip_hdr.ident));
 	ip_hdr.frag_offset = 0;
 	ip_hdr.flags = 0;
 	ip_hdr.ttl = 0xff;
