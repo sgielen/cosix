@@ -2,11 +2,12 @@ CloudOS
 -------
 
 This is a prototype kernel that is bootable by qemu. Its eventual purpose is to
-run CloudABI[0] binaries, including the ability to suspend, freeze, serialize,
-deserialize, thaw and resume CloudABI binaries. However, it's still far from
-that goal.
+run CloudABI[0][1] binaries, including the ability to suspend, freeze,
+serialize, deserialize, thaw and resume CloudABI binaries. However, it's still
+far from that goal.
 
 [0] https://www.bsdcan.org/2015/schedule/track/Security/524.en.html
+[1] http://nuxi.nl/cloudabi
 
 To run the tests, compile it with a native (non-cross) compiler:
 
@@ -35,25 +36,13 @@ build:
     -DCMAKE_TOOLCHAIN_FILE=../cmake/Toolchain-i686-elf.cmake ..
   make
 
-There is a 'boot' target that will run the kernel inside qemu:
+There are various targets to build or run the kernel in various ways:
 
-  make boot
-
-You can also boot the kernel in Bochs by finding a Grub 0.96 stage1 + stage2
-(Grub 0.97 did not work for me), then running:
-
-  dd if=/dev/zero of=pad bs=1 count=750
-  cat stage1 stage2 pad build/cloudkernel >floppy.img
-  cat <<EOF >bochsrc.txt
-  boot: floppy
-  floppya: 1_44="floppy.img", status=inserted
-  EOF
-  bochs
-
-Inside bochs, run "c" to start booting, then in GRUB, run:
-
-  kernel 200+200
-  boot
+  boot      - run inside qemu
+  fastboot  - run inside qemu, don't build first
+  gdbboot   - run inside qemu with -S -s, i.e. wait for debugger to attach
+  iso       - build an ISO file using mkisofs/genisoimage/xorriso
+  isoboot   - boot ISO using qemu
 
 Good luck and have fun!
 

@@ -49,21 +49,23 @@ if(BAREMETAL_ENABLED)
 	set_target_properties(cloudkernel PROPERTIES LINK_DEPENDS "${CMAKE_SOURCE_DIR}/linker.ld")
 	set_target_properties(cloudkernel PROPERTIES LINK_FLAGS "-T ${CMAKE_SOURCE_DIR}/linker.ld")
 
-	set(QEMU_ARGS -kernel cloudkernel -m 1024
+	set(QEMU_ARGS -m 1024
 		-net nic,model=virtio -net dump,file=dump.pcap -net user
 		-no-reboot -no-shutdown -d int -d cpu_reset -d guest_errors
 		-serial file:kernel.log)
 
 	add_custom_target(boot
-		COMMAND qemu-system-i386 ${QEMU_ARGS}
+		COMMAND qemu-system-i386 -kernel cloudkernel ${QEMU_ARGS}
 		DEPENDS cloudkernel
 	)
 	add_custom_target(gdbboot
-		COMMAND qemu-system-i386 ${QEMU_ARGS} -watchdog-action debug -S -s
+		COMMAND qemu-system-i386 -kernel cloudkernel ${QEMU_ARGS} -watchdog-action debug -S -s
 		DEPENDS cloudkernel
 	)
 
 	add_custom_target(fastboot
-		COMMAND qemu-system-i386 ${QEMU_ARGS}
+		COMMAND qemu-system-i386 -kernel cloudkernel ${QEMU_ARGS}
 	)
 endif()
+
+add_subdirectory(misc)
