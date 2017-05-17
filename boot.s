@@ -84,6 +84,8 @@ higher_half:
 	movl $0, _boot_page_directory
 
 	movl $stack_top, %esp
+	# Mark end of call stack for unwinding
+	movl $0, %ebp
 
 	# We expect a Multiboot boot, where %eax contains the Multiboot magic
 	# and %ebx a pointer to a struct with hardware information in physical
