@@ -13,9 +13,41 @@ struct pci_driver : public driver {
 };
 
 /**
+ * This device is a device beneath a PCI bus.
+ */
+struct pci_device : virtual device {
+	pci_device(pci_bus *bus, uint8_t dev);
+
+	inline pci_bus *get_pci_bus() { return bus; }
+	inline uint8_t get_pci_dev() { return dev; }
+
+	uint16_t get_device_id();
+	uint16_t get_vendor_id();
+	uint16_t get_subsystem_id();
+	uint32_t get_bar0();
+
+	void write8(uint16_t offset, uint8_t value);
+	void write16(uint16_t offset, uint16_t value);
+	void write32(uint16_t offset, uint32_t value);
+	uint8_t read8(uint16_t offset);
+	uint16_t read16(uint16_t offset);
+	uint32_t read32(uint16_t offset);
+
+private:
+	void init_pci_device();
+
+	pci_bus *bus = nullptr;
+	uint8_t dev = 0;
+
+	// 1 = IO, 2 = Mem
+	uint8_t bar_type = 0;
+	uint64_t base_address = 0;
+};
+
+/**
  * This device represents an unclaimed PCI device.
  */
-struct pci_unused_device : public device {
+struct pci_unused_device : public pci_device {
 	pci_unused_device(pci_bus *bus, uint8_t dev);
 	~pci_unused_device() override;
 
@@ -24,8 +56,6 @@ struct pci_unused_device : public device {
 
 private:
 	Blk descr;
-	pci_bus *bus = nullptr;
-	uint8_t dev = 0;
 };
 
 /**

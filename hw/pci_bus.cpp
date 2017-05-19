@@ -95,10 +95,120 @@ uint32_t pci_bus::read_pci_config(uint8_t bus, uint8_t device,
 	return inl(CONFIG_DATA);
 }
 
+pci_device::pci_device(pci_bus *b, uint8_t d)
+: bus(b)
+, dev(d)
+{}
+
+template <typename T>
+void bar_write(uint8_t bar_type, uint64_t base_address, uint16_t offset, T value) {
+	assert(bar_type == 1 || bar_type == 2);
+	assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4);
+	if(bar_type == 1) {
+		// IO
+		switch(sizeof(T)) {
+		case 1: outb(base_address + offset, value); break;
+		case 2: outw(base_address + offset, value); break;
+		case 4: outl(base_address + offset, value); break;
+		default: assert(false);
+		}
+	} else {
+		// Memory
+		uint8_t *p = reinterpret_cast<uint8_t*>(base_address) + offset;
+		*reinterpret_cast<T*>(p) = value;
+	}
+}
+
+template <typename T>
+T bar_read(uint8_t bar_type, uint64_t base_address, uint16_t offset) {
+	assert(bar_type == 1 || bar_type == 2);
+	assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4);
+	if(bar_type == 1) {
+		// IO
+		switch(sizeof(T)) {
+		case 1: return inb(base_address + offset); break;
+		case 2: return inw(base_address + offset); break;
+		case 4: return inl(base_address + offset); break;
+		default: assert(false);
+		}
+	} else {
+		// Memory
+		uint8_t *p = reinterpret_cast<uint8_t*>(base_address) + offset;
+		return *reinterpret_cast<T*>(p);
+	}
+}
+
+void pci_device::write8(uint16_t offset, uint8_t value)
+{
+	init_pci_device();
+	bar_write(bar_type, base_address, offset, value);
+}
+
+void pci_device::write16(uint16_t offset, uint16_t value)
+{
+	init_pci_device();
+	bar_write(bar_type, base_address, offset, value);
+}
+
+void pci_device::write32(uint16_t offset, uint32_t value)
+{
+	init_pci_device();
+	bar_write(bar_type, base_address, offset, value);
+}
+
+uint8_t pci_device::read8(uint16_t offset)
+{
+	init_pci_device();
+	return bar_read<uint8_t>(bar_type, base_address, offset);
+}
+
+uint16_t pci_device::read16(uint16_t offset)
+{
+	init_pci_device();
+	return bar_read<uint16_t>(bar_type, base_address, offset);
+}
+
+uint32_t pci_device::read32(uint16_t offset)
+{
+	init_pci_device();
+	return bar_read<uint32_t>(bar_type, base_address, offset);
+}
+
+void pci_device::init_pci_device()
+{
+	if(bar_type != 0) {
+		return;
+	}
+
+	uint32_t bar0 = bus->get_bar0(dev);
+	if((bar0 & 0x01) != 1) {
+		kernel_panic("Memory mapped BAR types are unsupported.");
+		// TODO: the base address is a physical memory address. Set
+		// base_address to the mapping in virtual memory.
+	}
+	bar_type = 1;
+	base_address = bar0 & 0xfffffffc;
+}
+
+uint16_t pci_device::get_device_id() {
+	return bus->get_device_id(dev);
+}
+
+uint16_t pci_device::get_vendor_id() {
+	return bus->get_vendor_id(dev);
+}
+
+uint16_t pci_device::get_subsystem_id() {
+	return bus->get_subsystem_id(dev);
+}
+
+uint32_t pci_device::get_bar0() {
+	return bus->get_bar0(dev);
+}
+
 pci_unused_device::pci_unused_device(pci_bus *b, uint8_t d)
 : device(b)
-, bus(b)
-, dev(d)
+, pci_device(b, d)
 {}
 
 pci_unused_device::~pci_unused_device()
@@ -118,8 +228,8 @@ cloudabi_errno_t pci_unused_device::init()
 	strncpy(d, "Unused PCI device ", descr.size);
 
 	char buf[8];
-	strncat(d, uitoa_s(bus->get_vendor_id(dev), buf, sizeof(buf), 16), descr.size - strlen(d) - 1);
+	strncat(d, uitoa_s(get_vendor_id(), buf, sizeof(buf), 16), descr.size - strlen(d) - 1);
 	strncat(d, ":", descr.size - strlen(d) - 1);
-	strncat(d, uitoa_s(bus->get_device_id(dev), buf, sizeof(buf), 16), descr.size - strlen(d) - 1);
+	strncat(d, uitoa_s(get_device_id(), buf, sizeof(buf), 16), descr.size - strlen(d) - 1);
 	return 0;
 }

@@ -7,12 +7,17 @@
 
 using namespace cloudos;
 
-ethernet_device::ethernet_device(device *p)
-: device(p)
-, interface(nullptr)
+ethernet_device::ethernet_device()
+: interface(nullptr)
 {
-	interface = get_allocator()->allocate<ethernet_interface>();
-	new(interface) ethernet_interface(this);
+	interface = allocate<ethernet_interface>(this);
+}
+
+ethernet_device::~ethernet_device()
+{
+	kernel_panic("TODO: unregister interface");
+	deallocate(interface);
+	interface = nullptr;
 }
 
 cloudabi_errno_t ethernet_device::init()

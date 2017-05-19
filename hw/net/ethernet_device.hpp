@@ -8,9 +8,10 @@ namespace cloudos {
 
 struct ethernet_interface;
 
-struct ethernet_device : public device
+struct ethernet_device : virtual device
 {
-	ethernet_device(device *parent);
+	ethernet_device();
+	virtual ~ethernet_device() override;
 
 	virtual cloudabi_errno_t init() override final;
 

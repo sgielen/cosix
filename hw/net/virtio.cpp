@@ -1,5 +1,4 @@
 #include "hw/net/virtio.hpp"
-#include "hw/cpu_io.hpp"
 #include "global.hpp"
 #include "memory/allocator.hpp"
 #include "memory/page_allocator.hpp"
@@ -153,9 +152,8 @@ const char *virtio_net_device::description()
 }
 
 virtio_net_device::virtio_net_device(pci_bus *parent, int d)
-: ethernet_device(parent)
-, bus(parent)
-, bus_device(d)
+: device(parent)
+, pci_device(parent, d)
 , last_readq_used_idx(0)
 , last_writeq_idx(0)
 , readq(nullptr)
@@ -176,69 +174,54 @@ cloudabi_errno_t virtio_net_device::add_buffer_to_avail(virtq *queue, int buffer
 	// memory barrier
 	asm volatile ("": : :"memory");
 
-	uint32_t bar0 = bus->get_bar0(bus_device);
-	if((bar0 & 0x01) != 1) {
-		get_vga_stream() << "Not I/O space BAR type, skipping.\n";
-		return ENOTSUP;
-	}
-	bar0 = bar0 & 0xfffffffc;
-
-	uint32_t const queue_notify = bar0 + 0x10;
-	outw(queue_notify, queue->get_queue_select());
+	write32(0x10, queue->get_queue_select());
 
 	return 0;
 }
 
 cloudabi_errno_t virtio_net_device::eth_init()
 {
-	uint32_t bar0 = bus->get_bar0(bus_device);
-	if((bar0 & 0x01) != 1) {
-		get_vga_stream() << "Not I/O space BAR type, skipping.\n";
-		return ENOTSUP;
-	}
-	bar0 = bar0 & 0xfffffffc;
 	//uint8_t int_info = read_pci_config(bus, device, 0, 0x3c) & 0xff;
 	//get_vga_stream() << "Will use IRQ " << int_info << "\n";
-	uint32_t mem_base = bar0;
-	uint32_t const device_features = mem_base + 0x00; // 4 bytes
-	uint32_t const driver_features = mem_base + 0x04; // 4 bytes
-	uint32_t const queue_address = mem_base + 0x08; // 4 bytes
-	uint32_t const queue_size = mem_base + 0x0c; // 2 bytes
-	uint32_t const queue_select = mem_base + 0x0e; // 2 bytes
-	uint32_t const device_status = mem_base + 0x12; // 1 byte
+	uint32_t const device_features = 0x00; // 4 bytes
+	uint32_t const driver_features = 0x04; // 4 bytes
+	uint32_t const queue_address = 0x08; // 4 bytes
+	uint32_t const queue_size = 0x0c; // 2 bytes
+	uint32_t const queue_select = 0x0e; // 2 bytes
+	uint32_t const device_status = 0x12; // 1 byte
 
 	// acknowledge device
-	outb(device_status, 0); /* reset device */
-	outb(device_status, 1); /* device acknowledged */
-	outb(device_status, 3); /* driver available */
+	write8(device_status, 0); /* reset device */
+	write8(device_status, 1); /* device acknowledged */
+	write8(device_status, 3); /* driver available */
 
-	uint64_t sup_features = inl(device_features);
-	sup_features |= uint64_t(inl(device_features + 1)) << 32;
+	uint64_t sup_features = read32(device_features);
+	sup_features |= uint64_t(read32(device_features + 1)) << 32;
 	get_vga_stream() << "Device features: 0x" << hex << sup_features << dec << "\n";
 
 	if((sup_features & VIRTIO_NET_F_MAC) == 0) {
 		// TODO: if the VIRTIO_NET_F_MAC feature is not in
 		// device_features, we must randomly generate our own MAC
 		get_vga_stream() << "MAC setting not supported. Skipping device.\n";
-		outb(device_status, 128); /* driver failed */
+		write8(device_status, 128); /* driver failed */
 		return ENOTSUP;
 	}
 
 	if((sup_features & VIRTIO_NET_F_STATUS) == 0) {
 		get_vga_stream() << "Device status bit not supported. Skipping device.\n";
-		outb(device_status, 128); /* driver failed */
+		write8(device_status, 128); /* driver failed */
 		return ENOTSUP;
 	}
 
 	if((sup_features & VIRTIO_NET_F_MRG_RXBUF) == 0) {
 		get_vga_stream() << "Merging received buffers not supported. Skipping device.\n";
-		outb(device_status, 128); /* driver failed */
+		write8(device_status, 128); /* driver failed */
 		return ENOTSUP;
 	}
 
 	if((sup_features & VIRTIO_F_NOTIFY_ON_EMPTY) == 0) {
 		get_vga_stream() << "Notify on empty not supported. Skipping device.\n";
-		outb(device_status, 128); /* driver failed */
+		write8(device_status, 128); /* driver failed */
 		return ENOTSUP;
 	}
 
@@ -247,24 +230,24 @@ cloudabi_errno_t virtio_net_device::eth_init()
 			| VIRTIO_NET_F_CSUM
 			| VIRTIO_NET_F_MRG_RXBUF
 			| VIRTIO_F_NOTIFY_ON_EMPTY);
-	outl(driver_features, drv_features & 0xffffffff);
-	outl(driver_features + 1, drv_features >> 32);
-	get_vga_stream() << "Driver features: 0x" << hex << inl(driver_features) << dec << "\n";
+	write32(driver_features, drv_features & 0xffffffff);
+	write32(driver_features + 1, drv_features >> 32);
+	get_vga_stream() << "Driver features: 0x" << hex << read32(driver_features) << dec << "\n";
 
-	outb(device_status, 11); /* features OK */
+	write8(device_status, 11); /* features OK */
 
-	mac[0] = inb(mem_base + 0x14);
-	mac[1] = inb(mem_base + 0x15);
-	mac[2] = inb(mem_base + 0x16);
-	mac[3] = inb(mem_base + 0x17);
-	mac[4] = inb(mem_base + 0x18);
-	mac[5] = inb(mem_base + 0x19);
+	mac[0] = read8(0x14);
+	mac[1] = read8(0x15);
+	mac[2] = read8(0x16);
+	mac[3] = read8(0x17);
+	mac[4] = read8(0x18);
+	mac[5] = read8(0x19);
 
 	get_vga_stream() << "MAC address: " << hex << mac[0] << ":" << mac[1] << ":" << mac[2] << ":" << mac[3] << ":" << mac[4] << ":" << mac[5] << dec << "\n";
 
 	for(int queue = 0; queue < 2; ++queue) {
-		outw(queue_select, queue);
-		auto number_of_entries = inw(queue_size);
+		write16(queue_select, queue);
+		auto number_of_entries = read16(queue_size);
 
 		virtq *q = get_allocator()->allocate<virtq>();
 		new(q) virtq(queue, number_of_entries);
@@ -274,7 +257,7 @@ cloudabi_errno_t virtio_net_device::eth_init()
 			get_vga_stream() << "Failed to allocate descriptor table aligned to a page\n";
 			return ENOMEM;
 		}
-		outl(queue_address, virtq_addr_phys >> 12);
+		write32(queue_address, virtq_addr_phys >> 12);
 		(queue == 0 ? readq : writeq) = q;
 	}
 
@@ -307,7 +290,7 @@ cloudabi_errno_t virtio_net_device::eth_init()
 		}
 	}
 
-	outb(device_status, 15); /* driver ready */
+	write8(device_status, 15); /* driver ready */
 	return 0;
 }
 

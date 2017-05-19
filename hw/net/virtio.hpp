@@ -16,7 +16,7 @@ typedef linked_list<address_mapping*> address_mapping_list;
 
 struct virtq;
 
-struct virtio_net_device : public ethernet_device {
+struct virtio_net_device : public ethernet_device, public pci_device {
 	virtio_net_device(pci_bus *parent, int bus_device);
 
 	const char *description() override;
@@ -33,8 +33,6 @@ private:
 	cloudabi_errno_t check_new_packets();
 
 	uint8_t mac[6];
-	pci_bus *bus;
-	int bus_device;
 	int last_readq_used_idx;
 	int last_writeq_idx;
 	uint64_t drv_features = 0;
