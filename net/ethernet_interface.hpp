@@ -14,7 +14,7 @@ struct ethernet_interface : public interface
 	ethernet_interface(ethernet_device *device);
 	virtual ~ethernet_interface() override {}
 
-	cloudabi_errno_t get_mac_address(char mac[6]) {
+	cloudabi_errno_t get_mac_address(uint8_t mac[6]) {
 		return device->get_mac_address(mac);
 	}
 

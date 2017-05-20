@@ -23,7 +23,7 @@ struct virtio_net_device : public ethernet_device, public pci_device {
 
 	cloudabi_errno_t eth_init() override;
 
-	cloudabi_errno_t get_mac_address(char mac[6]) override;
+	cloudabi_errno_t get_mac_address(uint8_t mac[6]) override;
 	cloudabi_errno_t send_ethernet_frame(uint8_t *frame, size_t length) override;
 
 	void timer_event() override;

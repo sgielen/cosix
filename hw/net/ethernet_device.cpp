@@ -32,7 +32,7 @@ cloudabi_errno_t ethernet_device::init()
 		return res;
 	}
 
-	char my_mac[6];
+	uint8_t my_mac[6];
 	res = get_mac_address(my_mac);
 	if(res != 0) {
 		return res;
@@ -44,7 +44,7 @@ cloudabi_errno_t ethernet_device::init()
 
 cloudabi_errno_t ethernet_device::ethernet_frame_received(uint8_t *frame, size_t length)
 {
-	char my_mac[6];
+	uint8_t my_mac[6];
 	auto res = get_mac_address(my_mac);
 	if(res != 0) {
 		return res;

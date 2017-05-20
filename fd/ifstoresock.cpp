@@ -213,7 +213,7 @@ void ifstoresock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *o
 	if(strcmp(command, "MAC") == 0) {
 		// Return MAC address of this interface
 		size_t mac_size = 0;
-		const char *mac = iface->get_mac(&mac_size);
+		auto const *mac = iface->get_mac(&mac_size);
 		for(uint8_t i = 0; i < mac_size; ++i) {
 			if(i > 0) {
 				strlcat(response, ":", sizeof(response));

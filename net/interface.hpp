@@ -55,7 +55,7 @@ struct interface {
 	 * caller. The value may become invalid or dangling after subsequent
 	 * calls to methods of this interface.
 	 */
-	inline const char *get_mac(size_t *size) {
+	inline const uint8_t *get_mac(size_t *size) {
 		*size = mac_size;
 		return mac;
 	}
@@ -80,7 +80,7 @@ protected:
 	/**
 	 * This method can be called to set the MAC address.
 	 */
-	void set_mac(const char *m, size_t s) {
+	void set_mac(const uint8_t *m, size_t s) {
 		mac_size = s;
 		if(mac_size > sizeof(mac)) {
 			mac_size = sizeof(mac);
@@ -96,7 +96,7 @@ private:
 	friend struct interface_store;
 	hwtype_t hwtype;
 	char name[8];
-	char mac[16];
+	uint8_t mac[16];
 	size_t mac_size = 0;
 	rawsock_list *subscribed_sockets = nullptr;
 };

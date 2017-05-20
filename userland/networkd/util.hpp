@@ -66,7 +66,7 @@ inline std::string mac_ntop(std::string mac) {
 			res += ':';
 		}
 		char num[4];
-		snprintf(num, sizeof(num), "%02x", byte);
+		snprintf(num, sizeof(num), "%02hhx", byte);
 		res += num;
 	}
 	if(res.empty()) {
@@ -86,7 +86,7 @@ inline std::string mac_pton(std::string mac) {
 
 		unsigned int w;
 		sscanf(word.c_str(), "%02x", &w);
-		res.push_back(static_cast<char>(w));
+		res.push_back(static_cast<uint8_t>(w));
 
 		// skip optional delimiter
 		if(offset < mac.length() && (mac[offset] == ':' || mac[offset] == '-')) {

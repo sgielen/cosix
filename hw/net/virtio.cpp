@@ -331,7 +331,7 @@ cloudabi_errno_t virtio_net_device::check_new_packets() {
 	return 0;
 }
 
-cloudabi_errno_t virtio_net_device::get_mac_address(char m[6]) {
+cloudabi_errno_t virtio_net_device::get_mac_address(uint8_t m[6]) {
 	if(readq == nullptr) {
 		return EINVAL;
 	}
