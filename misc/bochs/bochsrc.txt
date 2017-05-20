@@ -1,0 +1,7 @@
+boot: cdrom
+ata0-master: type=cdrom, path=cosix.iso, status=inserted
+memory: guest=1024, host=1024
+magic_break: enabled=1
+cpu: reset_on_triple_fault=0
+e1000: enabled=1, mac=52:54:00:ff:fe:fc, ethmod=slirp
+debug: action=ignore, e1000=report

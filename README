@@ -43,6 +43,7 @@ There are various targets to build or run the kernel in various ways:
   gdbboot   - run inside qemu with -S -s, i.e. wait for debugger to attach
   iso       - build an ISO file using mkisofs/genisoimage/xorriso
   isoboot   - boot ISO using qemu
+  bochsboot - run inside bochs
 
 Good luck and have fun!
 
