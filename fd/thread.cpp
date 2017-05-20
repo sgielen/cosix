@@ -85,6 +85,11 @@ thread::thread(process_fd *p, void *stack_bottom, size_t stack_len, void *auxv_a
 	memcpy(kernel_stack, &initial_kernel_stack, initial_kernel_stack_size);
 
 	esp = kernel_stack;
+
+	/* initialize SSE FXRSTOR region */
+	// TODO: instead of doing this every time, do it once and mask
+	// off only the important bits
+	save_sse_state();
 }
 
 thread::thread(process_fd *p, shared_ptr<thread> otherthread)
