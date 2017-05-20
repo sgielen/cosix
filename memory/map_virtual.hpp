@@ -27,6 +27,9 @@ struct map_virtual {
 	Blk allocate_contiguous_phys(size_t bytes);
 	Blk allocate(size_t bytes);
 	void deallocate(Blk b);
+
+	Blk map_pages_only(void *physaddr, size_t bytes);
+	void unmap_pages_only(Blk alloc);
 	void unmap_page_only(void *logical_address);
 
 	Blk allocate_aligned(size_t s, size_t alignment) {

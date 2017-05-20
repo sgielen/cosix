@@ -17,6 +17,7 @@ struct pci_driver : public driver {
  */
 struct pci_device : virtual device {
 	pci_device(pci_bus *bus, uint8_t dev);
+	~pci_device() override;
 
 	inline pci_bus *get_pci_bus() { return bus; }
 	inline uint8_t get_pci_dev() { return dev; }
@@ -24,7 +25,8 @@ struct pci_device : virtual device {
 	uint16_t get_device_id();
 	uint16_t get_vendor_id();
 	uint16_t get_subsystem_id();
-	uint32_t get_bar0();
+	uint32_t get_pci_config(uint8_t function, uint8_t reg);
+	void set_pci_config(uint8_t function, uint8_t reg, uint32_t value);
 
 	void write8(uint16_t offset, uint8_t value);
 	void write16(uint16_t offset, uint16_t value);
@@ -42,6 +44,7 @@ private:
 	// 1 = IO, 2 = Mem
 	uint8_t bar_type = 0;
 	uint64_t base_address = 0;
+	Blk mapping;
 };
 
 /**
@@ -70,11 +73,14 @@ struct pci_bus : public device {
 	uint16_t get_device_id(uint8_t device);
 	uint16_t get_vendor_id(uint8_t device);
 	uint16_t get_subsystem_id(uint8_t device);
-	uint32_t get_bar0(uint8_t device);
+	uint32_t get_pci_config(uint8_t device, uint8_t function, uint8_t reg);
+	void set_pci_config(uint8_t device, uint8_t function, uint8_t reg, uint32_t value);
 
 private:
 	static uint32_t read_pci_config(uint8_t bus, uint8_t device,
 		uint8_t function, uint8_t reg);
+	static void write_pci_config(uint8_t bus, uint8_t device,
+		uint8_t function, uint8_t reg, uint32_t value);
 };
 
 }

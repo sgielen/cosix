@@ -6,6 +6,10 @@
 
 using namespace cloudos;
 
+#define PCI_CONFIG_ADDRESS 0xcf8
+#define PCI_CONFIG_DATA 0xcfc
+#define PCI_CONFIG_BAR0 0x10
+
 const char *pci_driver::description() {
 	return "PCI root bus driver";
 }
@@ -73,32 +77,51 @@ uint16_t pci_bus::get_subsystem_id(uint8_t device) {
 	return subsystem_info >> 16;
 }
 
-uint32_t pci_bus::get_bar0(uint8_t device) {
+uint32_t pci_bus::get_pci_config(uint8_t device, uint8_t function, uint8_t reg)
+{
 	const uint8_t bus = 0;
-	return read_pci_config(bus, device, 0, 0x10);
+	return read_pci_config(bus, device, function, reg);
 }
 
-uint32_t pci_bus::read_pci_config(uint8_t bus, uint8_t device,
-	uint8_t function, uint8_t reg)
+void pci_bus::set_pci_config(uint8_t device, uint8_t function, uint8_t reg, uint32_t value)
 {
-	const int CONFIG_ADDRESS = 0xCF8;
-	const int CONFIG_DATA = 0xCFC;
+	const uint8_t bus = 0;
+	write_pci_config(bus, device, function, reg, value);
+}
 
+static uint32_t pci_param_address(uint8_t bus, uint8_t device, uint8_t function, uint8_t reg) {
 	uint32_t address =
 		uint32_t(1)               << 31 |
 		uint32_t(bus)             << 16 |
 		uint32_t(device & 0x1f)   << 11 |
 		uint32_t(function & 0x03) <<  8 |
 		uint32_t(reg & 0xfc); // 32-bit align read
-	outl(CONFIG_ADDRESS, address);
+	return address;
+}
 
-	return inl(CONFIG_DATA);
+uint32_t pci_bus::read_pci_config(uint8_t bus, uint8_t device,
+	uint8_t function, uint8_t reg)
+{
+	outl(PCI_CONFIG_ADDRESS, pci_param_address(bus, device, function, reg));
+	return inl(PCI_CONFIG_DATA);
+}
+
+void pci_bus::write_pci_config(uint8_t bus, uint8_t device,
+	uint8_t function, uint8_t reg, uint32_t value)
+{
+	outl(PCI_CONFIG_ADDRESS, pci_param_address(bus, device, function, reg));
+	outl(PCI_CONFIG_DATA, value);
 }
 
 pci_device::pci_device(pci_bus *b, uint8_t d)
 : bus(b)
 , dev(d)
 {}
+
+pci_device::~pci_device()
+{
+	get_map_virtual()->unmap_pages_only(mapping);
+}
 
 template <typename T>
 void bar_write(uint8_t bar_type, uint64_t base_address, uint16_t offset, T value) {
@@ -180,14 +203,29 @@ void pci_device::init_pci_device()
 		return;
 	}
 
-	uint32_t bar0 = bus->get_bar0(dev);
-	if((bar0 & 0x01) != 1) {
-		kernel_panic("Memory mapped BAR types are unsupported.");
-		// TODO: the base address is a physical memory address. Set
-		// base_address to the mapping in virtual memory.
+	uint32_t bar0 = get_pci_config(0, PCI_CONFIG_BAR0);
+	if((bar0 & 0x01) == 1) {
+		// I/O base address
+		bar_type = 1;
+		base_address = bar0 & 0xfffffffc;
+	} else {
+		// Memory base address
+		bar_type = 2;
+		uint8_t mem_type = bar0 & 0x6;
+		if(mem_type != 0) {
+			// 0 = 32-bits, 2 = 64-bits device, the other values
+			// are reserved. We only implement 32-bits.
+			kernel_panic("Unsupported memory bar type PCI device found");
+		}
+		void *phys_base = reinterpret_cast<void*>(bar0 & 0xfffffff0);
+		set_pci_config(0, PCI_CONFIG_BAR0, 0xffffffff);
+		uint32_t mem_size = get_pci_config(0, PCI_CONFIG_BAR0);
+		set_pci_config(0, PCI_CONFIG_BAR0, bar0);
+		mem_size = ~(mem_size & 0xfffffff0) + 1;
+
+		mapping = get_map_virtual()->map_pages_only(phys_base, mem_size);
+		base_address = reinterpret_cast<uint32_t>(mapping.ptr);
 	}
-	bar_type = 1;
-	base_address = bar0 & 0xfffffffc;
 }
 
 uint16_t pci_device::get_device_id() {
@@ -202,8 +240,12 @@ uint16_t pci_device::get_subsystem_id() {
 	return bus->get_subsystem_id(dev);
 }
 
-uint32_t pci_device::get_bar0() {
-	return bus->get_bar0(dev);
+uint32_t pci_device::get_pci_config(uint8_t function, uint8_t reg) {
+	return bus->get_pci_config(dev, function, reg);
+}
+
+void pci_device::set_pci_config(uint8_t function, uint8_t reg, uint32_t value) {
+	return bus->set_pci_config(dev, function, reg, value);
 }
 
 pci_unused_device::pci_unused_device(pci_bus *b, uint8_t d)

@@ -216,6 +216,43 @@ void map_virtual::deallocate(Blk b) {
 	}
 }
 
+Blk map_virtual::map_pages_only(void *physaddr, size_t bytes) {
+	assert(bytes % PAGE_SIZE == 0);
+	size_t num_pages = bytes / PAGE_SIZE;
+	size_t bit;
+	if(!vmem_bitmap.get_contiguous_free(num_pages, bit)) {
+		get_vga_stream() << "allocate() called, but there is no virtual address space left\n";
+		return {};
+	}
+
+	void *first_ptr = nullptr;
+	for(size_t i = 0; i < num_pages; ++i) {
+		size_t page = bit + i;
+		size_t table = page / PAGING_TABLE_SIZE;
+		size_t entrynum = page % PAGING_TABLE_SIZE;
+
+		assert(table < NUM_KERNEL_PAGE_TABLES);
+
+		uint32_t &entry = kernel_page_tables[table][entrynum];
+		assert(entry == 0);
+
+		entry = (reinterpret_cast<uint64_t>(physaddr) + i * PAGE_SIZE) | 0x03;
+		if(i == 0) {
+			table += KERNEL_PAGE_OFFSET;
+			first_ptr = reinterpret_cast<void*>(table * PAGING_TABLE_SIZE * PAGE_SIZE + entrynum * PAGE_SIZE);
+		}
+	}
+	return {first_ptr, bytes};
+}
+
+void map_virtual::unmap_pages_only(Blk alloc) {
+	assert(alloc.size % PAGE_SIZE == 0);
+	size_t num_pages = alloc.size / PAGE_SIZE;
+	for(size_t i = 0; i < num_pages; ++i) {
+		unmap_page_only(reinterpret_cast<uint8_t*>(alloc.ptr) + i * PAGE_SIZE);
+	}
+}
+
 void map_virtual::unmap_page_only(void *virtual_address) {
 	uint32_t addr = reinterpret_cast<uint32_t>(virtual_address);
 	uint16_t page_table_num = (addr >> 22) - KERNEL_PAGE_OFFSET;
