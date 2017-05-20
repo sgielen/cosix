@@ -165,7 +165,8 @@ void interrupt_handler::handle_irq(uint8_t irq) {
 	if(handler != 0) {
 		handler->handle_irq(irq);
 	} else {
-		get_vga_stream() << "Got unknown hardware interrupt " << irq << "\n";
+		get_vga_stream() << "Unknown kernel interrupt " << irq << "\n";
+		kernel_panic("Got unknown hardware interrupt.");
 	}
 }
 

@@ -2,6 +2,7 @@
 #include "x86_pit.hpp"
 #include "x86_kbd.hpp"
 #include "x86_serial.hpp"
+#include "x86_fpu.hpp"
 #include <memory/allocation.hpp>
 
 using namespace cloudos;
@@ -27,6 +28,8 @@ cloudabi_errno_t x86_pc::init() {
 	kbd->init();
 	auto *serial = allocate<x86_serial>(this);
 	serial->init();
+	auto *fpu = allocate<x86_fpu>(this);
+	fpu->init();
 	return 0;
 }
 
