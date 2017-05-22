@@ -11,7 +11,7 @@ struct ethernet_interface;
 struct ethernet_device : virtual device
 {
 	ethernet_device();
-	virtual ~ethernet_device() override;
+	~ethernet_device() override;
 
 	virtual cloudabi_errno_t init() override final;
 

@@ -10,6 +10,7 @@
 #include "hw/pci_bus.hpp"
 #include "hw/sse.hpp"
 #include "hw/net/virtio.hpp"
+#include "hw/net/intel_i217.hpp"
 #include "hw/arch/x86/x86.hpp"
 #include "net/loopback_interface.hpp"
 #include "net/interface_store.hpp"
@@ -179,6 +180,7 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	REGISTER_DRIVER(x86_driver);
 	REGISTER_DRIVER(pci_driver);
 	REGISTER_DRIVER(virtio_net_driver);
+	REGISTER_DRIVER(intel_i217_driver);
 
 	global.interface_store = get_allocator()->allocate<interface_store>();
 	new(global.interface_store) interface_store();

@@ -50,7 +50,7 @@ if(BAREMETAL_ENABLED)
 	set_target_properties(cloudkernel PROPERTIES LINK_FLAGS "-T ${CMAKE_SOURCE_DIR}/linker.ld")
 
 	set(QEMU_ARGS -m 1024
-		-net nic,model=virtio -net dump,file=dump.pcap -net user
+		-net nic,model=e1000 -net dump,file=dump.pcap -net user
 		-no-reboot -no-shutdown -d int -d cpu_reset -d guest_errors
 		-serial file:kernel.log)
 

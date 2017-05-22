@@ -18,8 +18,9 @@ add_library(hw
 	driver_store.hpp driver_store.cpp
 	device.hpp device.cpp
 	root_device.hpp root_device.cpp
-	net/virtio.hpp net/virtio.cpp
 	net/ethernet_device.hpp net/ethernet_device.cpp
+	net/virtio.hpp net/virtio.cpp
+	net/intel_i217.hpp net/intel_i217_flags.hpp net/intel_i217.cpp
 	arch/x86/x86.hpp arch/x86/x86.cpp
 	arch/x86/x86_pit.hpp arch/x86/x86_pit.cpp
 	arch/x86/x86_kbd.hpp arch/x86/x86_kbd.cpp
