@@ -127,6 +127,12 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	global.gdt = &gdt;
 	stream << "Global Descriptor Table loaded, segmentation is in effect\n";
 
+	interrupt_table interrupts;
+	interrupt_handler int_handler;
+	int_handler.setup(interrupts);
+	int_handler.reprogram_pic();
+	global.interrupt_handler = &int_handler;
+
 	scheduler sched;
 	global.scheduler = &sched;
 
@@ -158,12 +164,6 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 		}
 		global.init->add_initial_fds();
 	}
-
-	interrupt_table interrupts;
-	interrupt_handler int_handler;
-	int_handler.setup(interrupts);
-	int_handler.reprogram_pic();
-	global.interrupt_handler = &int_handler;
 
 	global.clock_store = allocate<clock_store>();
 
