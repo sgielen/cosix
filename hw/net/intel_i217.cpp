@@ -72,7 +72,6 @@ uint16_t intel_i217_device::eeprom_read(uint8_t offset)
 		uint32_t res = read32(REG_EEPROM);
 		if(res & (1 << 4)) {
 			return (res >> 16) & 0xffff;
-			break;
 		}
 	}
 }
@@ -161,10 +160,6 @@ cloudabi_errno_t intel_i217_device::eth_init()
 	tx_descs = reinterpret_cast<e1000_tx_desc*>(rx_descs + E1000_NUM_RX_DESC);
 	auto *rx_buffers_start = reinterpret_cast<uint8_t*>(tx_descs + E1000_NUM_TX_DESC);
 	auto *tx_buffers_start = rx_buffers_start + E1000_NUM_RX_DESC * buffer_size;
-
-	auto p = [&](void *x) {
-		return get_map_virtual()->to_physical_address(x);
-	};
 
 	assert(sizeof(rx_desc_bufs) / sizeof(rx_desc_bufs[0]) == E1000_NUM_RX_DESC);
 	for(size_t i = 0; i < E1000_NUM_RX_DESC; ++i) {

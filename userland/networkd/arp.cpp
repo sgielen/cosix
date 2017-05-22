@@ -3,7 +3,7 @@
 
 using namespace networkd;
 
-#define DEFAULT_ARP_VALIDITY 60 * 1000 * 1000 * 1000 /* 60 seconds */
+#define DEFAULT_ARP_VALIDITY 60ul * 1000 * 1000 * 1000 /* 60 seconds */
 #define ARP_REQUEST 1
 #define ARP_RESPONSE 2
 

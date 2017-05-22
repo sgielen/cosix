@@ -16,6 +16,6 @@ cloudabi_errno_t x86_fpu::init() {
 	return 0;
 }
 
-void x86_fpu::handle_irq(uint8_t irq) {
+void x86_fpu::handle_irq(uint8_t) {
 	/* ignore it */
 }

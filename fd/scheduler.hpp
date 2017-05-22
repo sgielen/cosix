@@ -16,7 +16,6 @@ struct scheduler {
 	[[noreturn]] void initial_yield();
 	[[noreturn]] void thread_final_yield();
 	void thread_yield();
-	void resume_running(interrupt_state_t *);
 
 	void thread_ready(shared_ptr<thread> thr);
 	void thread_exiting(shared_ptr<thread> thr);
