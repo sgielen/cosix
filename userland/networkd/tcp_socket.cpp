@@ -157,7 +157,7 @@ void tcp_socket::pwrite(pseudofd_t p, off_t o, const char *msg, size_t len)
 cloudabi_errno_t tcp_socket::establish() {
 	std::unique_lock<std::mutex> lock(wc_mtx);
 	if(status == sockstatus_t::LISTENING) {
-		// nothing to establish;
+		// nothing to establish
 		return 0;
 	}
 	assert(status == sockstatus_t::CONNECTING);
@@ -186,6 +186,8 @@ void tcp_socket::send_tcp_frame(bool syn, bool ack) {
 	tcp_hdr.acknum = htonl(send_ack_num);
 	if(syn) tcp_hdr.flag_syn = 1;
 	if(ack) tcp_hdr.flag_ack = 1;
+	// TODO: don't always set PSH on data, but when though?
+	if(!send_buffer.empty()) tcp_hdr.flag_psh = 1;
 	// TODO: use a proper growing window
 	tcp_hdr.window = htons(128);
 	tcp_hdr.data_off = sizeof(tcp_hdr) / 4;
@@ -208,9 +210,10 @@ void tcp_socket::send_tcp_frame(bool syn, bool ack) {
 	for(size_t i = 0; i < sizeof(tcp_hdr) / 2; ++i) {
 		short_sum += tcp_hdr_16[i];
 	}
-	for(size_t i = 0; i < send_buffer.size() / 2; ++i) {
+	size_t loops = send_buffer.size() / 2 + ((send_buffer.size() % 2) ? 1 : 0);
+	for(size_t i = 0; i < loops; ++i) {
 		if(i * 2 == send_buffer.size() - 1) {
-			short_sum += (send_buffer.back() << 8);
+			short_sum += uint16_t(send_buffer.back());
 		} else {
 			short_sum += *reinterpret_cast<uint16_t const*>(send_buffer.c_str() + i * 2);
 		}
