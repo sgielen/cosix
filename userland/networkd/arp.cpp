@@ -16,7 +16,7 @@ struct arp_frame_header {
 };
 
 static bool entry_valid(arp_entry const &entry, cloudabi_timestamp_t now) {
-	if(entry.valid_until >= now) {
+	if(entry.valid_until <= now) {
 		return false;
 	}
 	auto iface_shared = entry.iface.lock();
@@ -139,7 +139,7 @@ void arp::add_entry(std::shared_ptr<interface> iface, std::string ip, std::strin
 		{
 			// update MAC and validity
 			memcpy(it->mac, mac.c_str(), sizeof(it->mac));
-			it->valid_until = monotime() + validity;
+			it->valid_until = now + validity;
 			table_cv.notify_all();
 			return;
 		}
@@ -158,7 +158,7 @@ void arp::add_entry(std::shared_ptr<interface> iface, std::string ip, std::strin
 	memcpy(e.mac, mac.c_str(), sizeof(e.mac));
 	memcpy(e.ip, ip.c_str(), sizeof(e.ip));
 	e.iface = iface;
-	e.valid_until = monotime() + validity;
+	e.valid_until = now + validity;
 
 	arp_table.emplace_back(std::move(e));
 	table_cv.notify_all();

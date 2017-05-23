@@ -10,7 +10,7 @@
 
 using namespace networkd;
 
-#define IP_ARP_TIMEOUT 5 * 1000 * 1000 * 1000 /* 5 seconds */
+#define IP_ARP_TIMEOUT 5ull * 1000 * 1000 * 1000 /* 5 seconds */
 
 interface::interface(std::string n, std::string m, std::string h, int r)
 : name(n)
