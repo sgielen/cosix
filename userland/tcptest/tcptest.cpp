@@ -117,8 +117,12 @@ void program_main(const argdata_t *ad) {
 	fswap(stderr, out);
 
 	// First test, to see IP stack sending behaviour in PCAP dumps:
-	int sock0 = networkd_get_socket(SOCK_STREAM, "138.201.24.102:8765", "");
-	write(sock0, "Hello World!\n", 13);
+	try {
+		int sock0 = networkd_get_socket(SOCK_STREAM, "138.201.24.102:8765", "");
+		write(sock0, "Hello World!\n", 13);
+	} catch(std::runtime_error &e) {
+		dprintf(stdout, "Failed to run TCP test: %s\n", e.what());
+	}
 
 	bool running = true;
 	std::thread server([&]() {
