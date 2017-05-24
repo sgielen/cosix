@@ -43,7 +43,7 @@ struct tcp_socket : public ip_socket {
 	~tcp_socket() override;
 
 	enum sockstatus_t {
-		LISTENING, CONNECTING, CONNECTED, SHUTDOWN
+		LISTENING, CONNECTING, CONNECTED, SHUTDOWN, OURS_CLOSED, THEIRS_CLOSED, CLOSED
 	};
 
 	virtual cloudabi_errno_t establish() override;
@@ -56,7 +56,7 @@ private:
 	void sock_stat_get(cosix::pseudofd_t pseudo, cloudabi_sockstat_t *ss) override;
 	std::shared_ptr<tcp_socket> get_child(cosix::pseudofd_t ps);
 
-	void send_tcp_frame(bool syn, bool ack);
+	void send_tcp_frame(bool syn, bool ack, bool fin = false, bool rst = false);
 
 	std::mutex wc_mtx;
 	std::condition_variable incoming_cv;

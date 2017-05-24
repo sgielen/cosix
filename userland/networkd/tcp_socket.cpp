@@ -48,7 +48,7 @@ bool tcp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 
 	std::lock_guard<std::mutex> lock(wc_mtx);
 	if(status == sockstatus_t::LISTENING) {
-		if(!hdr->flag_syn || hdr->flag_ack) {
+		if(!hdr->flag_syn || hdr->flag_ack || hdr->flag_rst || hdr->flag_fin) {
 			// not an incoming connection, or confirmation of an outgoing connection
 			// TODO: if there is no child socket with this peer IP/port, send a RST
 			// to actively terminate the invalid connection. Now, the packets are
@@ -75,8 +75,10 @@ bool tcp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 	if(status == sockstatus_t::CONNECTING) {
 		if(hdr->flag_syn && hdr->flag_ack) {
 			if(htonl(hdr->acknum) != send_seq_num + 1) {
-				// TODO: reset & close connection
 				dprintf(0, "Got invalid SYN/ACK, dropping\n");
+				send_tcp_frame(false, false, false, true /* rst */);
+				status = sockstatus_t::CLOSED;
+				incoming_cv.notify_all();
 				return true;
 			}
 			send_seq_num++;
@@ -85,14 +87,36 @@ bool tcp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 			send_tcp_frame(false /* syn */, true /* ack */);
 			status = sockstatus_t::CONNECTED;
 			incoming_cv.notify_all();
+		} else if(hdr->flag_syn) {
+			// Getting a SYN onto a connecting socket is legal. It means that
+			// two machines were connecting to each other simultaneously. Send
+			// SYN|ACK instead.
+			send_seq_num++;
+			send_ack_num = htonl(hdr->seqnum) + 1;
+			send_tcp_frame(true /* syn */, true /* ack */);
+			status = sockstatus_t::CONNECTED;
+			incoming_cv.notify_all();
+		} else if(hdr->flag_rst) {
+			// Connection rejected
+			status = sockstatus_t::CLOSED;
+			incoming_cv.notify_all();
 		} else {
-			dprintf(0, "Got non-SYNACK packet on CONNECTING socket\n");
+			dprintf(0, "Got non-SYN/RST packet on CONNECTING socket\n");
+			if(hdr->flag_syn) dprintf(0, "  (SYN is set)\n");
+			if(hdr->flag_ack) dprintf(0, "  (ACK is set)\n");
+			if(hdr->flag_rst) dprintf(0, "  (RST is set)\n");
+			if(hdr->flag_fin) dprintf(0, "  (FIN is set)\n");
+			send_tcp_frame(false, false, false, true /* rst */);
+			status = sockstatus_t::CLOSED;
+			incoming_cv.notify_all();
 		}
 		return true;
 	}
 
-	// this is a connected socket, IPs and ports match, meant for us
+	assert(status == sockstatus_t::CONNECTED || status == sockstatus_t::THEIRS_CLOSED
+	|| status==sockstatus_t::OURS_CLOSED || status == sockstatus_t::CLOSED);
 
+	// this is a connected socket, IPs and ports match, meant for us
 	if(hdr->flag_ack) {
 		uint32_t acknum = htonl(hdr->acknum);
 		// TODO: handle overflow of sequence numbers
@@ -120,8 +144,24 @@ bool tcp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 		// current read call
 	}
 
+	if(hdr->flag_rst) {
+		// Break down this connection after handling the last data
+		status = sockstatus_t::CLOSED;
+		incoming_cv.notify_all();
+		return true;
+	}
+
 	if(hdr->flag_fin) {
-		// TODO: implement closing
+		// other side is closing their part of the connection
+		if(status == sockstatus_t::CONNECTED) {
+			status = sockstatus_t::THEIRS_CLOSED;
+		} else {
+			status = sockstatus_t::CLOSED;
+		}
+		send_ack_num += 1;
+		send_tcp_frame(false, true /* ack */);
+		incoming_cv.notify_all();
+		return true;
 	}
 
 	return true;
@@ -146,8 +186,9 @@ void tcp_socket::pwrite(pseudofd_t p, off_t o, const char *msg, size_t len)
 		return;
 	}
 
-	if(status == sockstatus_t::LISTENING || status == sockstatus_t::CONNECTING) {
-		throw cloudabi_system_error(EINVAL);
+	if(status != sockstatus_t::CONNECTED && status != sockstatus_t::SHUTDOWN) {
+		bool ours_closed = status == sockstatus_t::CLOSED || status == sockstatus_t::OURS_CLOSED;
+		throw cloudabi_system_error(ours_closed ? ECONNRESET : EINVAL);
 	}
 
 	send_buffer.append(std::string(msg, len));
@@ -163,15 +204,21 @@ cloudabi_errno_t tcp_socket::establish() {
 	assert(status == sockstatus_t::CONNECTING);
 	arc4random_buf(&send_seq_num, sizeof(send_seq_num));
 	send_tcp_frame(true /* syn */, false /* ack */);
-	while(status == sockstatus_t::CONNECTING /* or an error or timeout occurred */) {
+	while(status == sockstatus_t::CONNECTING) {
 		// wait for SYN|ACK
 		incoming_cv.wait(lock);
 	}
-	assert(status == sockstatus_t::CONNECTED);
-	return 0;
+	assert(status == sockstatus_t::CONNECTED || status == sockstatus_t::CLOSED);
+	return status == sockstatus_t::CONNECTED ? 0 : ECONNREFUSED;
 }
 
-void tcp_socket::send_tcp_frame(bool syn, bool ack) {
+void tcp_socket::send_tcp_frame(bool syn, bool ack, bool fin, bool rst) {
+	// TODO: don't re-send the whole buffer all the time. Instead, keep
+	// a list of unacked segments and let this method add to it. Then,
+	// when a triple ACK arrives or an acknowledgement timer times out,
+	// retransmit segments from the list until all of them are ACKed.
+	// Do a similar thing for incoming segments that are out of order.
+
 	// if we're just establishing or confirming, buffer must be empty
 	assert(!(syn && send_buffer.size()));
 
@@ -179,13 +226,12 @@ void tcp_socket::send_tcp_frame(bool syn, bool ack) {
 	memset(&tcp_hdr, 0, sizeof(tcp_header));
 	tcp_hdr.source_port = htons(get_local_port());
 	tcp_hdr.dest_port = htons(get_peer_port());
-	// TODO: don't re-send the whole buffer all the time, keep track of
-	// sent unacked segments, send only unsent data and handle
-	// retransmissions properly
 	tcp_hdr.seqnum = htonl(send_seq_num);
 	tcp_hdr.acknum = htonl(send_ack_num);
 	if(syn) tcp_hdr.flag_syn = 1;
 	if(ack) tcp_hdr.flag_ack = 1;
+	if(fin) tcp_hdr.flag_fin = 1;
+	if(rst) tcp_hdr.flag_rst = 1;
 	// TODO: don't always set PSH on data, but when though?
 	if(!send_buffer.empty()) tcp_hdr.flag_psh = 1;
 	// TODO: use a proper growing window
@@ -272,8 +318,9 @@ size_t tcp_socket::pread(pseudofd_t p, off_t o, char *dest, size_t requested)
 		return get_child(p)->pread(p, o, dest, requested);
 	}
 
-	if(status == sockstatus_t::LISTENING || status == sockstatus_t::CONNECTING) {
-		throw cloudabi_system_error(EINVAL);
+	if(status != sockstatus_t::CONNECTED && status != sockstatus_t::SHUTDOWN) {
+		bool theirs_closed = status == sockstatus_t::CLOSED || status == sockstatus_t::THEIRS_CLOSED;
+		throw cloudabi_system_error(theirs_closed ? ECONNRESET : EINVAL);
 	}
 
 	std::unique_lock<std::mutex> lock(wc_mtx);
