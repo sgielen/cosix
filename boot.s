@@ -30,18 +30,8 @@ _boot_page_directory:
 	.rept (KERNEL_PAGE_NUMBER - 1)
 	.long 0
 	.endr
-	# identity map first 32 MB of upper half
-	# TODO: determine how many mappings we actually need instead of hardcoding this
-	.long 0x00000083
-	.long 0x00400083
-	.long 0x00800083
-	.long 0x00c00083
-	.long 0x01000083
-	.long 0x01400083
-	.long 0x01800083
-	.long 0x01c00083
-	# no pages until end of memory
-	.rept (1024 - KERNEL_PAGE_NUMBER - 8)
+	# upper half will be fully mapped to lower half
+	.rept (1024 - KERNEL_PAGE_NUMBER)
 	.long 0
 	.endr
 .global _kernel_virtual_base
@@ -60,9 +50,23 @@ _start:
 	# when _entrypoint is called, this is the only code running in 0x10000
 	# our job is to set up paging for the higher half, then call into
 	# kernel_main in the higher half
+	# note that %eax contains a Multiboot magic and %ebx contains a
+	# Multiboot information address, so don't clobber these registers
 	cli
 
-	# set page directory
+	# initialize page directory
+	mov $0x00000083, %edx
+	mov $(_boot_page_directory - KERNEL_VIRTUAL_BASE + KERNEL_PAGE_NUMBER * 4), %ecx
+	mov $(1024 - KERNEL_PAGE_NUMBER), %ebp
+	# map only 32 pages
+	#mov $32, %ebp
+l1:
+	movl %edx, (%ecx)
+	add $0x00400000, %edx
+	add $4, %ecx
+	dec %ebp
+	jnz l1
+
 	mov $(_boot_page_directory - KERNEL_VIRTUAL_BASE), %ecx
 	mov %ecx, %cr3
 
