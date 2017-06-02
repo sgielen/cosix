@@ -5,7 +5,7 @@ namespace reverse_proto {
 typedef uint64_t pseudofd_t;
 
 struct reverse_request_t {
-	pseudofd_t pseudofd;
+	pseudofd_t pseudofd = 0;
 	enum class operation {
 		lookup /* path in buffer -> inode */,
 		// all the calls below use the inode, not the path
@@ -27,18 +27,18 @@ struct reverse_request_t {
 		sock_recv,
 		sock_send
 	} op;
-	uint64_t inode;
-	uint64_t flags;
-	uint64_t offset;
-	uint8_t length; // bytes used in buffer (for paths and writes), otherwise, length to read
-	uint8_t buffer[256];
+	uint64_t inode = 0;
+	uint64_t flags = 0;
+	uint64_t offset = 0;
+	uint16_t send_length = 0; // bytes following this request (for paths & writes)
+	uint16_t recv_length = 0; // length to read
 };
 
 struct reverse_response_t {
-	int64_t result; // < 0 is -errno, 0 is success, >= 0 is result (can be inode or pseudo-fd)
-	uint64_t flags; // filetype in case of lookup
-	uint8_t length; // bytes used in buffer (bytes actually read)
-	uint8_t buffer[256];
+	int64_t result = 0; // < 0 is -errno, 0 is success, >= 0 is result (can be inode or pseudo-fd)
+	uint64_t flags = 0; // filetype in case of lookup
+	uint16_t send_length = 0; // bytes following this response
+	uint16_t recv_length = 0; // bytes actually read
 };
 
 }

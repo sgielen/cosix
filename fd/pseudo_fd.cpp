@@ -4,6 +4,12 @@
 
 using namespace cloudos;
 
+static void maybe_deallocate(Blk b) {
+	if(b.size > 0) {
+		deallocate(b);
+	}
+}
+
 pseudo_fd::pseudo_fd(pseudofd_t id, shared_ptr<fd_t> r, cloudabi_filetype_t t, const char *n)
 : seekable_fd_t(t, n)
 , pseudo_id(id)
@@ -11,10 +17,10 @@ pseudo_fd::pseudo_fd(pseudofd_t id, shared_ptr<fd_t> r, cloudabi_filetype_t t, c
 {
 }
 
-bool pseudo_fd::send_request(reverse_request_t *request, reverse_response_t *response) {
+Blk pseudo_fd::send_request(reverse_request_t *request, const char *buffer, reverse_response_t *response) {
 	response->result = -EIO;
 	response->flags = 0;
-	response->length = 0;
+	response->send_length = 0;
 
 	// Lock the reverse_fd. Multiple pseudo FD's may have a reference to
 	// this reverse_fd, and another one may have an outstanding request
@@ -30,7 +36,11 @@ bool pseudo_fd::send_request(reverse_request_t *request, reverse_response_t *res
 	reverse_fd->refcount = 2;
 
 	char *msg = reinterpret_cast<char*>(request);
+	assert(reverse_fd->type == CLOUDABI_FILETYPE_SOCKET_STREAM);
 	reverse_fd->putstring(msg, sizeof(reverse_request_t));
+	if(request->send_length > 0) {
+		reverse_fd->putstring(buffer, request->send_length);
+	}
 
 	msg = reinterpret_cast<char*>(response);
 	size_t received = 0;
@@ -39,8 +49,20 @@ bool pseudo_fd::send_request(reverse_request_t *request, reverse_response_t *res
 		size_t remaining = sizeof(reverse_response_t) - received;
 		received += reverse_fd->read(msg + received, remaining);
 	}
+	assert(received == sizeof(reverse_response_t));
+	Blk recv_buf;
+	if(response->send_length > 0) {
+		received = 0;
+		recv_buf = allocate(response->send_length);
+		msg = reinterpret_cast<char*>(recv_buf.ptr);
+		while(received < response->send_length) {
+			size_t remaining = response->send_length - received;
+			received += reverse_fd->read(reinterpret_cast<char*>(recv_buf.ptr) + received, remaining);
+		}
+		assert(received == response->send_length);
+	}
 	reverse_fd->refcount = 1;
-	return true;
+	return recv_buf;
 }
 
 bool pseudo_fd::is_valid_path(const char *path, size_t length)
@@ -58,19 +80,17 @@ bool pseudo_fd::is_valid_path(const char *path, size_t length)
 bool pseudo_fd::lookup_inode(const char *path, size_t length, cloudabi_oflags_t oflags, reverse_response_t *response)
 {
 	if(!is_valid_path(path, length)) {
-		return nullptr;
+		return false;
 	}
 	reverse_request_t request;
 	request.pseudofd = pseudo_id;
 	request.op = reverse_request_t::operation::lookup;
 	request.inode = 0;
 	request.flags = oflags;
-	if(length > sizeof(request.buffer)) {
-		length = sizeof(request.buffer);
-	}
-	request.length = length;
-	memcpy(request.buffer, path, length);
-	return send_request(&request, response);
+	request.send_length = length;
+	request.recv_length = 0;
+	maybe_deallocate(send_request(&request, path, response));
+	return true;
 }
 
 size_t pseudo_fd::read(void *dest, size_t count)
@@ -84,50 +104,41 @@ size_t pseudo_fd::read(void *dest, size_t count)
 	request.inode = 0;
 	request.flags = 0;
 	request.offset = pos;
-	request.length = count;
+	request.recv_length = count;
 	reverse_response_t response;
-	if(!send_request(&request, &response) || response.result < 0) {
+	Blk buf = send_request(&request, nullptr, &response);
+	if(response.result < 0) {
 		error = -response.result;
+		maybe_deallocate(buf);
 		return 0;
 	}
 
 	error = 0;
-	if(response.length < count) {
-		count = response.length;
-	}
-	else if(response.length > count) {
+	if(response.send_length > count) {
 		get_vga_stream() << "pseudo-fd filesystem returned more data than requested, dropping";
+		response.send_length = count;
 	}
 
-	memcpy(dest, response.buffer, count);
-	pos += count;
-	return count;
+	memcpy(dest, buf.ptr, response.send_length);
+	maybe_deallocate(buf);
+	pos += response.send_length;
+	return response.send_length;
 }
 
-void pseudo_fd::putstring(const char *str, size_t remaining)
+void pseudo_fd::putstring(const char *str, size_t size)
 {
-	size_t copied = 0;
-	while(remaining > 0) {
-		size_t count = remaining;
-		if(count > UINT8_MAX) {
-			count = UINT8_MAX;
-		}
-		remaining -= count;
-
-		reverse_request_t request;
-		request.pseudofd = pseudo_id;
-		request.op = reverse_request_t::operation::pwrite;
-		request.inode = 0;
-		request.flags = 0;
-		request.offset = 0; /* TODO */
-		request.length = count;
-		memcpy(request.buffer, str + copied, count);
-		copied += count;
-		reverse_response_t response;
-		if(!send_request(&request, &response) || response.result < 0) {
-			error = -response.result;
-			return;
-		}
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::pwrite;
+	request.inode = 0;
+	request.flags = 0;
+	request.offset = 0; /* TODO */
+	request.send_length = size;
+	reverse_response_t response;
+	maybe_deallocate(send_request(&request, str, &response));
+	if(response.result < 0) {
+		error = -response.result;
+		return;
 	}
 	error = 0;
 }
@@ -148,10 +159,10 @@ shared_ptr<fd_t> pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_of
 		request.op = reverse_request_t::operation::create;
 		request.inode = 0;
 		request.flags = filetype;
-		request.length = pathlen < sizeof(request.buffer) ? pathlen : sizeof(request.buffer);
-		memcpy(request.buffer, path, request.length);
+		request.send_length = pathlen;
 
-		if(!send_request(&request, &response) || response.result < 0) {
+		maybe_deallocate(send_request(&request, path, &response));
+		if(response.result < 0) {
 			error = -response.result;
 			return nullptr;
 		}
@@ -170,9 +181,9 @@ shared_ptr<fd_t> pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_of
 	request.op = reverse_request_t::operation::open;
 	request.inode = inode;
 	request.flags = oflags;
-	request.length = 0;
 
-	if(!send_request(&request, &response) || response.result < 0) {
+	maybe_deallocate(send_request(&request, nullptr, &response));
+	if(response.result < 0) {
 		error = -response.result;
 		return nullptr;
 	}
@@ -208,11 +219,11 @@ cloudabi_inode_t pseudo_fd::file_create(const char *path, size_t pathlen, clouda
 	request.op = reverse_request_t::operation::create;
 	request.inode = 0;
 	request.flags = type;
-	request.length = pathlen < sizeof(request.buffer) ? pathlen : sizeof(request.buffer);
-	memcpy(request.buffer, path, request.length);
+	request.send_length = pathlen;
 
 	reverse_response_t response;
-	if(!send_request(&request, &response) || response.result < 0) {
+	maybe_deallocate(send_request(&request, path, &response));
+	if(response.result < 0) {
 		error = -response.result;
 		return 0;
 	} else {
@@ -228,11 +239,11 @@ void pseudo_fd::file_unlink(const char *path, size_t pathlen, cloudabi_ulflags_t
 	request.op = reverse_request_t::operation::unlink;
 	request.inode = 0;
 	request.flags = flags;
-	request.length = pathlen < sizeof(request.buffer) ? pathlen : sizeof(request.buffer);
-	memcpy(request.buffer, path, request.length);
+	request.send_length = pathlen;
 
 	reverse_response_t response;
-	if(!send_request(&request, &response) || response.result < 0) {
+	maybe_deallocate(send_request(&request, path, &response));
+	if(response.result < 0) {
 		error = -response.result;
 	} else {
 		error = 0;
@@ -252,18 +263,21 @@ void pseudo_fd::file_stat_get(cloudabi_lookupflags_t flags, const char *path, si
 	request.op = reverse_request_t::operation::stat_get;
 	request.inode = 0;
 	request.flags = flags;
-	request.length = pathlen < sizeof(request.buffer) ? pathlen : sizeof(request.buffer);
-	memcpy(request.buffer, path, request.length);
+	request.send_length = pathlen;
 
 	reverse_response_t response;
-	if(!send_request(&request, &response) || response.result < 0) {
+	Blk b = send_request(&request, path, &response);
+	if(response.result < 0) {
+		maybe_deallocate(b);
 		error = -response.result;
 	} else {
-		if(response.length < sizeof(cloudabi_filestat_t)) {
+		if(b.size < sizeof(cloudabi_filestat_t)) {
 			error = EIO;
+			maybe_deallocate(b);
 			return;
 		}
-		memcpy(buf, response.buffer, sizeof(cloudabi_filestat_t));
+		memcpy(buf, b.ptr, sizeof(cloudabi_filestat_t));
+		maybe_deallocate(b);
 		if(buf->st_dev != device) {
 			get_vga_stream() << "Pseudo FD powered filesystem changed device ID's";
 			error = EIO;
@@ -284,28 +298,38 @@ size_t pseudo_fd::readdir(char *buf, size_t nbyte, cloudabi_dircookie_t cookie)
 		request.pseudofd = pseudo_id;
 		request.op = reverse_request_t::operation::readdir;
 		request.flags = cookie;
-		request.length = 0;
+
 		reverse_response_t response;
-		if(!send_request(&request, &response) || response.result < 0) {
+		Blk b = send_request(&request, nullptr, &response);
+		if(response.result < 0) {
 			error = -response.result;
+			maybe_deallocate(b);
 			return 0;
 		} else if(response.result == 0) {
 			// there were no more entries
 			break;
 		}
+		if(b.size < sizeof(cloudabi_dirent_t)) {
+			// too little data returned
+			error = EIO;
+			maybe_deallocate(b);
+			return 0;
+		}
 		cookie = response.result;
 		// check the entry, add it to buf
-		cloudabi_dirent_t *dirent = reinterpret_cast<cloudabi_dirent_t*>(response.buffer);
-		if(response.length != sizeof(cloudabi_dirent_t) + dirent->d_namlen) {
+		cloudabi_dirent_t *dirent = reinterpret_cast<cloudabi_dirent_t*>(b.ptr);
+		if(b.size != sizeof(cloudabi_dirent_t) + dirent->d_namlen) {
 			// filesystem did not provide enough data, maybe the filename didn't fit?
 			error = EIO;
+			maybe_deallocate(b);
 			return 0;
 		}
 		// append this buf to the given buffer
 		size_t remaining = nbyte - written;
-		size_t write = remaining < response.length ? remaining : response.length;
-		memcpy(buf + written, response.buffer, write);
+		size_t write = remaining < b.size ? remaining : b.size;
+		memcpy(buf + written, b.ptr, write);
 		written += write;
+		maybe_deallocate(b);
 	}
 	error = 0;
 	return written;
@@ -324,20 +348,23 @@ cloudabi_errno_t pseudo_fd::lookup_device_id() {
 	request.op = reverse_request_t::operation::stat_get;
 	request.inode = 0;
 	request.flags = flags;
-	request.length = 1;
-	request.buffer[0] = '.';
+	request.send_length = 1;
 
 	reverse_response_t response;
-	if(!send_request(&request, &response) || response.result < 0) {
+	Blk b = send_request(&request, ".", &response);
+	if(response.result < 0) {
+		maybe_deallocate(b);
 		return -response.result;
 	} else {
-		if(response.length < sizeof(cloudabi_filestat_t)) {
+		if(b.size < sizeof(cloudabi_filestat_t)) {
+			maybe_deallocate(b);
 			return EIO;
 		}
-		auto *stat = reinterpret_cast<cloudabi_filestat_t*>(&response.buffer[0]);
+		auto *stat = reinterpret_cast<cloudabi_filestat_t*>(b.ptr);
 		device = stat->st_dev;
 		assert(device > 0);
 		device_id_obtained = true;
+		maybe_deallocate(b);
 		return 0;
 	}
 }
@@ -361,10 +388,11 @@ void pseudo_fd::sock_listen(cloudabi_backlog_t backlog)
 	request.op = reverse_request_t::operation::sock_listen;
 	request.inode = 0;
 	request.flags = 0;
-	request.length = backlog;
+	request.recv_length = backlog;
 
 	reverse_response_t response;
-	if(!send_request(&request, &response) || response.result < 0) {
+	maybe_deallocate(send_request(&request, nullptr, &response));
+	if(response.result < 0) {
 		error = -response.result;
 	}
 	error = 0;
@@ -377,27 +405,31 @@ shared_ptr<fd_t> pseudo_fd::sock_accept(cloudabi_sa_family_t family, void *addre
 	request.op = reverse_request_t::operation::sock_accept;
 	request.inode = 0;
 	request.flags = family;
-	request.length = address_len == nullptr ? 0 : *address_len;
+	request.recv_length = address_len == nullptr ? 0 : *address_len;
 
 	reverse_response_t response;
-	if(!send_request(&request, &response) || response.result < 0) {
+	Blk b = send_request(&request, nullptr, &response);
+	if(response.result < 0) {
 		error = -response.result;
+		maybe_deallocate(b);
 		return nullptr;
 	}
 	if(address != nullptr && address_len != nullptr) {
 		if(*address_len < sizeof(cloudabi_sockstat_t)) {
 			*address_len = 0;
 		} else {
-			if(response.length != sizeof(cloudabi_sockstat_t)) {
+			if(b.size != sizeof(cloudabi_sockstat_t)) {
 				error = EIO;
 				// TODO: close pseudo FD again
+				maybe_deallocate(b);
 				return nullptr;
 			}
-			memcpy(address, response.buffer, response.length);
-			*address_len = response.length;
+			memcpy(address, b.ptr, b.size);
+			*address_len = b.size;
 		}
 	}
 
+	maybe_deallocate(b);
 	pseudofd_t new_pseudo_id = response.result;
 
 	char new_name[sizeof(name)];
@@ -417,10 +449,10 @@ void pseudo_fd::sock_shutdown(cloudabi_sdflags_t how)
 	request.op = reverse_request_t::operation::sock_shutdown;
 	request.inode = 0;
 	request.flags = how;
-	request.length = 0;
 
 	reverse_response_t response;
-	if(!send_request(&request, &response) || response.result < 0) {
+	maybe_deallocate(send_request(&request, nullptr, &response));
+	if(response.result < 0) {
 		error = -response.result;
 	}
 	error = 0;
@@ -433,19 +465,22 @@ void pseudo_fd::sock_stat_get(cloudabi_sockstat_t *buf, cloudabi_ssflags_t flags
 	request.op = reverse_request_t::operation::sock_stat_get;
 	request.inode = 0;
 	request.flags = flags;
-	request.length = sizeof(cloudabi_sockstat_t);
+	request.recv_length = sizeof(cloudabi_sockstat_t);
 
 	reverse_response_t response;
-	if(!send_request(&request, &response) || response.result < 0) {
+	Blk b = send_request(&request, nullptr, &response);
+	if(response.result < 0) {
 		error = -response.result;
+		maybe_deallocate(b);
 		return;
 	}
-	if(response.length != sizeof(cloudabi_sockstat_t)) {
+	if(b.size != sizeof(cloudabi_sockstat_t)) {
 		error = EIO;
 		return;
 	}
-	memcpy(buf, response.buffer, response.length);
+	memcpy(buf, b.ptr, b.size);
 	error = 0;
+	maybe_deallocate(b);
 }
 
 void pseudo_fd::sock_recv(const cloudabi_recv_in_t *in, cloudabi_recv_out_t *out)
@@ -455,34 +490,32 @@ void pseudo_fd::sock_recv(const cloudabi_recv_in_t *in, cloudabi_recv_out_t *out
 	request.op = reverse_request_t::operation::sock_recv;
 	request.inode = 0;
 	request.flags = in->ri_flags;
-	size_t length = 0;
 	for(size_t i = 0; i < in->ri_data_len; ++i) {
-		length += in->ri_data[i].buf_len;
+		request.recv_length += in->ri_data[i].buf_len;
 	}
-	if(length > sizeof(request.buffer)) {
-		// TODO: take buffer out of the struct, so any size can be sent
-		get_vga_stream() << "Cannot sock_recv of this size, failing\n";
-		error = EMSGSIZE;
-		return;
-	}
-	request.length = length;
 
 	reverse_response_t response;
-	if(!send_request(&request, &response) || response.result < 0) {
+	Blk b = send_request(&request, nullptr, &response);
+	if(response.result < 0) {
 		error = -response.result;
+		maybe_deallocate(b);
 		return;
 	}
-	if(response.length > request.length) {
+	if(b.size > request.recv_length) {
 		error = EIO;
+		maybe_deallocate(b);
 		return;
 	}
 	size_t off = 0;
 	for(size_t i = 0; i < in->ri_data_len; ++i) {
-		memcpy(in->ri_data[i].buf, response.buffer + off, in->ri_data[i].buf_len);
-		off += in->ri_data[i].buf_len;
+		size_t remaining = b.size - off;
+		size_t buf_len = in->ri_data[i].buf_len;
+		size_t copy = buf_len < remaining ? buf_len : remaining;
+		memcpy(in->ri_data[i].buf, reinterpret_cast<uint8_t*>(b.ptr) + off, copy);
+		off += copy;
 	}
 	memset(out, 0, sizeof(cloudabi_recv_out_t));
-	out->ro_datalen = response.length;
+	out->ro_datalen = b.size;
 	error = 0;
 }
 
@@ -493,27 +526,22 @@ void pseudo_fd::sock_send(const cloudabi_send_in_t *in, cloudabi_send_out_t *out
 	request.op = reverse_request_t::operation::sock_send;
 	request.inode = 0;
 	request.flags = in->si_flags;
-	size_t length = 0;
 	for(size_t i = 0; i < in->si_data_len; ++i) {
-		length += in->si_data[i].buf_len;
+		request.send_length += in->si_data[i].buf_len;
 	}
-	if(length > sizeof(reverse_response_t::buffer)) {
-		// TODO: take buffer out of the struct, so any size can be received
-		get_vga_stream() << "Cannot sock_send of this size, failing\n";
-		error = EMSGSIZE;
-		return;
-	}
-	request.length = length;
 	size_t off = 0;
+	Blk b = allocate(request.send_length);
 	for(size_t i = 0; i < in->si_data_len; ++i) {
-		memcpy(request.buffer + off, in->si_data[i].buf, in->si_data[i].buf_len);
+		memcpy(reinterpret_cast<uint8_t*>(b.ptr) + off, in->si_data[i].buf, in->si_data[i].buf_len);
 		off += in->si_data[i].buf_len;
 	}
 
 	reverse_response_t response;
-	if(!send_request(&request, &response) || response.result < 0) {
+	maybe_deallocate(send_request(&request, reinterpret_cast<const char*>(b.ptr), &response));
+	deallocate(b);
+	if(response.result < 0) {
 		error = -response.result;
 		return;
 	}
-	out->so_datalen = response.length;
+	out->so_datalen = response.recv_length;
 }

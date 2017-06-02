@@ -12,7 +12,7 @@ using reverse_proto::reverse_response_t;
 
 struct reverse_handler;
 
-void handle_request(reverse_request_t *request, reverse_response_t *response, reverse_handler *h);
+char *handle_request(reverse_request_t *request, char *buf, reverse_response_t *response, reverse_handler *h);
 void handle_requests(int reversefd, reverse_handler *h);
 
 struct cloudabi_system_error : public std::runtime_error {

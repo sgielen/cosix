@@ -45,7 +45,7 @@ struct pseudo_fd : public seekable_fd_t {
 
 private:
 	cloudabi_errno_t lookup_device_id();
-	bool send_request(reverse_request_t *request, reverse_response_t *response);
+	Blk send_request(reverse_request_t *request, const char *buf, reverse_response_t *response);
 	bool is_valid_path(const char *path, size_t length);
 	bool lookup_inode(const char *path, size_t length, cloudabi_oflags_t oflags, reverse_response_t *response);
 
