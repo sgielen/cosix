@@ -318,13 +318,17 @@ size_t tcp_socket::pread(pseudofd_t p, off_t o, char *dest, size_t requested)
 		return get_child(p)->pread(p, o, dest, requested);
 	}
 
+	if(requested == 0) {
+		throw cloudabi_system_error(EMSGSIZE);
+	}
+
 	if(status != sockstatus_t::CONNECTED && status != sockstatus_t::SHUTDOWN) {
 		bool theirs_closed = status == sockstatus_t::CLOSED || status == sockstatus_t::THEIRS_CLOSED;
 		throw cloudabi_system_error(theirs_closed ? ECONNRESET : EINVAL);
 	}
 
 	std::unique_lock<std::mutex> lock(wc_mtx);
-	while(recv_buffer.empty()) {
+	while(recv_buffer.empty() && (status == sockstatus_t::CONNECTED || status == sockstatus_t::OURS_CLOSED)) {
 		incoming_cv.wait(lock);
 	}
 
