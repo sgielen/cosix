@@ -32,6 +32,8 @@ void x86_pit::handle_irq(uint8_t irq) {
 
 x86_pit_clock::x86_pit_clock() {
 	get_clock_store()->register_clock(CLOUDABI_CLOCK_MONOTONIC, this);
+	// TODO: while we don't have a realtime clock, the monotonic clock will act like one:
+	get_clock_store()->register_clock(CLOUDABI_CLOCK_REALTIME, this);
 }
 
 cloudabi_timestamp_t x86_pit_clock::get_resolution() {
