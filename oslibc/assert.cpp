@@ -20,7 +20,7 @@ __attribute__((noreturn)) void assertion_failed(const char *assertion, const cha
 	uintptr_t *ebp;
 	asm volatile("mov %%ebp, %0" : "=r"(ebp));
 	void *eip = nullptr;
-	for(size_t i = 1; i <= 5; ++i) {
+	for(size_t i = 1; i <= 10; ++i) {
 		stack_up(ebp, eip);
 		stream << "At " << i << ": " << eip << "\n";
 	}
