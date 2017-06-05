@@ -1,4 +1,5 @@
 #include "bootfs.hpp"
+#include <fd/memory_fd.hpp>
 #include "global.hpp"
 #include <oslibc/numeric.h>
 #include <memory/allocator.hpp>
@@ -15,18 +16,10 @@ struct bootfs_directory_fd : fd_t {
 	shared_ptr<fd_t> openat(const char * /*path */, size_t /*pathlen*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) override;
 };
 
-struct bootfs_file_fd : seekable_fd_t {
+struct bootfs_file_fd : public memory_fd {
 	bootfs_file_fd(external_binary_t const &file, const char *n)
-	: seekable_fd_t(CLOUDABI_FILETYPE_REGULAR_FILE, n)
-	, addr(file.start)
-	, length(file.end - file.start)
+	: memory_fd(file.start, file.end - file.start, n)
 	{}
-
-	size_t read(void *dest, size_t count) override;
-
-private:
-	uint8_t *addr;
-	size_t length;
 };
 
 }
@@ -54,22 +47,6 @@ shared_ptr<fd_t> bootfs_directory_fd::openat(const char *pathname, size_t pathle
 
 	error = ENOENT;
 	return nullptr;
-}
-
-size_t bootfs_file_fd::read(void *dest, size_t count) {
-	error = 0;
-
-	// TODO this is the same code for every file for which we
-	// already have all contents in memory, so unify this
-	if(pos + count > length) {
-		return 0;
-	}
-
-	size_t bytes_left = length - pos;
-	size_t copied = count < bytes_left ? count : bytes_left;
-	memcpy(reinterpret_cast<char*>(dest), addr + pos, copied);
-	pos += copied;
-	return copied;
 }
 
 shared_ptr<fd_t> bootfs::get_root_fd() {
