@@ -5,6 +5,7 @@
 #include <vector>
 #include <thread>
 #include <memory>
+#include <list>
 #include <cloudabi_types.h>
 
 #include <mstd/optional.hpp>
@@ -15,6 +16,12 @@ struct interface_ipv4addr {
 	char ip[4];
 	uint8_t cidr_prefix;
 	/* TODO: flag bits, like 'temporary'? */
+};
+
+struct arp_pending_frame {
+	std::string frame;
+	std::string ip_hop;
+	cloudabi_timestamp_t timeout;
 };
 
 struct interface : public std::enable_shared_from_this<interface> {
@@ -32,7 +39,9 @@ struct interface : public std::enable_shared_from_this<interface> {
 	void add_ipv4addr(const char *ip, uint8_t cidr_prefix);
 
 	cloudabi_errno_t send_ip_packet(std::vector<iovec> const&, std::string ip_hop);
+	void send_frame(std::vector<iovec>, std::string mac);
 	void send_frame(std::vector<iovec>);
+	void check_pending_arp_list();
 
 private:
 	/* Read frames from the rawsock, hand them to the right protocol implementation */
@@ -44,6 +53,7 @@ private:
 
 	std::thread thr;
 	std::vector<interface_ipv4addr> ipv4addrs;
+	std::list<arp_pending_frame> frames_pending_arp;
 
 	int rawsock;
 };

@@ -3,7 +3,7 @@
 
 using namespace networkd;
 
-#define DEFAULT_ARP_VALIDITY 60ul * 1000 * 1000 * 1000 /* 60 seconds */
+#define DEFAULT_ARP_VALIDITY 60ull * 1000 * 1000 * 1000 /* 60 seconds */
 #define ARP_REQUEST 1
 #define ARP_RESPONSE 2
 
@@ -85,38 +85,27 @@ std::list<arp_entry> arp::copy_table()
 	return res;
 }
 
-mstd::optional<std::string> arp::mac_for_ip(std::shared_ptr<interface> iface, std::string ip, cloudabi_timestamp_t timeout)
+mstd::optional<std::string> arp::mac_for_ip(std::shared_ptr<interface> iface, std::string ip)
 {
 	if(ip.length() != 4) {
 		throw std::runtime_error("IP length mismatch");
 	}
 
 	std::unique_lock<std::mutex> lock(table_mutex);
-	cloudabi_timestamp_t stoptime = monotime() + timeout;
-	cloudabi_timestamp_t now;
-	while((now = monotime()) && now < stoptime) {
-		for(auto it = arp_table.begin(); it != arp_table.end();) {
-			if(!entry_valid(*it, now)) {
-				// remove invalid entry
-				it = arp_table.erase(it);
-				continue;
-			}
-			auto iface_shared = it->iface.lock();
-			if(iface_shared && iface_shared == iface && memcmp(it->ip, ip.c_str(), 4) == 0) {
-				return std::string(it->mac, 6);
-			}
-			++it;
+	auto now = monotime();
+	for(auto it = arp_table.begin(); it != arp_table.end();) {
+		if(!entry_valid(*it, now)) {
+			// remove invalid entry
+			it = arp_table.erase(it);
+			continue;
 		}
-
-		send_arp_request(iface, ip);
-
-		if(timeout > 0) {
-			// wait until ARP table is updated
-			// TODO: include a timeout once kernel supports it
-			// table_cv.wait_until(lock, std::chrono::nanoseconds(stoptime));
-			table_cv.wait(lock);
+		auto iface_shared = it->iface.lock();
+		if(iface_shared && iface_shared == iface && memcmp(it->ip, ip.c_str(), 4) == 0) {
+			return std::string(it->mac, 6);
 		}
+		++it;
 	}
+
 	return {};
 }
 
@@ -268,14 +257,15 @@ void arp::send_arp_request(std::shared_ptr<interface> iface, std::string ip)
 	iface->send_frame(vecs);
 }
 
-bool arp::probe_ip_is_taken(std::shared_ptr<interface> iface, std::string ip, cloudabi_timestamp_t timeout)
+bool arp::probe_ip_is_taken(std::shared_ptr<interface> iface, std::string ip, cloudabi_timestamp_t /*timeout*/)
 {
 	// TODO: officially (per RFC 5227) we SHOULD also check if another machine
 	// is probing this IP, and return false if so.
 	// TODO: we may have to send a probe even if the entry already exists
 	// in the table; maybe the DHCP server gave us this IP because it knows
 	// that other lease has already expired and nobody is using it anymore?
-	auto mac = mac_for_ip(iface, ip, timeout);
+	// TODO: we should keep trying until timeout passes
+	auto mac = mac_for_ip(iface, ip);
 	return mac && *mac != iface->get_mac();
 }
 

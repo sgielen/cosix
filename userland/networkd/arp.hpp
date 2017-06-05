@@ -23,10 +23,10 @@ struct arp {
 	std::list<arp_entry> copy_table();
 
 	// Returns the MAC address, if possible. If the IP is not known in the
-	// ARP table, a request for it will be sent. If timeout is greater than
-	// zero, this method will block if necessary, pending arp responses. IP
-	// and MAC are in packed format, so their sizes are 4 and 6 respectively.
-	mstd::optional<std::string> mac_for_ip(std::shared_ptr<interface> iface, std::string ip, cloudabi_timestamp_t timeout);
+	// ARP table, this method returns an empty optional, and you can send a
+	// request for it using send_arp_request(). IP and MAC are in packed
+	// format, so their sizes are 4 and 6 respectively.
+	mstd::optional<std::string> mac_for_ip(std::shared_ptr<interface> iface, std::string ip);
 
 	// Add an ARP entry to the table. IP and MAC are in packed format, so
 	// their sizes are 4 and 6 respectively.
@@ -40,7 +40,9 @@ struct arp {
 
 	// Probe to see if an IP address is taken, returns true if so, false if not.
 	// Will wait $timeout ns to return false, but returns true as soon as an
-	// ARP response is received.
+	// ARP response is received. Don't call this method somewhere in the call
+	// tree of iface->run() (i.e. when handling received packets), because
+	// then it will block until timeout expires and always return false.
 	bool probe_ip_is_taken(std::shared_ptr<interface> iface, std::string ip, cloudabi_timestamp_t timeout);
 
 	// Send a gratuitous ARP broadcast saying that the interface has the given IP
