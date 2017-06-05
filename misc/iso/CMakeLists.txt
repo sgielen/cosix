@@ -9,7 +9,7 @@ if(BAREMETAL_ENABLED)
 		DEPENDS "${CMAKE_BINARY_DIR}/cosix.iso"
 	)
 	add_custom_target(isoboot
-		COMMAND qemu-system-i386 -boot d -cdrom "${CMAKE_BINARY_DIR}/cosix.iso"
+		COMMAND qemu-system-i386 -boot d -cdrom "${CMAKE_BINARY_DIR}/cosix.iso" ${QEMU_ARGS}
 		DEPENDS "${CMAKE_BINARY_DIR}/cosix.iso"
 	)
 endif()
