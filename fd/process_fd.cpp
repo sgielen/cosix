@@ -489,6 +489,9 @@ cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping
 	for(cloudabi_fd_t i = 0; i < fdslen; ++i) {
 		fds[i] = new_fds[i];
 	}
+	for(cloudabi_fd_t i = fdslen; i < fd_capacity; ++i) {
+		fds[i] = 0;
+	}
 
 	// temporarily re-install the old page directory, so we unmap from the old page directory
 	auto new_page_directory = page_directory;
