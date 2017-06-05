@@ -32,6 +32,7 @@ struct pseudo_fd : public seekable_fd_t {
 	cloudabi_inode_t file_create(const char *path, size_t pathlen, cloudabi_filetype_t type) override;
 	void file_unlink(const char *path, size_t pathlen, cloudabi_ulflags_t flags) override;
 	void file_stat_get(cloudabi_lookupflags_t flags, const char *path, size_t pathlen, cloudabi_filestat_t *buf) override;
+	void file_stat_fget(cloudabi_filestat_t *buf) override;
 
 	/* For sockets */
 	void sock_bind(cloudabi_sa_family_t family, shared_ptr<fd_t> fd, void * address, size_t address_len) override;

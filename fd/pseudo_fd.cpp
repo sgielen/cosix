@@ -287,6 +287,42 @@ void pseudo_fd::file_stat_get(cloudabi_lookupflags_t flags, const char *path, si
 	}
 }
 
+void pseudo_fd::file_stat_fget(cloudabi_filestat_t *buf)
+{
+	auto res = lookup_device_id();
+	if(res != 0) {
+		error = res;
+		return;
+	}
+
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::stat_fget;
+	request.inode = 0;
+	request.flags = 0;
+
+	reverse_response_t response;
+	Blk b = send_request(&request, nullptr, &response);
+	if(response.result < 0) {
+		maybe_deallocate(b);
+		error = -response.result;
+	} else {
+		if(b.size < sizeof(cloudabi_filestat_t)) {
+			error = EIO;
+			maybe_deallocate(b);
+			return;
+		}
+		memcpy(buf, b.ptr, sizeof(cloudabi_filestat_t));
+		maybe_deallocate(b);
+		if(buf->st_dev != device) {
+			get_vga_stream() << "Pseudo FD powered filesystem changed device ID's";
+			error = EIO;
+			return;
+		}
+		error = 0;
+	}
+}
+
 size_t pseudo_fd::readdir(char *buf, size_t nbyte, cloudabi_dircookie_t cookie)
 {
 	// TODO: the RPC protocol allows requesting a single readdir buffer. We
@@ -340,18 +376,17 @@ cloudabi_errno_t pseudo_fd::lookup_device_id() {
 		return 0;
 	}
 
-	// figure out the device ID by doing a stat() for .
+	// figure out the device ID by doing an fstat()
 	// NOTE: the uniqueness of device IDs is not checked, which means that
 	// the userland is responsible for keeping them unique!
 	reverse_request_t request;
 	request.pseudofd = pseudo_id;
-	request.op = reverse_request_t::operation::stat_get;
+	request.op = reverse_request_t::operation::stat_fget;
 	request.inode = 0;
 	request.flags = flags;
-	request.send_length = 1;
 
 	reverse_response_t response;
-	Blk b = send_request(&request, ".", &response);
+	Blk b = send_request(&request, nullptr, &response);
 	if(response.result < 0) {
 		maybe_deallocate(b);
 		return -response.result;

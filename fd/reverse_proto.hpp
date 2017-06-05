@@ -8,8 +8,9 @@ struct reverse_request_t {
 	pseudofd_t pseudofd = 0;
 	enum class operation {
 		lookup /* path in buffer -> inode */,
-		// all the calls below use the inode, not the path
 		stat_get,
+		stat_fget,
+		// all the calls below use the inode, not the path
 		stat_put,
 		open,
 		create,

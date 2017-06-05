@@ -116,9 +116,23 @@ cloudabi_errno_t cloudos::syscall_file_rename(syscall_context &)
 	return ENOSYS;
 }
 
-cloudabi_errno_t cloudos::syscall_file_stat_fget(syscall_context &)
+cloudabi_errno_t cloudos::syscall_file_stat_fget(syscall_context &c)
 {
-	return ENOSYS;
+	auto args = arguments_t<cloudabi_fd_t, cloudabi_filestat_t*>(c);
+	auto fdnum = args.first();
+	auto statbuf = args.second();
+
+	fd_mapping_t *mapping;
+	auto res = c.process()->get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FILE_STAT_FGET);
+	if(res != 0) {
+		return res;
+	}
+
+	mapping->fd->file_stat_fget(statbuf);
+	if(mapping->fd->error == 0) {
+		assert(statbuf->st_dev == mapping->fd->device);
+	}
+	return mapping->fd->error;
 }
 
 cloudabi_errno_t cloudos::syscall_file_stat_fput(syscall_context &)

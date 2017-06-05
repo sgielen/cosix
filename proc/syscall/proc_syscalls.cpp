@@ -68,7 +68,7 @@ cloudabi_errno_t cloudos::syscall_proc_fork(syscall_context &c)
 	c.process()->install_page_directory();
 
 	// set return values for parent
-	auto fdnum = c.process()->add_fd(newprocess, CLOUDABI_RIGHT_POLL_PROC_TERMINATE, 0);
+	auto fdnum = c.process()->add_fd(newprocess, CLOUDABI_RIGHT_POLL_PROC_TERMINATE | CLOUDABI_RIGHT_FILE_STAT_FGET, 0);
 	c.set_results(0, fdnum);
 	return 0;
 }

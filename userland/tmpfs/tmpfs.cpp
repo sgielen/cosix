@@ -189,16 +189,7 @@ size_t tmpfs::readdir(pseudofd_t pseudo, char *buffer, size_t buflen, cloudabi_d
 	return to_copy;
 }
 
-void tmpfs::stat_get(pseudofd_t pseudo, cloudabi_lookupflags_t flags, char *path, size_t len, cloudabi_filestat_t *buf) {
-	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
-
-	std::string filename = normalize_path(directory, path, len, flags);
-	auto it = directory->files.find(filename);
-	if(it == directory->files.end()) {
-		throw cloudabi_system_error(ENOENT);
-	}
-
-	auto entry = it->second;
+static void file_entry_to_filestat(file_entry_ptr &entry, cloudabi_filestat_t *buf) {
 	buf->st_dev = entry->device;
 	buf->st_ino = entry->inode;
 	buf->st_filetype = entry->type;
@@ -210,6 +201,23 @@ void tmpfs::stat_get(pseudofd_t pseudo, cloudabi_lookupflags_t flags, char *path
 	buf->st_atim = 0;
 	buf->st_mtim = 0;
 	buf->st_ctim = 0;
+}
+
+void tmpfs::stat_get(pseudofd_t pseudo, cloudabi_lookupflags_t flags, char *path, size_t len, cloudabi_filestat_t *buf) {
+	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
+
+	std::string filename = normalize_path(directory, path, len, flags);
+	auto it = directory->files.find(filename);
+	if(it == directory->files.end()) {
+		throw cloudabi_system_error(ENOENT);
+	}
+
+	file_entry_to_filestat(it->second, buf);
+}
+
+void tmpfs::stat_fget(pseudofd_t pseudo, cloudabi_filestat_t *buf) {
+	file_entry_ptr entry = get_file_entry_from_pseudo(pseudo);
+	file_entry_to_filestat(entry, buf);
 }
 
 /** Normalizes the given path. When it returns normally, directory

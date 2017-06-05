@@ -21,6 +21,14 @@ char *cosix::handle_request(reverse_request_t *request, char *buf, reverse_respo
 
 	try {
 		switch(request->op) {
+		case op::stat_fget: {
+			response->send_length = sizeof(cloudabi_filestat_t);
+			res = reinterpret_cast<char*>(malloc(response->send_length));
+			auto statbuf = reinterpret_cast<cloudabi_filestat_t*>(res);
+			h->stat_fget(request->pseudofd, statbuf);
+			response->result = 0;
+			break;
+		}
 		case op::lookup: {
 			auto file_entry = h->lookup(request->pseudofd, buf, request->send_length, request->flags);
 			response->result = file_entry.inode;

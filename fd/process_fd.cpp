@@ -81,7 +81,7 @@ process_fd::~process_fd()
 
 void process_fd::add_initial_fds() {
 	auto vga = make_shared<vga_fd>("vga_fd");
-	add_fd(vga, CLOUDABI_RIGHT_FD_WRITE);
+	add_fd(vga, CLOUDABI_RIGHT_FD_WRITE | CLOUDABI_RIGHT_FILE_STAT_FGET);
 
 	Blk fd_buf = allocate(200);
 	strncpy(reinterpret_cast<char*>(fd_buf.ptr), "These are the contents of my buffer!\n", fd_buf.size);
@@ -94,7 +94,9 @@ void process_fd::add_initial_fds() {
 		CLOUDABI_RIGHT_FD_WRITE |
 		CLOUDABI_RIGHT_FD_SEEK |
 		CLOUDABI_RIGHT_FD_TELL |
-		CLOUDABI_RIGHT_FILE_OPEN
+		CLOUDABI_RIGHT_FILE_OPEN |
+		CLOUDABI_RIGHT_FILE_STAT_FGET |
+		CLOUDABI_RIGHT_FILE_STAT_GET
 	);
 
 	add_fd(bootfs::get_root_fd(), CLOUDABI_RIGHT_FILE_OPEN,
@@ -102,6 +104,8 @@ void process_fd::add_initial_fds() {
 		CLOUDABI_RIGHT_FD_SEEK |
 		CLOUDABI_RIGHT_FD_TELL |
 		CLOUDABI_RIGHT_FILE_OPEN |
+		CLOUDABI_RIGHT_FILE_STAT_FGET |
+		CLOUDABI_RIGHT_FILE_STAT_GET |
 		CLOUDABI_RIGHT_PROC_EXEC);
 
 	auto ifstore = make_shared<ifstoresock>("ifstoresock");

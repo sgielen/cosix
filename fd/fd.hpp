@@ -117,9 +117,34 @@ struct fd_t {
 
 	/** Get attributes of a file by path.
 	 */
-	virtual void file_stat_get(cloudabi_lookupflags_t /*flags*/, const char* /*path*/, size_t /*path_len*/, cloudabi_filestat_t* /*buf*/)
+	virtual void file_stat_get(cloudabi_lookupflags_t /*flags*/, const char* path, size_t pathlen, cloudabi_filestat_t* buf)
 	{
-		error = EINVAL;
+		// If file_stat_get is unimplemented, use openat() + file_stat_fget
+		cloudabi_fdstat_t stat;
+		auto fd = openat(path, pathlen, 0, &stat);
+		if(error) {
+			return;
+		}
+		fd->file_stat_fget(buf);
+		if(fd->error) {
+			error = fd->error;
+		}
+	}
+
+	/** Get attributes of the open file.
+	 */
+	virtual void file_stat_fget(cloudabi_filestat_t *buf)
+	{
+		// fill in what we know; override this to give all values
+		buf->st_dev = device;
+		buf->st_ino = 0;
+		buf->st_filetype = type;
+		buf->st_nlink = 0;
+		buf->st_size = 0;
+		buf->st_atim = 0;
+		buf->st_mtim = 0;
+		buf->st_ctim = 0;
+		error = 0;
 	}
 
 	/* For sockets */
