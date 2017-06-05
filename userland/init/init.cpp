@@ -185,7 +185,7 @@ int start_binary(const char *name) {
 	return r;
 }
 
-int start_networked_binary(const char *name) {
+int start_networked_binary(const char *name, bool wait = true) {
 	int bfd = openat(bootfs, name, O_RDONLY);
 	if(bfd < 0) {
 		dprintf(stdout, "Failed to open %s: %s\n", name, strerror(errno));
@@ -204,13 +204,22 @@ int start_networked_binary(const char *name) {
 		exit(1);
 	}
 
-	argdata_t *keys[] = {argdata_create_string("stdout"), argdata_create_string("tmpdir"), argdata_create_string("networkd")};
-	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(pseudofd), argdata_create_fd(networkfd)};
+	argdata_t *keys[] = {argdata_create_string("stdout"), argdata_create_string("tmpdir"), argdata_create_string("initrd"), argdata_create_string("networkd")};
+	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(pseudofd), argdata_create_fd(initrd), argdata_create_fd(networkfd)};
 	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 
-	auto r = program_run(name, bfd, ad);
-	close(bfd);
-	return r;
+	if(wait) {
+		auto r = program_run(name, bfd, ad);
+		close(bfd);
+		return r;
+	} else {
+		int pfd = program_spawn(bfd, ad);
+		if(pfd < 0) {
+			dprintf(stdout, "%s failed to spawn: %s\n", name, strerror(errno));
+			return 1;
+		}
+		return 0;
+	}
 }
 
 void rm_rf_contents(DIR *d) {
@@ -356,6 +365,8 @@ void program_main(const argdata_t *) {
 
 	start_networked_binary("udptest");
 	start_networked_binary("tcptest");
+	start_networked_binary("pythonshell", false);
+	start_networked_binary("httpd", false);
 
 	// sleep for a bit after networking tests
 	{

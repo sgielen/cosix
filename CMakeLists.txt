@@ -52,6 +52,7 @@ if(BAREMETAL_ENABLED)
 	set(QEMU_ARGS -m 1024
 		-net nic,model=e1000 -net dump,file=dump.pcap -net user
 		-no-reboot -no-shutdown -d int -d cpu_reset -d guest_errors
+		-redir tcp:2626::26 -redir tcp:8080::80
 		-serial file:kernel.log)
 
 	add_custom_target(boot
