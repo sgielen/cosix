@@ -72,7 +72,6 @@ cloudabi_errno_t cloudos::syscall_file_open(syscall_context &c)
 	auto oflags = args.fourth();
 	auto new_fd = mapping->fd->openat(path, pathlen, oflags, fds);
 	if(!new_fd || mapping->fd->error != 0) {
-		get_vga_stream() << "failed to openat()\n";
 		if(mapping->fd->error == 0) {
 			mapping->fd->error = EIO;
 		}
