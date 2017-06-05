@@ -36,3 +36,15 @@ void ip_socket::run()
 {
 	handle_requests(reversefd, this);
 }
+
+void ip_socket::stat_fget(cosix::pseudofd_t, cloudabi_filestat_t *buf)
+{
+	buf->st_dev = 0;
+	buf->st_ino = 0;
+	buf->st_filetype = proto == transport_proto::udp ? CLOUDABI_FILETYPE_SOCKET_DGRAM : CLOUDABI_FILETYPE_SOCKET_STREAM;
+	buf->st_nlink = 0;
+	buf->st_size = 0;
+	buf->st_atim = 0;
+	buf->st_mtim = 0;
+	buf->st_ctim = 0;
+}

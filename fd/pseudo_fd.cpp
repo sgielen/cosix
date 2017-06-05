@@ -397,7 +397,7 @@ cloudabi_errno_t pseudo_fd::lookup_device_id() {
 		}
 		auto *stat = reinterpret_cast<cloudabi_filestat_t*>(b.ptr);
 		device = stat->st_dev;
-		assert(device > 0);
+		assert(device > 0 || type == CLOUDABI_FILETYPE_SOCKET_STREAM || type == CLOUDABI_FILETYPE_SOCKET_DGRAM);
 		device_id_obtained = true;
 		maybe_deallocate(b);
 		return 0;
