@@ -1,4 +1,5 @@
 #include "hw/multiboot.hpp"
+#include "global.hpp"
 #include <stdint.h>
 
 using namespace cloudos;
@@ -55,6 +56,7 @@ struct boot_info {
 }
 
 #define FLAG_MEMORY 1
+#define FLAG_MODULE 8
 #define FLAG_MMAP 64
 
 multiboot_info::multiboot_info(void *a, uint32_t magic)
@@ -84,4 +86,16 @@ size_t multiboot_info::memory_map(memory_map_entry **first) const {
 
 	*first = reinterpret_cast<memory_map_entry*>(bi->mmap_addr + _kernel_virtual_base);
 	return bi->mmap_length;
+}
+
+multiboot_module *multiboot_info::module_base_address() const {
+	if((bi->flags & FLAG_MODULE) == 0 || bi->mods_count == 0) {
+		get_vga_stream() << "No module base address\n";
+		return nullptr;
+	}
+
+	auto *r = reinterpret_cast<multiboot_module*>(bi->mods_addr + _kernel_virtual_base);
+	r->mmo_start += _kernel_virtual_base;
+	r->mmo_end += _kernel_virtual_base;
+	return r;
 }

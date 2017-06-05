@@ -2,21 +2,22 @@
 
 using namespace cloudos;
 
-memory_fd::memory_fd(const char *n)
+memory_fd::memory_fd(const char *n, cloudabi_inode_t i)
 : seekable_fd_t(CLOUDABI_FILETYPE_REGULAR_FILE, n)
 , alloc({nullptr, 0})
 , file_length(0)
+, inode(i)
 , owned(false)
 {}
 
-memory_fd::memory_fd(Blk a, size_t l, const char *n)
-: memory_fd(n)
+memory_fd::memory_fd(Blk a, size_t l, const char *n, cloudabi_inode_t i)
+: memory_fd(n, i)
 {
 	reset(a, l);
 }
 
-memory_fd::memory_fd(void *a, size_t l, const char *n)
-: memory_fd(n)
+memory_fd::memory_fd(void *a, size_t l, const char *n, cloudabi_inode_t i)
+: memory_fd(n, i)
 {
 	reset(a, l);
 }
@@ -24,18 +25,21 @@ memory_fd::memory_fd(void *a, size_t l, const char *n)
 void memory_fd::reset() {
 	alloc = {nullptr, 0};
 	file_length = 0;
+	inode = 0;
 	owned = false;
 }
 
-void memory_fd::reset(Blk a, size_t l) {
+void memory_fd::reset(Blk a, size_t l, cloudabi_inode_t i) {
 	alloc = a;
 	file_length = l;
+	inode = i;
 	owned = true;
 }
 
-void memory_fd::reset(void *a, size_t l) {
+void memory_fd::reset(void *a, size_t l, cloudabi_inode_t i) {
 	alloc = {a, 0};
 	file_length = l;
+	inode = i;
 	owned = false;
 }
 
@@ -66,3 +70,14 @@ size_t memory_fd::read(void *dest, size_t count) {
 	return copied;
 }
 
+void memory_fd::file_stat_fget(cloudabi_filestat_t *buf) {
+	buf->st_dev = device;
+	buf->st_ino = inode;
+	buf->st_filetype = type;
+	buf->st_nlink = 1;
+	buf->st_size = file_length;
+	buf->st_atim = 0;
+	buf->st_mtim = 0;
+	buf->st_ctim = 0;
+	error = 0;
+}

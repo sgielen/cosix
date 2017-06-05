@@ -22,6 +22,7 @@
 int stdout;
 int procfs;
 int bootfs;
+int initrd;
 int reversefd;
 int pseudofd;
 int ifstore;
@@ -324,7 +325,8 @@ void program_main(const argdata_t *) {
 	stdout = 0;
 	procfs = 2;
 	bootfs = 3;
-	ifstore = 4;
+	initrd = 4;
+	ifstore = 5;
 
 	dprintf(stdout, "Init starting up.\n");
 

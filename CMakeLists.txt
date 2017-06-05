@@ -55,16 +55,16 @@ if(BAREMETAL_ENABLED)
 		-serial file:kernel.log)
 
 	add_custom_target(boot
-		COMMAND qemu-system-i386 -kernel cloudkernel ${QEMU_ARGS}
-		DEPENDS cloudkernel
+		COMMAND qemu-system-i386 -kernel cloudkernel -initrd initrd ${QEMU_ARGS}
+		DEPENDS cloudkernel initrd
 	)
 	add_custom_target(gdbboot
-		COMMAND qemu-system-i386 -kernel cloudkernel ${QEMU_ARGS} -watchdog-action debug -S -s
-		DEPENDS cloudkernel
+		COMMAND qemu-system-i386 -kernel cloudkernel -initrd initrd ${QEMU_ARGS} -watchdog-action debug -S -s
+		DEPENDS cloudkernel initrd
 	)
 
 	add_custom_target(fastboot
-		COMMAND qemu-system-i386 -kernel cloudkernel ${QEMU_ARGS}
+		COMMAND qemu-system-i386 -kernel cloudkernel -initrd initrd ${QEMU_ARGS}
 	)
 endif()
 

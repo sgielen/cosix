@@ -3,7 +3,7 @@ if(BAREMETAL_ENABLED)
 		COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/produce_iso.sh"
 			"${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}" "cosix.iso"
 		WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
-		DEPENDS cloudkernel
+		DEPENDS cloudkernel initrd
 	)
 	add_custom_target(iso
 		DEPENDS "${CMAKE_BINARY_DIR}/cosix.iso"

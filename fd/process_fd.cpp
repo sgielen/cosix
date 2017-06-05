@@ -8,6 +8,7 @@
 #include <fd/memory_fd.hpp>
 #include <fd/procfs.hpp>
 #include <fd/bootfs.hpp>
+#include <fd/initrdfs.hpp>
 #include <fd/pseudo_fd.hpp>
 #include <fd/unixsock.hpp>
 #include <fd/scheduler.hpp>
@@ -106,6 +107,17 @@ void process_fd::add_initial_fds() {
 		CLOUDABI_RIGHT_FILE_OPEN |
 		CLOUDABI_RIGHT_FILE_STAT_FGET |
 		CLOUDABI_RIGHT_FILE_STAT_GET |
+		CLOUDABI_RIGHT_PROC_EXEC);
+
+	add_fd(get_initrdfs()->get_root_fd(), CLOUDABI_RIGHT_FILE_OPEN,
+		CLOUDABI_RIGHT_FD_READ |
+		CLOUDABI_RIGHT_FD_SEEK |
+		CLOUDABI_RIGHT_FD_TELL |
+		CLOUDABI_RIGHT_FILE_OPEN |
+		CLOUDABI_RIGHT_FILE_READDIR |
+		CLOUDABI_RIGHT_FILE_STAT_FGET |
+		CLOUDABI_RIGHT_FILE_STAT_GET |
+		CLOUDABI_RIGHT_FILE_CREATE_DIRECTORY |
 		CLOUDABI_RIGHT_PROC_EXEC);
 
 	auto ifstore = make_shared<ifstoresock>("ifstoresock");

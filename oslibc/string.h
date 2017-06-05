@@ -10,6 +10,9 @@ extern "C" {
 size_t
 strlen(const char *s);
 
+size_t
+strnlen(const char *s, size_t maxlen);
+
 void *
 memset(void *b, int c, size_t len);
 
@@ -21,6 +24,9 @@ memcmp(const void *left, const void *right, size_t n);
 
 int
 strcmp(const char *left, const char *right);
+
+int
+strncmp(const char *left, const char *right, size_t n);
 
 char *
 strncpy(char *dst, const char *src, size_t n);

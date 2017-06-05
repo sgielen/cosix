@@ -45,7 +45,8 @@ fi
 mkdir -p $TMPDIR/boot/grub
 cp ${SOURCEDIR}/misc/iso/menu.lst        ${TMPDIR}/boot/grub
 cp ${SOURCEDIR}/misc/iso/stage2_eltorito ${TMPDIR}/boot/grub
-cp ${BINDIR}/cloudkernel                  ${TMPDIR}/boot
+cp ${BINDIR}/cloudkernel                 ${TMPDIR}/boot
+cp ${BINDIR}/initrd                      ${TMPDIR}/boot
 ${MKISOFS} -V "COSIX" \
 	-o ${ISONAME} -iso-level 3 -R \
 	-b boot/grub/stage2_eltorito -no-emul-boot \

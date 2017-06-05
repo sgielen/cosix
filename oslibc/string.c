@@ -8,6 +8,15 @@ strlen(const char* str) {
 	return ret;
 }
 
+size_t
+strnlen(const char *str, size_t maxlen) {
+	size_t ret = 0;
+	while ( str[ret] != 0 && ret < maxlen) {
+		ret++;
+	}
+	return ret;
+}
+
 void *
 memset(void *b, int c, size_t len) {
 	unsigned char *buf = b;
@@ -50,6 +59,19 @@ strcmp(const char *left, const char *right) {
 		left++;
 		right++;
 	}
+}
+
+int
+strncmp(const char *left, const char *right, size_t n) {
+	while(n > 0) {
+		if(*left == 0 && *right == 0) return 0;
+		if(*left < *right) return -1;
+		if(*left > *right) return 1;
+		left++;
+		right++;
+		n--;
+	}
+	return 0;
 }
 
 char *

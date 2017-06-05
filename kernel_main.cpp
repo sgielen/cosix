@@ -20,6 +20,7 @@
 #include "fd/process_fd.hpp"
 #include "fd/scheduler.hpp"
 #include "fd/bootfs.hpp"
+#include "fd/initrdfs.hpp"
 #include "memory/allocator.hpp"
 #include "memory/page_allocator.hpp"
 #include "memory/map_virtual.hpp"
@@ -87,7 +88,16 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 
 	sse_enable();
 
-	// end_of_kernel points at the end of any usable code, stack, BSS, etc
+	// Load initrd
+	// TODO: this code assumes initrd is loaded shortly after the kernel.
+	// A bootloader is allowed to load it anywhere -- if it decides to load
+	// it at end of memory, we won't have any physical pages to allocate.
+	auto *module_base_address = boot_info.module_base_address();
+	if(module_base_address && module_base_address->mmo_end > reinterpret_cast<uint32_t>(end_of_kernel)) {
+		end_of_kernel = reinterpret_cast<void*>(module_base_address->mmo_end);
+	}
+
+	// end_of_kernel points at the end of any usable code, stack, BSS, initrd, etc
 	// in physical memory, so everything after that is free for use by the
 	// allocator
 	page_allocator paging(end_of_kernel, mmap, memory_map_bytes);
@@ -95,6 +105,9 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	map_virtual vmap(&paging);
 	global.map_virtual = &vmap;
 	vmap.load_paging_stage2();
+
+	initrdfs initrd(module_base_address);
+	global.initrdfs = &initrd;
 
 	allocator alloc_;
 	global.alloc = &alloc_;

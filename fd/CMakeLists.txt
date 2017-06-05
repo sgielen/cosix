@@ -8,6 +8,7 @@ if(BAREMETAL_ENABLED)
 		scheduler.cpp scheduler.hpp scheduler.s
 		procfs.cpp procfs.hpp
 		bootfs.cpp bootfs.hpp
+		initrdfs.cpp initrdfs.hpp
 		thread.cpp thread.hpp
 		pipe_fd.cpp pipe_fd.hpp
 		pseudo_fd.cpp pseudo_fd.hpp

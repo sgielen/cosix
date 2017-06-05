@@ -3,3 +3,4 @@ timeout 5
 
 title Cosix
 kernel /boot/cloudkernel
+module /boot/initrd
