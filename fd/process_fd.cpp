@@ -365,29 +365,50 @@ void *process_fd::find_free_virtual_range(size_t num_pages)
 
 cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping_t **new_fds, void const *argdata, size_t argdatalen) {
 	// read from this fd until it gives EOF, then exec(buf, buf_size)
-	// TODO: once all fds implement seek(), we can read() only the header,
-	// then seek to the phdr offset, then read() phdrs, then for every LOAD
-	// phdr, seek() to the binary data and read() only that into the
-	// process address space
-	Blk elf_buffer_blk = allocate(10 * 1024 * 1024);
-	uint8_t *elf_buffer = reinterpret_cast<uint8_t*>(elf_buffer_blk.ptr);
-	if(elf_buffer == nullptr) {
-		return ENOMEM;
-	}
-
-	size_t buffer_size = 0;
+	// TODO: memory map instead of reading it in full
+	linked_list<Blk> *elf_pieces = nullptr;
+	size_t total_size = 0;
 	do {
-		size_t read = fd->read(&elf_buffer[buffer_size], 1024);
-		buffer_size += read;
+		Blk blk = allocate(4096);
+		assert(blk.ptr != 0); // TODO: deallocate
+		size_t read = fd->read(blk.ptr, blk.size);
 		if(read == 0) {
+			deallocate(blk);
+			break;
+		}
+		total_size += read;
+		linked_list<Blk> *piece = allocate<linked_list<Blk>>(blk);
+		append(&elf_pieces, piece);
+		if(read < blk.size) {
 			break;
 		}
 	} while(fd->error == 0);
 
 	if(fd->error != 0) {
-		deallocate(elf_buffer_blk);
+		// TODO: deallocate
 		return EINVAL;
 	}
+
+	Blk elf_buffer_blk = allocate(total_size);
+	uint8_t *elf_buffer = reinterpret_cast<uint8_t*>(elf_buffer_blk.ptr);
+	if(elf_buffer == nullptr) {
+		// TODO: deallocate
+		return ENOMEM;
+	}
+	while(elf_pieces) {
+		auto *item = elf_pieces;
+		elf_pieces = item->next;
+
+		size_t copy = item->data.size < total_size ? item->data.size : total_size;
+		memcpy(elf_buffer, item->data.ptr, copy);
+		elf_buffer += copy;
+		total_size -= copy;
+
+		deallocate(item->data);
+		deallocate(item);
+	}
+	assert(elf_pieces == nullptr);
+	assert(total_size == 0);
 
 	assert(argdata != nullptr);
 	assert(argdatalen > 0);
@@ -431,7 +452,7 @@ cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping
 	memcpy(argdata_address, argdata_buffer, argdatalen);
 	deallocate(argdata_alloc);
 
-	auto res = exec(elf_buffer, buffer_size, argdata_address, argdatalen);
+	auto res = exec(reinterpret_cast<uint8_t*>(elf_buffer_blk.ptr), elf_buffer_blk.size, argdata_address, argdatalen);
 	deallocate(elf_buffer_blk);
 	if(res != 0) {
 		page_directory = old_page_directory;
