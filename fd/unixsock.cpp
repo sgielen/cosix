@@ -343,7 +343,7 @@ void unixsock::sock_stat_get(cloudabi_sockstat_t* buf, cloudabi_ssflags_t flags)
 {
 	assert(buf);
 	buf->ss_sockname.sa_family = CLOUDABI_AF_UNIX;
-	if(status == sockstatus_t::CONNECTING || status == sockstatus_t::CONNECTED || status == sockstatus_t::SHUTDOWN) {
+	if(status == sockstatus_t::CONNECTING || status == sockstatus_t::CONNECTED) {
 		buf->ss_peername.sa_family = CLOUDABI_AF_UNIX;
 	} else {
 		buf->ss_peername.sa_family = CLOUDABI_AF_UNSPEC;
@@ -358,6 +358,12 @@ void unixsock::sock_stat_get(cloudabi_sockstat_t* buf, cloudabi_ssflags_t flags)
 
 void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 {
+	out->ro_sockname.sa_family = CLOUDABI_AF_UNIX;
+	out->ro_peername.sa_family = CLOUDABI_AF_UNIX;
+	out->ro_flags = 0;
+	out->ro_datalen = 0;
+	out->ro_fdslen = 0;
+
 	if(status != sockstatus_t::CONNECTED && status != sockstatus_t::SHUTDOWN) {
 		error = ENOTCONN;
 		return;
@@ -370,7 +376,7 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 		auto other = othersock.lock();
 		if(!other) {
 			// othersock is already destroyed
-			error = ECONNRESET;
+			error = 0;
 			return;
 		}
 		assert(other->othersock.lock().get() == this);
@@ -384,7 +390,7 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 
 		if(recv_messages == nullptr) {
 			// other socket is in shutdown and there are no messages
-			error = ECONNRESET;
+			error = 0;
 			return;
 		}
 	}
@@ -437,13 +443,10 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 		// TODO: what if fds are truncated? move to next message?
 		out->ro_datalen = datalen;
 		out->ro_fdslen = fds_set;
-		out->ro_sockname.sa_family = CLOUDABI_AF_UNIX;
-		out->ro_peername.sa_family = CLOUDABI_AF_UNIX;
-		out->ro_flags = 0;
+		error = 0;
 
 		deallocate(message->buf);
 		deallocate(message);
-		error = 0;
 	} else if(type == CLOUDABI_FILETYPE_SOCKET_STREAM) {
 		// Stream receiving: while the current buffers aren't full,
 		// fill them with parts of the next message, taking them off
@@ -506,10 +509,6 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 
 		out->ro_datalen = total_written;
 		out->ro_fdslen = fds_set;
-		out->ro_sockname.sa_family = CLOUDABI_AF_UNIX;
-		out->ro_peername.sa_family = CLOUDABI_AF_UNIX;
-		out->ro_flags = 0;
-
 		error = 0;
 	}
 }

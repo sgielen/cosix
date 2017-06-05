@@ -160,6 +160,6 @@ cloudabi_errno_t cloudos::syscall_sock_stat_get(syscall_context &c)
 	}
 
 	mapping->fd->sock_stat_get(sockstat, ssflags);
-	return mapping->fd->error;
+	return 0 /* return error through sock_stat_get only */;
 }
 
