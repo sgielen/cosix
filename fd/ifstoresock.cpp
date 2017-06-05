@@ -137,7 +137,7 @@ void ifstoresock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *o
 
 	interface *iface = nullptr;
 
-	// Commands without arguments
+	// Commands without mandatory arguments
 	if(strcmp(command, "LIST") == 0) {
 		// List all interfaces
 		auto *ifaces = get_interface_store()->get_interfaces();
@@ -158,7 +158,22 @@ void ifstoresock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *o
 		auto process = get_scheduler()->get_running_thread()->get_process();
 		int reverse_fd = process->add_fd(their_reverse, all_rights, all_rights);
 
-		auto pseudo = make_shared<pseudo_fd>(0, my_reverse, CLOUDABI_FILETYPE_DIRECTORY, "pseudo");
+		cloudabi_filetype_t f = CLOUDABI_FILETYPE_DIRECTORY;
+		if(arg) {
+			if(strcmp(arg, "REGULAR_FILE") == 0) {
+				f = CLOUDABI_FILETYPE_REGULAR_FILE;
+			} else if(strcmp(arg, "SOCKET_STREAM") == 0) {
+				f = CLOUDABI_FILETYPE_SOCKET_STREAM;
+			} else if(strcmp(arg, "SOCKET_DGRAM") == 0) {
+				f = CLOUDABI_FILETYPE_SOCKET_DGRAM;
+			} else if(strcmp(arg, "DIRECTORY") == 0) {
+				f = CLOUDABI_FILETYPE_DIRECTORY;
+			} else {
+				strncpy(response, "ERROR", sizeof(response));
+				goto send;
+			}
+		}
+		auto pseudo = make_shared<pseudo_fd>(0, my_reverse, f, "pseudo");
 		int pseudo_fd = process->add_fd(pseudo, all_rights, all_rights);
 
 		fd_mapping_t *fd_mapping;

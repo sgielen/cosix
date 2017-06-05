@@ -94,9 +94,11 @@ std::string get_mac(std::string iface) {
 	return send_ifstore_command("MAC " + iface);
 }
 
-std::pair<int, int> open_pseudo() {
+std::pair<int, int> open_pseudo(cloudabi_filetype_t type) {
+	std::string message = "PSEUDOPAIR ";
+	message += (type == CLOUDABI_FILETYPE_SOCKET_DGRAM ? "SOCKET_DGRAM" : "SOCKET_STREAM");
 	std::lock_guard<std::mutex> lock(ifstore_mtx);
-	write(ifstore, "PSEUDOPAIR", 10);
+	write(ifstore, message.c_str(), message.size());
 	char buf[20];
 	buf[0] = 0;
 	struct iovec iov = {.iov_base = buf, .iov_len = sizeof(buf)};

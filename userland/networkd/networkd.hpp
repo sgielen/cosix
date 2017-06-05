@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <cloudabi_types.h>
 
 namespace networkd {
 struct interface;
@@ -26,7 +27,7 @@ std::vector<std::string> get_addr_v4(std::string iface);
 void add_addr_v4(std::string iface, std::string ip, int cidr_prefix);
 
 /* reverse, pseudo */
-std::pair<int, int> open_pseudo();
+std::pair<int, int> open_pseudo(cloudabi_filetype_t);
 
 void dump_interfaces();
 void dump_routing_table();

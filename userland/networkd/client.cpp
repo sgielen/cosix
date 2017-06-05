@@ -383,6 +383,7 @@ void client::run() {
 			uint16_t local_port = 0;
 			std::string peer_ip;
 			uint16_t peer_port = 0;
+			cloudabi_filetype_t filetype = command == "udpsock" ? CLOUDABI_FILETYPE_SOCKET_DGRAM : CLOUDABI_FILETYPE_SOCKET_STREAM;
 
 			if(!bind.empty()) {
 				auto bind_ip_port = ipv4_port_pton(bind);
@@ -420,7 +421,7 @@ void client::run() {
 				local_ip = *l_ip;
 			}
 
-			auto rev_pseu = open_pseudo();
+			auto rev_pseu = open_pseudo(filetype);
 			if(rev_pseu.first <= 0 || rev_pseu.second <= 0) {
 				if(!send_error("Failed to open pseudo pair")) {
 					return;
