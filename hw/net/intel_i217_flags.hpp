@@ -93,7 +93,5 @@
 
 #define MEM_MAC 0x5400
 
-#define E1000_NUM_RX_DESC 32
-#define E1000_NUM_TX_DESC 8
 #define E1000_BUFFER_SIZE 2048
 

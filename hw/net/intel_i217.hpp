@@ -7,6 +7,9 @@
 
 namespace cloudos {
 
+#define E1000_NUM_RX_DESC 32
+#define E1000_NUM_TX_DESC 8
+
 struct intel_i217_device : public ethernet_device, public pci_device, public irq_handler {
 	intel_i217_device(pci_bus *parent, int bus_device);
 	~intel_i217_device() override;
@@ -34,8 +37,8 @@ private:
 	struct e1000_tx_desc *tx_descs = nullptr;
 	uint8_t tx_current = 0;
 
-	uint8_t *rx_desc_bufs[32];
-	uint8_t *tx_desc_bufs[8];
+	uint8_t *rx_desc_bufs[E1000_NUM_RX_DESC];
+	uint8_t *tx_desc_bufs[E1000_NUM_TX_DESC];
 };
 
 struct intel_i217_driver : public driver {

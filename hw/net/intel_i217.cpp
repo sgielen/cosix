@@ -272,6 +272,8 @@ void intel_i217_device::handle_receive()
 		ethernet_frame_received(buf, length);
 
 		rx_descs[rx_current].status = 0;
+		asm volatile ("": : :"memory");
+		write32(REG_RXDESCTAIL, rx_current);
 		rx_current = (rx_current + 1) % E1000_NUM_RX_DESC;
 	}
 }
