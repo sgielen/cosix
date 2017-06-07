@@ -166,7 +166,6 @@ import code
 import socket
 
 original_print = print
-active_socket = None
 def my_print(*args, **kwargs):
   kwargs.pop('file', None)
   original_print(*args, file=sys.stderr, **kwargs)
@@ -174,6 +173,9 @@ print = my_print
 
 print("Python shell started!")
 sys.stderr.flush()
+
+class SocketClosedError(Exception):
+  pass
 
 class SockConsole(code.InteractiveConsole):
   def __init__(self, sock, locals):
@@ -185,7 +187,7 @@ class SockConsole(code.InteractiveConsole):
     file = self.sock.makefile()
     res = file.readline()
     if res == '':
-      raise IOError("Failed to read input from SockConsole")
+      raise SocketClosedError()
     return res[:-1]
 
   def runsource(self, source, filename, symbol="single"):
@@ -253,11 +255,16 @@ class Output(io.IOBase):
   def writable():
     return True
 
-  def write(self, str):
-    self.file.write(str)
+  def write(self, string):
+    self.file.write(string)
     self.file.flush()
     if self.sock is not None:
-      self.sock.send(bytearray(str, "UTF-8"))
+      try:
+        self.sock.send(bytearray(string, "UTF-8"))
+      except Exception as e:
+        self.sock = None
+        self.write("Failed to write string to socket: " + str(e) + "\n")
+        raise
 
 listensock = sys.argdata['socket']
 output = Output(sys.stderr)
@@ -269,6 +276,8 @@ while listensock:
   output.sock = conn
   try:
     SockConsole(conn, globals()).interact()
+  except SocketClosedError:
+    pass
   except Exception as e:
     output.write("Exception occurred: " + str(e) + "\n")
   output.sock = None
