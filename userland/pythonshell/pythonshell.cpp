@@ -27,6 +27,8 @@ int stdout;
 int tmpdir;
 int initrd;
 int networkd;
+int procfs;
+int bootfs;
 
 int networkd_get_socket(int type, std::string connect, std::string bind) {
 	std::string command;
@@ -100,6 +102,12 @@ void parse_params(const argdata_t *ad) {
 	const argdata_t *key;
 	const argdata_t *value;
 	argdata_map_iterate(ad, &it);
+	stdout = -1;
+	networkd = -1;
+	procfs = -1;
+	bootfs = -1;
+	tmpdir = -1;
+	initrd = -1;
 	while (argdata_map_next(&it, &key, &value)) {
 		const char *keystr;
 		if(argdata_get_str_c(key, &keystr) != 0) {
@@ -110,6 +118,10 @@ void parse_params(const argdata_t *ad) {
 			argdata_get_fd(value, &stdout);
 		} else if(strcmp(keystr, "networkd") == 0) {
 			argdata_get_fd(value, &networkd);
+		} else if(strcmp(keystr, "procfs") == 0) {
+			argdata_get_fd(value, &procfs);
+		} else if(strcmp(keystr, "bootfs") == 0) {
+			argdata_get_fd(value, &bootfs);
 		} else if(strcmp(keystr, "tmpdir") == 0) {
 			argdata_get_fd(value, &tmpdir);
 		} else if(strcmp(keystr, "initrd") == 0) {
@@ -141,14 +153,36 @@ void program_main(const argdata_t *ad) {
 		exit(1);
 	}
 
-	std::unique_ptr<argdata_t> paths = {argdata_t::create_fd(libfd)};
+	// Find cosix libs on the initrd
+	int clibfd = openat(initrd, "lib/cosix", O_RDONLY);
+	if(clibfd < 0) {
+		dprintf(stdout, "Won't run Python shell, because I failed to open the Cosix libdir: %s\n", strerror(errno));
+		exit(1);
+	}
+
+	std::unique_ptr<argdata_t> paths[] = {
+		argdata_t::create_fd(libfd),
+		argdata_t::create_fd(clibfd)
+	};
 	std::vector<argdata_t*> path_ptrs;
 	for(auto &path : mstd::range<std::unique_ptr<argdata_t>>(paths)) {
 		path_ptrs.push_back(path.get());
 	}
 
-	std::unique_ptr<argdata_t> args_keys[] = {argdata_t::create_str("socket")};
-	std::unique_ptr<argdata_t> args_values[] = {argdata_t::create_fd(listensock)};
+	std::unique_ptr<argdata_t> args_keys[] = {
+		argdata_t::create_str("socket"),
+		argdata_t::create_str("procfs"),
+		argdata_t::create_str("bootfs"),
+		argdata_t::create_str("tmpdir"),
+		argdata_t::create_str("networkd")
+	};
+	std::unique_ptr<argdata_t> args_values[] = {
+		argdata_t::create_fd(listensock),
+		argdata_t::create_fd(procfs),
+		argdata_t::create_fd(bootfs),
+		argdata_t::create_fd(tmpdir),
+		argdata_t::create_fd(networkd),
+	};
 	std::vector<argdata_t*> args_key_ptrs;
 	std::vector<argdata_t*> args_value_ptrs;
 	
@@ -162,98 +196,18 @@ void program_main(const argdata_t *ad) {
 	std::string command = R"PYTHON(
 import io
 import sys
-import code
-import socket
-
-original_print = print
-def my_print(*args, **kwargs):
-  kwargs.pop('file', None)
-  original_print(*args, file=sys.stderr, **kwargs)
-print = my_print
+from cosix import *
 
 print("Python shell started!")
 sys.stderr.flush()
-
-class SocketClosedError(Exception):
-  pass
-
-class SockConsole(code.InteractiveConsole):
-  def __init__(self, sock, locals):
-    code.InteractiveConsole.__init__(self, locals, "<SockConsole>")
-    self.sock = sock
-
-  def raw_input(self, prompt):
-    self.sock.send(bytearray(prompt, "UTF-8"))
-    file = self.sock.makefile()
-    res = file.readline()
-    if res == '':
-      raise SocketClosedError()
-    return res[:-1]
-
-  def runsource(self, source, filename, symbol="single"):
-    # Python has some pretty annoying quirks here. While eval(expr) returns
-    # the return value of the expression, compile(eval(expr)) prints the
-    # return value. It also doesn't use the Python global print() function,
-    # but an internal one, so the output doesn't go to the socket. Also, this
-    # works only for expressions; for statements (like 'foo=5') it raises a
-    # syntax error exception.
-    # So, we first figure out what type of input we get. If it parses as an
-    # expression, we run it as such. Otherwise, we assume it is a statement
-    # and try to compile and run it as such.
-
-    code = None
-
-    try:
-      code = self.compile(source, filename, "eval")
-    except:
-      pass
-
-    if code is not None:
-      # It compiles in eval mode so it's an expression; run it through eval()
-      # again so we can print its return value
-      try:
-        self.print(eval(source, self.locals))
-      except SystemExit:
-        raise
-      except:
-        self.showtraceback()
-      return False
-
-    # Either malformed or it's a statement, try compiling as a statement
-    try:
-      code = self.compile(source, filename, symbol)
-    except (OverflowError, SyntaxError, ValueError):
-      # Input is malformed
-      self.showsyntaxerror(filename)
-      return False
-
-    if code is None:
-      # More input is required
-      return True
-
-    # Compiles as a statement, run it as such
-    try:
-      eval(code, self.locals)
-    except SystemExit:
-      raise
-    except:
-      self.showtraceback()
-
-  def print(self, obj):
-    if obj is None:
-      pass
-    elif type(obj) == str:
-      print("'%s'" % obj)
-    else:
-      print(str(obj))
 
 class Output(io.IOBase):
   def __init__(self, file):
     self.file = file
     self.sock = None
 
-  def writable():
-    return True
+  def fileno(self):
+    return self.file.fileno()
 
   def write(self, string):
     self.file.write(string)
@@ -275,7 +229,9 @@ while listensock:
   file = conn.makefile('w')
   output.sock = conn
   try:
-    SockConsole(conn, globals()).interact()
+    cons = SockConsole(conn, globals())
+    cons.runsource("from cosix import *", "<init>")
+    cons.interact()
   except SocketClosedError:
     pass
   except Exception as e:

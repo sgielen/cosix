@@ -35,7 +35,7 @@ while (( "$#" )); do
 		mkdir -p $TMPDIR/$INTO
 		shift
 	else
-		cp -R $1 "$TMPDIR/$INTO"
+		cp -R $(greadlink -f $1) "$TMPDIR/$INTO"
 	fi
 	shift
 done

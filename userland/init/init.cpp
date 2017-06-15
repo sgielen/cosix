@@ -204,8 +204,18 @@ int start_networked_binary(const char *name, bool wait = true) {
 		exit(1);
 	}
 
-	argdata_t *keys[] = {argdata_create_string("stdout"), argdata_create_string("tmpdir"), argdata_create_string("initrd"), argdata_create_string("networkd")};
-	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(pseudofd), argdata_create_fd(initrd), argdata_create_fd(networkfd)};
+	argdata_t *keys[] = {argdata_create_string("stdout"),
+		argdata_create_string("tmpdir"),
+		argdata_create_string("initrd"),
+		argdata_create_string("networkd"),
+		argdata_create_string("procfs"),
+		argdata_create_string("bootfs")};
+	argdata_t *values[] = {argdata_create_fd(stdout),
+		argdata_create_fd(pseudofd),
+		argdata_create_fd(initrd),
+		argdata_create_fd(networkfd),
+		argdata_create_fd(procfs),
+		argdata_create_fd(bootfs)};
 	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 
 	if(wait) {
@@ -293,6 +303,7 @@ void open_pseudo() {
 		CLOUDABI_RIGHT_FILE_LINK_TARGET |
 		CLOUDABI_RIGHT_FILE_OPEN |
 		CLOUDABI_RIGHT_FILE_READDIR |
+		CLOUDABI_RIGHT_FILE_STAT_FGET |
 		CLOUDABI_RIGHT_FILE_STAT_GET |
 		CLOUDABI_RIGHT_FILE_UNLINK |
 		CLOUDABI_RIGHT_SOCK_BIND_DIRECTORY |

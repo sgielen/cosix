@@ -10,6 +10,8 @@ if(CLOUDABI_PYTHON_BINARY AND CLOUDABI_PYTHON_LIBRARIES AND BAREMETAL_ENABLED)
 			"${CLOUDABI_PYTHON_BINARY}"
 			"--into" "lib"
 			"${CLOUDABI_PYTHON_LIBRARIES}"
+			"--into" "lib/cosix"
+			"${CMAKE_SOURCE_DIR}/misc/python/cosix.py"
 		WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
 	)
 	add_custom_target(initrd

@@ -1,0 +1,102 @@
+import os
+import sys
+import code
+
+original_print = print
+def my_print(*args, **kwargs):
+  kwargs.pop('file', None)
+  original_print(*args, file=sys.stderr, **kwargs)
+print = my_print
+
+class FDWrapper:
+  def __init__(self, fd):
+    self.fd = fd
+  def fileno(self):
+    return self.fd
+
+class SocketClosedError(Exception):
+  pass
+
+class SockConsole(code.InteractiveConsole):
+  def __init__(self, sock, locals):
+    code.InteractiveConsole.__init__(self, locals, "<SockConsole>")
+    self.sock = sock
+
+  def raw_input(self, prompt):
+    self.sock.send(bytearray(prompt, "UTF-8"))
+    file = self.sock.makefile()
+    res = file.readline()
+    if res == '':
+      raise SocketClosedError()
+    return res[:-1]
+
+  def runsource(self, source, filename, symbol="single"):
+    # Python has some pretty annoying quirks here. While eval(expr) returns
+    # the return value of the expression, compile(eval(expr)) prints the
+    # return value. It also doesn't use the Python global print() function,
+    # but an internal one, so the output doesn't go to the socket. Also, this
+    # works only for expressions; for statements (like 'foo=5') it raises a
+    # syntax error exception.
+    # So, we first figure out what type of input we get. If it parses as an
+    # expression, we run it as such. Otherwise, we assume it is a statement
+    # and try to compile and run it as such.
+
+    code = None
+
+    try:
+      code = self.compile(source, filename, "eval")
+    except:
+      pass
+
+    if code is not None:
+      # It compiles in eval mode so it's an expression; run it through eval()
+      # again so we can print its return value
+      try:
+        self.print(eval(source, self.locals))
+      except SystemExit:
+        raise
+      except:
+        self.showtraceback()
+      return False
+
+    # Either malformed or it's a statement, try compiling as a statement
+    try:
+      code = self.compile(source, filename, symbol)
+    except (OverflowError, SyntaxError, ValueError):
+      # Input is malformed
+      self.showsyntaxerror(filename)
+      return False
+
+    if code is None:
+      # More input is required
+      return True
+
+    # Compiles as a statement, run it as such
+    try:
+      eval(code, self.locals)
+    except SystemExit:
+      raise
+    except:
+      self.showtraceback()
+
+  def print(self, obj):
+    if obj is None:
+      pass
+    elif type(obj) == str:
+      print("'%s'" % obj)
+    else:
+      print(str(obj))
+
+def this_conn():
+  return sys.stderr.sock
+
+def run_unittests():
+  binfd = os.open("unittests", os.O_RDONLY, dir_fd=sys.argdata['bootfs'])
+  procfd = os.program_spawn(binfd,
+    {'logfile': this_conn(),
+     'tmpdir': FDWrapper(sys.argdata['tmpdir']),
+     'nthreads': 1,
+    })
+  os.pdwait(procfd, 0)
+  os.close(procfd)
+  os.close(binfd)
