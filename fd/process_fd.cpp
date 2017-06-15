@@ -90,7 +90,11 @@ void process_fd::add_initial_fds() {
 	auto memory = make_shared<memory_fd>(fd_buf, strlen(reinterpret_cast<char*>(fd_buf.ptr)) + 1, "memory_fd");
 	add_fd(memory, CLOUDABI_RIGHT_FD_READ);
 
-	add_fd(procfs::get_root_fd(), CLOUDABI_RIGHT_FILE_OPEN,
+	add_fd(procfs::get_root_fd(),
+		// base rights
+		CLOUDABI_RIGHT_FILE_OPEN |
+		CLOUDABI_RIGHT_FILE_STAT_FGET,
+		// inherited rights
 		CLOUDABI_RIGHT_FD_READ |
 		CLOUDABI_RIGHT_FD_WRITE |
 		CLOUDABI_RIGHT_FD_SEEK |
@@ -100,7 +104,11 @@ void process_fd::add_initial_fds() {
 		CLOUDABI_RIGHT_FILE_STAT_GET
 	);
 
-	add_fd(bootfs::get_root_fd(), CLOUDABI_RIGHT_FILE_OPEN,
+	add_fd(bootfs::get_root_fd(),
+		// base rights
+		CLOUDABI_RIGHT_FILE_OPEN |
+		CLOUDABI_RIGHT_FILE_STAT_FGET,
+		// inherited rights
 		CLOUDABI_RIGHT_FD_READ |
 		CLOUDABI_RIGHT_FD_SEEK |
 		CLOUDABI_RIGHT_FD_TELL |
@@ -109,7 +117,13 @@ void process_fd::add_initial_fds() {
 		CLOUDABI_RIGHT_FILE_STAT_GET |
 		CLOUDABI_RIGHT_PROC_EXEC);
 
-	add_fd(get_initrdfs()->get_root_fd(), CLOUDABI_RIGHT_FILE_OPEN,
+	add_fd(get_initrdfs()->get_root_fd(),
+		// base rights
+		CLOUDABI_RIGHT_FILE_OPEN |
+		CLOUDABI_RIGHT_FILE_READDIR |
+		CLOUDABI_RIGHT_FILE_STAT_FGET |
+		CLOUDABI_RIGHT_FILE_STAT_GET,
+		// inherited rights
 		CLOUDABI_RIGHT_FD_READ |
 		CLOUDABI_RIGHT_FD_SEEK |
 		CLOUDABI_RIGHT_FD_TELL |
@@ -117,7 +131,6 @@ void process_fd::add_initial_fds() {
 		CLOUDABI_RIGHT_FILE_READDIR |
 		CLOUDABI_RIGHT_FILE_STAT_FGET |
 		CLOUDABI_RIGHT_FILE_STAT_GET |
-		CLOUDABI_RIGHT_FILE_CREATE_DIRECTORY |
 		CLOUDABI_RIGHT_PROC_EXEC);
 
 	auto ifstore = make_shared<ifstoresock>("ifstoresock");
@@ -175,7 +188,7 @@ cloudabi_errno_t process_fd::get_fd(fd_mapping_t **r_mapping, cloudabi_fd_t num,
 		return EBADF;
 	}
 	if((mapping->rights_base & has_rights) != has_rights) {
-		get_vga_stream() << "get_fd: fd " << num << " has insufficient rights 0x" << hex << has_rights << dec << "\n";
+		//get_vga_stream() << "get_fd: fd " << num << " has insufficient rights 0x" << hex << has_rights << dec << "\n";
 		return ENOTCAPABLE;
 	}
 	*r_mapping = mapping;
