@@ -375,9 +375,11 @@ void send_dhcp_packet(uint8_t *bootp, size_t bootp_size) {
 }
 
 void perform_discover() {
-	uint8_t mac[16];
+	// TODO: workaround for a clang bug
+	uint8_t mmac[16];
 	size_t macsize;
-	get_raw_mac(mac, sizeof(mac), &macsize);
+	get_raw_mac(mmac, sizeof(mmac), &macsize);
+	uint8_t *mac = mmac;
 
 	arc4random_buf(active_xid, sizeof(active_xid));
 
