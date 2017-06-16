@@ -1,11 +1,12 @@
-2017-06-16: Release of Cosix 1.0
+2017-06-17: Release of Cosix 1.0
 ================================
 
-Today marks the first release of Cosix, a fully capability-based operating
-system. Cosix is written from scratch and consists of a small kernel that
-provides memory management and inter-process communication, and a userland that
-provides an IP stack and filesystems. It runs only on x86, but there are plans
-to support x86-64 and arm7 in future releases.
+Today, a little over two years after work began, marks the first release of
+Cosix, a fully capability-based operating system. Cosix is written from scratch
+and consists of a small kernel that provides memory management and
+inter-process communication, and a userland that provides an IP stack and
+filesystems. It runs only on x86, but there are plans to support x86-64 and
+arm7 in future releases.
 
 The capability enforcing mechanism comes from implementing only CloudABI as an
 Application Binary Interface between the userland and the kernel. CloudABI
