@@ -87,7 +87,7 @@ void client::run() {
 		if(size == 0) {
 			continue;
 		}
-		argdata_t *message = argdata_from_buffer(buf, size);
+		argdata_t *message = argdata_from_buffer(buf, size, nullptr, nullptr);
 
 		std::string command;
 		std::string iface;

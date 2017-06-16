@@ -144,7 +144,7 @@ std::string string_from_map(argdata_t *ad, std::string needle) {
 void dump_networkd() {
 	char buf[200];
 	size_t size = send_if_command("dump", "", buf, sizeof(buf), nullptr);
-	argdata_t *response = argdata_from_buffer(buf, size);
+	argdata_t *response = argdata_from_buffer(buf, size, nullptr, nullptr);
 	std::string error = string_from_map(response, "error");
 	if(!error.empty()) {
 		dprintf(stdout, "Error: %s\n", error.c_str());
@@ -154,7 +154,7 @@ void dump_networkd() {
 std::string get_mac() {
 	char buf[200];
 	size_t size = send_if_command("mac", "", buf, sizeof(buf), nullptr);
-	argdata_t *response = argdata_from_buffer(buf, size);
+	argdata_t *response = argdata_from_buffer(buf, size, nullptr, nullptr);
 	std::string error = string_from_map(response, "error");
 	if(!error.empty()) {
 		dprintf(stdout, "Error: %s\n", error.c_str());
@@ -166,7 +166,7 @@ std::string get_mac() {
 std::string get_hwtype() {
 	char buf[200];
 	size_t size = send_if_command("hwtype", "", buf, sizeof(buf), nullptr);
-	argdata_t *response = argdata_from_buffer(buf, size);
+	argdata_t *response = argdata_from_buffer(buf, size, nullptr, nullptr);
 	std::string error = string_from_map(response, "error");
 	if(!error.empty()) {
 		dprintf(stdout, "Error: %s\n", error.c_str());
@@ -178,7 +178,7 @@ std::string get_hwtype() {
 std::vector<std::string> get_v4addr() {
 	char buf[200];
 	size_t size = send_if_command("addrv4", "", buf, sizeof(buf), nullptr);
-	argdata_t *response = argdata_from_buffer(buf, size);
+	argdata_t *response = argdata_from_buffer(buf, size, nullptr, nullptr);
 	std::string error = string_from_map(response, "error");
 	std::vector<std::string> res;
 	if(!error.empty()) {
@@ -198,10 +198,19 @@ std::vector<std::string> get_v4addr() {
 void add_v4addr(std::string ip) {
 	char buf[200];
 	size_t size = send_if_command("add_addrv4", ip, buf, sizeof(buf), nullptr);
-	argdata_t *response = argdata_from_buffer(buf, size);
+	argdata_t *response = argdata_from_buffer(buf, size, nullptr, nullptr);
 	std::string error = string_from_map(response, "error");
 	if(!error.empty()) {
 		dprintf(stdout, "Error: %s\n", error.c_str());
+	}
+}
+
+static
+int return_arg_if_zero(void *value, size_t raw_fd) {
+	if(raw_fd == 0) {
+		return *reinterpret_cast<int*>(value);
+	} else {
+		return -1;
 	}
 }
 
@@ -209,17 +218,16 @@ int get_rawsock() {
 	char buf[200];
 	int fd;
 	size_t size = send_if_command("rawsock", "", buf, sizeof(buf), &fd);
-	argdata_t *response = argdata_from_buffer(buf, size);
+	argdata_t *response = argdata_from_buffer(buf, size, return_arg_if_zero, &fd);
 	std::string error = string_from_map(response, "error");
 	if(!error.empty()) {
 		dprintf(stdout, "Error: %s\n", error.c_str());
 		return -1;
 	}
 	const argdata_t *fdad = ad_from_map(response, "fd");
-	int fdidx;
-	argdata_get_fd(fdad, &fdidx);
-	if(fdidx != 0) {
-		dprintf(stdout, "FD index not as expected\n");
+	int fdres;
+	if(argdata_get_fd(fdad, &fdres) != 0 || fdres != fd) {
+		dprintf(stdout, "FD not as expected\n");
 		exit(1);
 	}
 	return fd;
@@ -261,7 +269,7 @@ void set_property(std::string property, std::string value) {
 		perror("read");
 		exit(1);
 	}
-	argdata_t *response = argdata_from_buffer(buf, size);
+	argdata_t *response = argdata_from_buffer(buf, size, nullptr, nullptr);
 	std::string error = string_from_map(response, "error");
 	if(!error.empty()) {
 		dprintf(stdout, "Error: %s\n", error.c_str());
