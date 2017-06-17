@@ -1,6 +1,7 @@
 import os
 import sys
 import code
+import time
 
 original_print = print
 def my_print(*args, **kwargs):
@@ -90,13 +91,98 @@ class SockConsole(code.InteractiveConsole):
 def this_conn():
   return sys.stderr.sock
 
+def rm_rf(name, dir_fd):
+  try:
+    os.unlink(name, dir_fd=dir_fd)
+    return
+  except IsADirectoryError:
+    pass
+  except FileNotFoundError:
+    return
+  fd = -1
+  try:
+    fd = os.open(name, os.O_RDWR, dir_fd=dir_fd)
+    for file in os.listdir(fd):
+      rm_rf(file, fd)
+    os.rmdir(name, dir_fd=dir_fd)
+  except Exception as e:
+    print("Failed to recursively remove " + name + ": " + str(e))
+  finally:
+    if fd >= 0: os.close(fd)
+
 def run_unittests():
+  rm_rf('unittests', sys.argdata['tmpdir'])
+  os.mkdir('unittests', dir_fd=sys.argdata['tmpdir'])
+  dirfd = os.open("unittests", os.O_RDWR, dir_fd=sys.argdata['tmpdir'])
+
   binfd = os.open("unittests", os.O_RDONLY, dir_fd=sys.argdata['bootfs'])
   procfd = os.program_spawn(binfd,
     {'logfile': this_conn(),
-     'tmpdir': FDWrapper(sys.argdata['tmpdir']),
+     'tmpdir': FDWrapper(dirfd),
      'nthreads': 1,
     })
-  os.pdwait(procfd, 0)
+  res = os.pdwait(procfd, 0)
   os.close(procfd)
   os.close(binfd)
+  return res
+
+def run_unittests_count(count):
+  num_success = 0
+  num_failures = 0
+  while count == 0 or (num_success + num_failures) < count:
+    res = run_unittests()
+    if res.si_status == 0:
+      success="succeeded"
+      num_success += 1
+    else:
+      success="FAILED"
+      num_failures += 1
+    print("== Unittest iteration %d %s. Total %d successes, %d failures." %
+      (num_success + num_failures, success, num_success, num_failures))
+    time.sleep(5)
+
+class allocation_tracking():
+  def __enter__(self):
+    self.send_alloctracker_command(b'1')
+    return self
+
+  def __exit__(self, *args):
+    self.send_alloctracker_command(b'0')
+
+  @staticmethod
+  def send_alloctracker_command(cmd):
+    fd = os.open("kernel/alloctracker", os.O_WRONLY, dir_fd=sys.argdata['procfs'])
+    os.write(fd, cmd)
+    os.close(fd)
+
+  @staticmethod
+  def report():
+    allocation_tracking.send_alloctracker_command(b'R')
+
+def run_leak_analysis():
+  run_unittests()
+  with allocation_tracking() as a:
+   run_unittests()
+   run_unittests()
+  run_unittests()
+  allocation_tracking.report()
+
+def run_binary(binary):
+  binfd = os.open(binary, os.O_RDONLY, dir_fd=sys.argdata['bootfs'])
+  procfd = os.program_spawn(binfd,
+    {'stdout': this_conn(),
+     'tmpdir': FDWrapper(sys.argdata['tmpdir']),
+     'networkd': sys.argdata['networkd'],
+    })
+  res = os.pdwait(procfd, 0)
+  os.close(procfd)
+  os.close(binfd)
+  return res
+
+def run_tests():
+  tests = ("pipe_test", "concur_test", "time_test",
+    "mmap_test", "forkfork_test", "unixsock_test",
+    "udptest", "tcptest")
+  for test in tests:
+    run_binary(test)
+  run_unittests()

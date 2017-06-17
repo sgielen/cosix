@@ -27,28 +27,6 @@ int reversefd;
 int pseudofd;
 int ifstore;
 
-void allocation_tracker_cmd(char cmd) {
-	int alltrackfd = openat(procfs, "kernel/alloctracker", O_WRONLY);
-	if(alltrackfd < 0) {
-		dprintf(stdout, "INIT: failed to send allocation tracker cmd: %s\n", strerror(errno));
-		return;
-	}
-	write(alltrackfd, &cmd, 1);
-	close(alltrackfd);
-}
-
-void start_allocation_tracker() {
-	allocation_tracker_cmd('1');
-}
-
-void stop_allocation_tracker() {
-	allocation_tracker_cmd('0');
-}
-
-void dump_allocation_tracker() {
-	allocation_tracker_cmd('R');
-}
-
 long uptime() {
 	int uptimefd = openat(procfs, "kernel/uptime", O_RDONLY);
 	if(uptimefd < 0) {
@@ -86,23 +64,6 @@ int program_run(const char *name, int bfd, argdata_t *ad) {
 
 	close(pfd);
 	return si.si_status;
-}
-
-int start_unittests() {
-	int bfd = openat(bootfs, "unittests", O_RDONLY);
-	if(bfd < 0) {
-		dprintf(stdout, "Won't run unittests, because I failed to open them: %s\n", strerror(errno));
-		return -1;
-	}
-
-	dprintf(stdout, "Running unit tests...\n");
-	argdata_t *keys[] = {argdata_create_string("logfile"), argdata_create_string("tmpdir"), argdata_create_string("nthreads")};
-	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(pseudofd), argdata_create_int(1)};
-	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
-
-	auto res = program_run("unittests", bfd, ad);
-	close(bfd);
-	return res;
 }
 
 void start_tmpfs() {
@@ -165,24 +126,6 @@ void start_networkd() {
 	} else {
 		dprintf(stdout, "networkd spawned, fd: %d\n", pfd);
 	}
-}
-
-int start_binary(const char *name) {
-	int bfd = openat(bootfs, name, O_RDONLY);
-	if(bfd < 0) {
-		dprintf(stdout, "Failed to open %s: %s\n", name, strerror(errno));
-		return 1;
-	}
-
-	dprintf(stdout, "Init going to program_spawn() %s...\n", name);
-
-	argdata_t *keys[] = {argdata_create_string("stdout"), argdata_create_string("tmpdir")};
-	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(pseudofd)};
-	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
-
-	auto r = program_run(name, bfd, ad);
-	close(bfd);
-	return r;
 }
 
 int start_networked_binary(const char *name, bool wait = true) {
@@ -354,18 +297,8 @@ void program_main(const argdata_t *) {
 	FILE *out = fdopen(stdout, "w");
 	fswap(stderr, out);
 
-	start_binary("exec_test");
-	start_binary("thread_test");
-	start_binary("pipe_test");
-	start_binary("concur_test");
-	start_binary("time_test");
-	start_binary("mmap_test");
-	start_binary("forkfork_test");
-
 	open_pseudo();
 	start_tmpfs();
-	//start_binary("tmptest");
-	start_binary("unixsock_test");
 	start_networkd();
 
 	// sleep for a bit for networkd to come up
@@ -374,45 +307,9 @@ void program_main(const argdata_t *) {
 		clock_nanosleep(CLOCK_MONOTONIC, 0, &ts);
 	}
 
-	start_networked_binary("udptest");
-	start_networked_binary("tcptest");
-	start_networked_binary("pythonshell", false);
 	start_networked_binary("httpd", false);
-
-	// sleep for a bit after networking tests
-	{
-		struct timespec ts = {.tv_sec = 5, .tv_nsec = 0};
-		clock_nanosleep(CLOCK_MONOTONIC, 0, &ts);
-	}
-
-	uint32_t num_success = 0;
-	uint32_t num_failures = 0;
 	while(1) {
-		auto res = start_unittests();
-		if(res == 0) {
-			num_success++;
-			dprintf(stdout, "== Unittest iteration %d succeeded. Total %d successes, %d failures.\n",
-				num_success + num_failures, num_success, num_failures);
-		} else {
-			num_failures++;
-			dprintf(stdout, "== Unittest iteration %d FAILED. Total %d successes, %d failures.\n",
-				num_success + num_failures, num_success, num_failures);
-		}
-		DIR *dir = fdopendir(dup(pseudofd));
-		rm_rf_contents(dir);
-		closedir(dir);
-		struct timespec ts = {.tv_sec = 5, .tv_nsec = 0};
-		clock_nanosleep(CLOCK_MONOTONIC, 0, &ts);
-
-		size_t count = num_success + num_failures;
-		if(count == 2) {
-			start_allocation_tracker();
-		} else if(count == 6) {
-			stop_allocation_tracker();
-		} else if(count == 10) {
-			dump_allocation_tracker();
-			break;
-		}
+		start_networked_binary("pythonshell", true);
 	}
 
 	pthread_mutex_t mtx;

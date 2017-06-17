@@ -50,8 +50,6 @@ macro(add_external_binary BINARY_NAME)
 endmacro()
 
 add_external_binary(init)
-add_external_binary(exec_test)
-add_external_binary(thread_test)
 add_external_binary(pipe_test)
 add_external_binary(concur_test)
 add_external_binary(time_test)
