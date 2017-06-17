@@ -1,4 +1,5 @@
 #include "ip_socket.hpp"
+#include "util.hpp"
 #include <thread>
 #include <cassert>
 
@@ -34,7 +35,18 @@ void ip_socket::start()
 
 void ip_socket::run()
 {
-	handle_requests(reversefd, this);
+	try {
+		handle_requests(reversefd, this);
+	} catch(std::exception &e) {
+		dprintf(0, "*** handle_requests threw an exception in ip_socket\n");
+		dprintf(0, "*** error: \"%s\"\n", e.what());
+		dprintf(0, "*** proto: %d\n", proto);
+		std::string ipd = ipv4_ntop(local_ip);
+		dprintf(0, "*** local bind: %s:%d\n", ipd.c_str(), local_port);
+		ipd = ipv4_ntop(peer_ip);
+		dprintf(0, "*** remote bind: %s:%d\n", ipd.c_str(), peer_port);
+		dprintf(0, "*** pseudo: %llu / reverse: %d\n", pseudofd, reversefd);
+	}
 }
 
 void ip_socket::stat_fget(cosix::pseudofd_t, cloudabi_filestat_t *buf)

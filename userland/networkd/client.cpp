@@ -75,7 +75,7 @@ bool client::send_error(std::string error) {
 }
 
 void client::run() {
-	while(1) {
+	while(1) try {
 		char buf[200];
 		// TODO: set non-blocking flag once kernel supports it
 		// this way, we can read until EOF instead of only 200 bytes
@@ -472,5 +472,8 @@ void client::run() {
 				return;
 			}
 		}
+	} catch(std::exception &e) {
+		dprintf(logfd, "*** Uncaught exception in client interface with fd %d\n", fd);
+		dprintf(logfd, "*** Error: \"%s\"\n", e.what());
 	}
 }

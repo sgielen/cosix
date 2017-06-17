@@ -34,8 +34,15 @@ interface::~interface()
 void interface::start()
 {
 	assert(rawsock >= 0);
-	thr = std::thread([this](){
-		run();
+	auto that = shared_from_this();
+	thr = std::thread([that](){
+		try {
+			that->run();
+		} catch(std::exception &e) {
+			dprintf(0, "*** Uncaught exception in handling incoming data on %s interface %s\n",
+				that->hwtype.c_str(), that->name.c_str());
+			dprintf(0, "*** Error: \"%s\"\n", e.what());
+		}
 	});
 }
 
