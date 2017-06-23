@@ -76,8 +76,7 @@ cloudabi_errno_t interface::send_ip_packet(std::vector<iovec> const &in_vecs, st
 		return 0;
 	}
 
-	send_frame(in_vecs, *opt_mac);
-	return 0;
+	return send_frame(in_vecs, *opt_mac);
 }
 
 void interface::check_pending_arp_list() {
@@ -106,7 +105,7 @@ void interface::check_pending_arp_list() {
 	}
 }
 
-void interface::send_frame(std::vector<iovec> in_vecs, std::string mac_hop) {
+cloudabi_errno_t interface::send_frame(std::vector<iovec> in_vecs, std::string mac_hop) {
 	char eth_frm[14];
 	const size_t hwlen = 6;
 	assert(mac_hop.length() == hwlen);
@@ -124,10 +123,10 @@ void interface::send_frame(std::vector<iovec> in_vecs, std::string mac_hop) {
 		vecs[i+1] = in_vecs[i];
 	}
 
-	send_frame(vecs);
+	return send_frame(vecs);
 }
 
-void interface::send_frame(std::vector<iovec> iov) {
+cloudabi_errno_t interface::send_frame(std::vector<iovec> iov) {
 	// Ethernet trailer & check sum
 	// Ethernet packets must be a minimum of 60 bytes, plus a check-sum at the end.
 	// The checksum is computed in the kernel (because it can be offloaded to hardware).
@@ -152,12 +151,7 @@ void interface::send_frame(std::vector<iovec> iov) {
 	in.si_fds_len = 0;
 	in.si_flags = 0;
 	cloudabi_send_out_t out;
-	cloudabi_errno_t error =
-		cloudabi_sys_sock_send(rawsock, &in, &out);
-	if(error != 0) {
-		// TODO: close the interface?
-		throw std::runtime_error("Failed to write frame");
-	}
+	return cloudabi_sys_sock_send(rawsock, &in, &out);
 }
 
 void interface::run() {
