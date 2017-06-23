@@ -2,10 +2,13 @@
 #include "interface.hpp"
 #include <arpa/inet.h>
 #include "ip.hpp"
+#include "arp.hpp"
 #include <cassert>
 
 using namespace cosix;
 using namespace networkd;
+
+#define TCP_SEGMENT_ACK_TIMEOUT 5ull * 1000 * 1000 * 1000 /* 5 seconds */
 
 struct ipv4_pseudo_hdr {
 	uint32_t source_ip;
@@ -76,7 +79,7 @@ bool tcp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 		if(hdr->flag_syn && hdr->flag_ack) {
 			if(htonl(hdr->acknum) != send_seq_num + 1) {
 				dprintf(0, "Got invalid SYN/ACK, dropping\n");
-				send_tcp_frame(false, false, false, true /* rst */);
+				send_tcp_frame(false, false, std::string(), false, true /* rst */);
 				status = sockstatus_t::CLOSED;
 				incoming_cv.notify_all();
 				return true;
@@ -106,7 +109,7 @@ bool tcp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 			if(hdr->flag_ack) dprintf(0, "  (ACK is set)\n");
 			if(hdr->flag_rst) dprintf(0, "  (RST is set)\n");
 			if(hdr->flag_fin) dprintf(0, "  (FIN is set)\n");
-			send_tcp_frame(false, false, false, true /* rst */);
+			send_tcp_frame(false, false, std::string(), false, true /* rst */);
 			status = sockstatus_t::CLOSED;
 			incoming_cv.notify_all();
 		}
@@ -120,9 +123,12 @@ bool tcp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 	if(hdr->flag_ack) {
 		uint32_t acknum = htonl(hdr->acknum);
 		// TODO: handle overflow of sequence numbers
-		size_t acked_bytes = acknum - send_seq_num;
-		send_buffer = send_buffer.substr(acked_bytes);
-		send_seq_num = acknum;
+		while(!outgoing_segments.empty() && (outgoing_segments.front().seqnum + outgoing_segments.front().segsize <= acknum)) {
+			// first segment is acked! take it out of the segment list
+			send_window_size -= outgoing_segments.front().segsize;
+			outgoing_segments.pop_front();
+		}
+		pump_segment_queue();
 	}
 
 	if(payload_length > 0) {
@@ -191,8 +197,7 @@ void tcp_socket::pwrite(pseudofd_t p, off_t o, const char *msg, size_t len)
 		throw cloudabi_system_error(ours_closed ? ECONNRESET : EINVAL);
 	}
 
-	send_buffer.append(std::string(msg, len));
-	send_tcp_frame(false /* syn */, true /* ack */);
+	send_tcp_frame(false /* syn */, true /* ack */, std::string(msg, len));
 }
 
 cloudabi_errno_t tcp_socket::establish() {
@@ -212,103 +217,145 @@ cloudabi_errno_t tcp_socket::establish() {
 	return status == sockstatus_t::CONNECTED ? 0 : ECONNREFUSED;
 }
 
-void tcp_socket::send_tcp_frame(bool syn, bool ack, bool fin, bool rst) {
-	// TODO: don't re-send the whole buffer all the time. Instead, keep
-	// a list of unacked segments and let this method add to it. Then,
-	// when a triple ACK arrives or an acknowledgement timer times out,
-	// retransmit segments from the list until all of them are ACKed.
-	// Do a similar thing for incoming segments that are out of order.
+void tcp_socket::send_tcp_frame(bool syn, bool ack, std::string data, bool fin, bool rst) {
+	// if we're establishing, closing or resetting, don't send any data
+	assert(! ((syn || fin || rst) && !data.empty()));
 
-	// if we're just establishing or confirming, buffer must be empty
-	assert(!(syn && send_buffer.size()));
+	// TODO: instead of hardcoding MTU, request it from interface or use
+	// max MSS option from the sender (also, don't assume ethernet frame
+	// will be used eventually)
+	size_t max_mss = 1500 - sizeof(tcp_header) - sizeof(ip_header) - 18 /* eth frame + checksum */;
 
-	struct tcp_header tcp_hdr;
-	memset(&tcp_hdr, 0, sizeof(tcp_header));
-	tcp_hdr.source_port = htons(get_local_port());
-	tcp_hdr.dest_port = htons(get_peer_port());
-	tcp_hdr.seqnum = htonl(send_seq_num);
-	tcp_hdr.acknum = htonl(send_ack_num);
-	if(syn) tcp_hdr.flag_syn = 1;
-	if(ack) tcp_hdr.flag_ack = 1;
-	if(fin) tcp_hdr.flag_fin = 1;
-	if(rst) tcp_hdr.flag_rst = 1;
-	// TODO: don't always set PSH on data, but when though?
-	if(!send_buffer.empty()) tcp_hdr.flag_psh = 1;
-	// TODO: use a proper growing window
-	tcp_hdr.window = htons(128);
-	tcp_hdr.data_off = sizeof(tcp_hdr) / 4;
+	do {
+		size_t segment_size = std::min(max_mss, data.size());
 
-	uint32_t source_ip = *reinterpret_cast<uint32_t const*>(get_local_ip().c_str());
-	uint32_t dest_ip = *reinterpret_cast<uint32_t const*>(get_peer_ip().c_str());
+		struct tcp_header tcp_hdr;
+		memset(&tcp_hdr, 0, sizeof(tcp_header));
+		tcp_hdr.source_port = htons(get_local_port());
+		tcp_hdr.dest_port = htons(get_peer_port());
+		tcp_hdr.seqnum = htonl(send_seq_num);
+		tcp_hdr.acknum = htonl(send_ack_num);
+		if(syn) tcp_hdr.flag_syn = 1;
+		if(ack) tcp_hdr.flag_ack = 1;
+		if(fin) tcp_hdr.flag_fin = 1;
+		if(rst) tcp_hdr.flag_rst = 1;
+		// TODO: don't always set PSH on data, but when though?
+		if(segment_size > 0) tcp_hdr.flag_psh = 1;
+		// TODO: use a proper growing window
+		tcp_hdr.window = htons(128);
+		tcp_hdr.data_off = sizeof(tcp_hdr) / 4;
 
-	struct ipv4_pseudo_hdr pseudo_hdr;
-	memset(&pseudo_hdr, 0, sizeof(pseudo_hdr));
-	pseudo_hdr.source_ip = source_ip;
-	pseudo_hdr.dest_ip = dest_ip;
-	pseudo_hdr.protocol = transport_proto::tcp;
-	pseudo_hdr.length = htons(sizeof(tcp_hdr) + send_buffer.size());
-	uint16_t *pseudo_hdr_16 = reinterpret_cast<uint16_t*>(&pseudo_hdr);
-	uint32_t short_sum = 0;
-	for(size_t i = 0; i < sizeof(pseudo_hdr) / 2; ++i) {
-		short_sum += pseudo_hdr_16[i];
-	}
-	uint16_t *tcp_hdr_16 = reinterpret_cast<uint16_t*>(&tcp_hdr);
-	for(size_t i = 0; i < sizeof(tcp_hdr) / 2; ++i) {
-		short_sum += tcp_hdr_16[i];
-	}
-	size_t loops = send_buffer.size() / 2 + ((send_buffer.size() % 2) ? 1 : 0);
-	for(size_t i = 0; i < loops; ++i) {
-		if(i * 2 == send_buffer.size() - 1) {
-			short_sum += uint16_t(send_buffer.back());
-		} else {
-			short_sum += *reinterpret_cast<uint16_t const*>(send_buffer.c_str() + i * 2);
+		uint32_t source_ip = *reinterpret_cast<uint32_t const*>(get_local_ip().c_str());
+		uint32_t dest_ip = *reinterpret_cast<uint32_t const*>(get_peer_ip().c_str());
+
+		struct ipv4_pseudo_hdr pseudo_hdr;
+		memset(&pseudo_hdr, 0, sizeof(pseudo_hdr));
+		pseudo_hdr.source_ip = source_ip;
+		pseudo_hdr.dest_ip = dest_ip;
+		pseudo_hdr.protocol = transport_proto::tcp;
+		pseudo_hdr.length = htons(sizeof(tcp_hdr) + segment_size);
+		uint16_t *pseudo_hdr_16 = reinterpret_cast<uint16_t*>(&pseudo_hdr);
+		uint32_t short_sum = 0;
+		for(size_t i = 0; i < sizeof(pseudo_hdr) / 2; ++i) {
+			short_sum += pseudo_hdr_16[i];
+		}
+		uint16_t *tcp_hdr_16 = reinterpret_cast<uint16_t*>(&tcp_hdr);
+		for(size_t i = 0; i < sizeof(tcp_hdr) / 2; ++i) {
+			short_sum += tcp_hdr_16[i];
+		}
+		size_t loops = segment_size / 2 + segment_size % 2;
+		for(size_t i = 0; i < loops; ++i) {
+			if(i * 2 == segment_size - 1) {
+				short_sum += uint16_t(data[segment_size-1]);
+			} else {
+				short_sum += *reinterpret_cast<uint16_t const*>(data.c_str() + i * 2);
+			}
+		}
+		short_sum = (short_sum & 0xffff) + (short_sum >> 16);
+		short_sum = (short_sum & 0xffff) + (short_sum >> 16);
+		tcp_hdr.checksum = ~short_sum;
+
+		struct ip_header ip_hdr;
+		memset(&ip_hdr, 0, sizeof(ip_hdr));
+		ip_hdr.ihl = 5;
+		ip_hdr.version = 4;
+		ip_hdr.total_len = htons(sizeof(ip_hdr) + sizeof(tcp_hdr) + segment_size);
+		arc4random_buf(&ip_hdr.ident, sizeof(ip_hdr.ident));
+		ip_hdr.ttl = 0xff;
+		ip_hdr.proto = transport_proto::tcp;
+		ip_hdr.source_ip = source_ip;
+		ip_hdr.dest_ip = dest_ip;
+
+		uint16_t *ip_hdr_16 = reinterpret_cast<uint16_t*>(&ip_hdr);
+		short_sum = 0;
+		for(size_t i = 0; i < sizeof(ip_hdr) / 2; ++i) {
+			short_sum += ip_hdr_16[i];
+		}
+		short_sum = (short_sum & 0xffff) + (short_sum >> 16);
+		short_sum = (short_sum & 0xffff) + (short_sum >> 16);
+		ip_hdr.checksum = ~short_sum;
+
+		tcp_outgoing_segment segment;
+		segment.segment.reserve(sizeof(ip_hdr) + sizeof(tcp_hdr) + segment_size);
+		segment.segment.append(reinterpret_cast<const char*>(&ip_hdr), sizeof(ip_hdr));
+		segment.segment.append(reinterpret_cast<const char*>(&tcp_hdr), sizeof(tcp_hdr));
+		segment.segment.append(data.c_str(), segment_size);
+		segment.seqnum = ntohl(tcp_hdr.seqnum);
+		assert(segment_size < UINT16_MAX);
+		segment.segsize = segment_size;
+		segment.ack_deadline = 0;
+
+		outgoing_segments.emplace_back(std::move(segment));
+		// TODO: don't create segments if send_window_size would grow beyond
+		// the remote window size; instead, keep extra data in a buffer that is
+		// turned into segments as soon as the remote side ACKs data
+		send_window_size += segment_size;
+		send_seq_num += segment_size;
+		data = data.substr(segment_size);
+	} while(!data.empty());
+
+	pump_segment_queue();
+}
+
+void tcp_socket::pump_segment_queue()
+{
+	uint32_t last_seqnum = 0;
+	auto now = monotime();
+	cloudabi_errno_t res = 0;
+	for(auto &segment : outgoing_segments) {
+		// TODO: handle overflow
+		assert(segment.seqnum > last_seqnum);
+
+		if(segment.ack_deadline > now) {
+			continue;
+		}
+
+		try {
+			std::vector<iovec> vecs(1);
+			vecs[0].iov_base = const_cast<void*>(reinterpret_cast<const void*>(segment.segment.c_str()));
+			vecs[0].iov_len = segment.segment.size();
+			res = get_ip().send_packet(vecs, get_peer_ip());
+			if(res != 0) {
+				break;
+			}
+			// TODO: use an exponential back-off timer for every segment
+			segment.ack_deadline = now + TCP_SEGMENT_ACK_TIMEOUT;
+		} catch(std::runtime_error &e) {
+			fprintf(stderr, "Failed to send TCP frame: %s\n", e.what());
+			res = ECANCELED;
+			break;
 		}
 	}
-	short_sum = (short_sum & 0xffff) + (short_sum >> 16);
-	short_sum = (short_sum & 0xffff) + (short_sum >> 16);
-	tcp_hdr.checksum = ~short_sum;
 
-	struct ip_header ip_hdr;
-	memset(&ip_hdr, 0, sizeof(ip_hdr));
-	ip_hdr.ihl = 5;
-	ip_hdr.version = 4;
-	ip_hdr.total_len = htons(sizeof(ip_hdr) + sizeof(tcp_hdr) + send_buffer.size());
-	arc4random_buf(&ip_hdr.ident, sizeof(ip_hdr.ident));
-	ip_hdr.ttl = 0xff;
-	ip_hdr.proto = transport_proto::tcp;
-	ip_hdr.source_ip = source_ip;
-	ip_hdr.dest_ip = dest_ip;
-
-	uint16_t *ip_hdr_16 = reinterpret_cast<uint16_t*>(&ip_hdr);
-	short_sum = 0;
-	for(size_t i = 0; i < sizeof(ip_hdr) / 2; ++i) {
-		short_sum += ip_hdr_16[i];
-	}
-	short_sum = (short_sum & 0xffff) + (short_sum >> 16);
-	short_sum = (short_sum & 0xffff) + (short_sum >> 16);
-	ip_hdr.checksum = ~short_sum;
-
-	std::vector<iovec> vecs(3);
-	vecs[0].iov_base = &ip_hdr;
-	vecs[0].iov_len = sizeof(ip_hdr);
-	vecs[1].iov_base = &tcp_hdr;
-	vecs[1].iov_len = sizeof(tcp_hdr);
-	if(send_buffer.empty()) {
-		vecs.resize(2);
-	} else {
-		vecs[2].iov_base = const_cast<char*>(send_buffer.c_str());
-		vecs[2].iov_len = send_buffer.size();
-	}
-
-	cloudabi_errno_t res;
-	try {
-		res = get_ip().send_packet(vecs, get_peer_ip());
-	} catch(std::runtime_error &e) {
-		fprintf(stderr, "Failed to send TCP frame: %s\n", e.what());
-		throw cloudabi_system_error(ECANCELED);
-	}
+	next_ack_deadline = UINT64_MAX;
 	if(res != 0) {
-		throw cloudabi_system_error(res);
+		fprintf(stderr, "Failed to send TCP frame: %s\n", strerror(res));
+		return;
+	}
+
+	for(auto const &segment : outgoing_segments) {
+		assert(segment.ack_deadline != 0);
+		next_ack_deadline = std::min(segment.ack_deadline, next_ack_deadline);
 	}
 }
 
@@ -403,4 +450,15 @@ void tcp_socket::sock_stat_get(cosix::pseudofd_t p, cloudabi_sockstat_t *ss)
 	ss->ss_peername.sa_inet.port = get_peer_port();
 	ss->ss_error = 0; /* TODO */
 	ss->ss_state = get_peer_ip().empty() ? CLOUDABI_SOCKSTATE_ACCEPTCONN : 0;
+}
+
+void tcp_socket::timed_out()
+{
+	std::unique_lock<std::mutex> lock(wc_mtx);
+	pump_segment_queue();
+}
+
+cloudabi_timestamp_t tcp_socket::next_timeout()
+{
+	return next_ack_deadline;
 }

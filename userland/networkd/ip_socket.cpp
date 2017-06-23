@@ -36,7 +36,12 @@ void ip_socket::start()
 void ip_socket::run()
 {
 	try {
-		handle_requests(reversefd, this);
+		while(true) {
+			auto res = handle_request(reversefd, this, next_timeout());
+			if(res != 0) {
+				throw std::runtime_error("handle_request failed: " + std::string(strerror(res)));
+			}
+		}
 	} catch(std::exception &e) {
 		dprintf(0, "*** handle_requests threw an exception in ip_socket\n");
 		dprintf(0, "*** error: \"%s\"\n", e.what());

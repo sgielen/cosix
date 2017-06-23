@@ -1,13 +1,18 @@
+#include "cosix/reverse.hpp"
+
+#include <argdata.h>
+#include <cloudabi_syscalls.h>
+#include <errno.h>
+#include <program.h>
+#include <pthread.h>
+#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <program.h>
-#include <argdata.h>
-#include <sched.h>
-#include <pthread.h>
-#include <atomic>
+#include <string.h>
 #include <unistd.h>
-#include <errno.h>
-#include "cosix/reverse.hpp"
+
+#include <string>
+#include <atomic>
 
 using namespace cosix;
 
@@ -125,39 +130,89 @@ char *cosix::handle_request(reverse_request_t *request, char *buf, reverse_respo
 	return res;
 }
 
-void cosix::handle_requests(int reversefd, reverse_handler *h) {
+cloudabi_errno_t cosix::handle_request(int reversefd, reverse_handler *h, cloudabi_timestamp_t poll_timeout) {
+	// if a timeout is given, wait until there is at least one byte to read
+	if(poll_timeout != 0) {
+		cloudabi_subscription_t subscriptions[2] = {
+			{
+				.type = CLOUDABI_EVENTTYPE_CLOCK,
+				.clock.clock_id = CLOUDABI_CLOCK_MONOTONIC,
+				.clock.flags = CLOUDABI_SUBSCRIPTION_CLOCK_ABSTIME,
+			},
+			{
+				.type = CLOUDABI_EVENTTYPE_FD_READ,
+				.fd_readwrite.fd = static_cast<cloudabi_fd_t>(reversefd),
+				.fd_readwrite.flags = CLOUDABI_SUBSCRIPTION_FD_READWRITE_POLL
+			},
+		};
+		cloudabi_event_t events[2];
+		size_t nevents = 2;
+		cloudabi_errno_t error = cloudabi_sys_poll(subscriptions, events, nevents, &nevents);
+		if(error != 0) {
+			return error;
+		}
+		for(size_t i = 0; i < nevents; ++i) {
+			if(events[i].error != 0) {
+				return events[i].error;
+			}
+		}
+		if(nevents == 0) {
+			// ?
+			return EINVAL;
+		}
+		if(nevents == 1 && events[0].type == CLOUDABI_EVENTTYPE_CLOCK) {
+			// clock passed
+			return 0;
+		}
+	}
+
 	reverse_request_t request;
 	reverse_response_t response;
+
+	size_t received = 0;
+	char *buf = reinterpret_cast<char*>(&request);
+	while(received < sizeof(reverse_request_t)) {
+		size_t remaining = sizeof(reverse_request_t) - received;
+		ssize_t count = read(reversefd, buf + received, remaining);
+		if(count <= 0) {
+			if(errno == 0) {
+				throw std::runtime_error("reversefd read() failed, but no errno present");
+			}
+			return errno;
+		}
+		received += count;
+	}
+	received = 0;
+	buf = reinterpret_cast<char*>(malloc(request.send_length));
+	while(received < request.send_length) {
+		size_t remaining = request.send_length - received;
+		ssize_t count = read(reversefd, buf + received, remaining);
+		if(count <= 0) {
+			if(errno == 0) {
+				throw std::runtime_error("reversefd read() failed, but no errno present");
+			}
+			return errno;
+		}
+		received += count;
+	}
+	char *resbuf = handle_request(&request, buf, &response, h);
+	free(buf);
+	char *msg = reinterpret_cast<char*>(&response);
+	write(reversefd, msg, sizeof(reverse_response_t));
+	if(response.send_length > 0) {
+		write(reversefd, resbuf, response.send_length);
+	}
+	if(resbuf) {
+		free(resbuf);
+	}
+	return 0;
+}
+
+void cosix::handle_requests(int reversefd, reverse_handler *h) {
 	while(true) {
-		size_t received = 0;
-		char *buf = reinterpret_cast<char*>(&request);
-		while(received < sizeof(reverse_request_t)) {
-			size_t remaining = sizeof(reverse_request_t) - received;
-			ssize_t count = read(reversefd, buf + received, remaining);
-			if(count <= 0) {
-				throw std::runtime_error("reversefd read() failed");
-			}
-			received += count;
-		}
-		received = 0;
-		buf = reinterpret_cast<char*>(malloc(request.send_length));
-		while(received < request.send_length) {
-			size_t remaining = request.send_length - received;
-			ssize_t count = read(reversefd, buf + received, remaining);
-			if(count <= 0) {
-				throw std::runtime_error("reversefd read() failed");
-			}
-			received += count;
-		}
-		char *resbuf = handle_request(&request, buf, &response, h);
-		free(buf);
-		char *msg = reinterpret_cast<char*>(&response);
-		write(reversefd, msg, sizeof(reverse_response_t));
-		if(response.send_length > 0) {
-			write(reversefd, resbuf, response.send_length);
-		}
-		if(resbuf) {
-			free(resbuf);
+		auto res = handle_request(reversefd, h);
+		if(res != 0) {
+			throw std::runtime_error("handle_request failed: " + std::string(strerror(res)));
 		}
 	}
 }

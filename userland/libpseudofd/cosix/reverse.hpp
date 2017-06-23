@@ -14,6 +14,7 @@ using reverse_proto::reverse_response_t;
 struct reverse_handler;
 
 char *handle_request(reverse_request_t *request, char *buf, reverse_response_t *response, reverse_handler *h);
+cloudabi_errno_t handle_request(int reversefd, reverse_handler *h, cloudabi_timestamp_t poll_timeout = 0);
 void handle_requests(int reversefd, reverse_handler *h);
 
 struct cloudabi_system_error : public std::runtime_error {

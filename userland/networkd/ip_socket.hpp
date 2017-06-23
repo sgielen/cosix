@@ -30,6 +30,9 @@ struct ip_socket : public cosix::reverse_handler, std::enable_shared_from_this<i
 	virtual cloudabi_errno_t establish() { return 0; }
 	virtual bool handle_packet(std::shared_ptr<interface> iface, const char *frame, size_t framelen, size_t ip_offset, size_t payload_offset, size_t payload_length) = 0;
 
+	inline virtual void timed_out() {}
+	inline virtual cloudabi_timestamp_t next_timeout() { return UINT64_MAX; }
+
 protected:
 	inline cosix::pseudofd_t get_pseudo_fd() { return pseudofd; }
 	inline int get_reverse_fd() { return reversefd; }
