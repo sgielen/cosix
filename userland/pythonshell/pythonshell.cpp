@@ -236,6 +236,8 @@ while listensock:
     cons.interact()
   except SocketClosedError:
     pass
+  except ConnectionError:
+    pass
   except Exception as e:
     output.write("Exception occurred: " + str(e) + "\n")
   output.sock = None
