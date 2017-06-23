@@ -18,10 +18,6 @@ pseudo_fd::pseudo_fd(pseudofd_t id, shared_ptr<fd_t> r, cloudabi_filetype_t t, c
 }
 
 Blk pseudo_fd::send_request(reverse_request_t *request, const char *buffer, reverse_response_t *response) {
-	response->result = -EIO;
-	response->flags = 0;
-	response->send_length = 0;
-
 	// Lock the reverse_fd. Multiple pseudo FD's may have a reference to
 	// this reverse_fd, and another one may have an outstanding request
 	// already.
@@ -35,22 +31,31 @@ Blk pseudo_fd::send_request(reverse_request_t *request, const char *buffer, reve
 	}
 	reverse_fd->refcount = 2;
 
+	size_t received = 0;
+	Blk recv_buf;
+
 	char *msg = reinterpret_cast<char*>(request);
 	assert(reverse_fd->type == CLOUDABI_FILETYPE_SOCKET_STREAM);
 	reverse_fd->putstring(msg, sizeof(reverse_request_t));
+	if(reverse_fd->error != 0) {
+		goto error;
+	}
 	if(request->send_length > 0) {
 		reverse_fd->putstring(buffer, request->send_length);
+		if(reverse_fd->error != 0) {
+			goto error;
+		}
 	}
 
 	msg = reinterpret_cast<char*>(response);
-	size_t received = 0;
 	while(received < sizeof(reverse_response_t)) {
-		// TODO: error checking on the reverse_fd, in case it closed
 		size_t remaining = sizeof(reverse_response_t) - received;
 		received += reverse_fd->read(msg + received, remaining);
+		if(reverse_fd->error != 0) {
+			goto error;
+		}
 	}
 	assert(received == sizeof(reverse_response_t));
-	Blk recv_buf;
 	if(response->send_length > 0) {
 		received = 0;
 		recv_buf = allocate(response->send_length);
@@ -58,11 +63,22 @@ Blk pseudo_fd::send_request(reverse_request_t *request, const char *buffer, reve
 		while(received < response->send_length) {
 			size_t remaining = response->send_length - received;
 			received += reverse_fd->read(reinterpret_cast<char*>(recv_buf.ptr) + received, remaining);
+			if(reverse_fd->error != 0) {
+				goto error;
+			}
 		}
 		assert(received == response->send_length);
 	}
 	reverse_fd->refcount = 1;
 	return recv_buf;
+
+error:
+	get_vga_stream() << "Failed to send pseudo RPC or read response: " << reverse_fd->error << "\n";
+	response->result = -reverse_fd->error;
+	response->flags = 0;
+	response->send_length = 0;
+	maybe_deallocate(recv_buf);
+	return {};
 }
 
 bool pseudo_fd::is_valid_path(const char *path, size_t length)
@@ -562,6 +578,7 @@ void pseudo_fd::sock_send(const cloudabi_send_in_t *in, cloudabi_send_out_t *out
 	request.inode = 0;
 	request.flags = in->si_flags;
 	for(size_t i = 0; i < in->si_data_len; ++i) {
+		// TODO guard against overflow
 		request.send_length += in->si_data[i].buf_len;
 	}
 	size_t off = 0;
