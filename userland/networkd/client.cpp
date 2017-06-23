@@ -100,15 +100,17 @@ void client::run() {
 		const argdata_t *arg_key;
 		const argdata_t *arg_value;
 		argdata_map_iterate(message, &it);
-		while (argdata_map_next(&it, &arg_key, &arg_value)) {
+		while (argdata_map_get(&it, &arg_key, &arg_value)) {
 			const char *keystr;
 			if(argdata_get_str_c(arg_key, &keystr) != 0) {
+				argdata_map_next(&it);
 				continue;
 			}
 
 			const char *cstr;
 			size_t len;
 			if(argdata_get_str(arg_value, &cstr, &len) != 0) {
+				argdata_map_next(&it);
 				continue;
 			}
 			if(strcmp(keystr, "command") == 0) {
@@ -124,6 +126,7 @@ void client::run() {
 			} else if(strcmp(keystr, "connect") == 0) {
 				connect.assign(cstr, len);
 			}
+			argdata_map_next(&it);
 		}
 
 		if(command.empty()) {

@@ -32,7 +32,7 @@
  */
 
 #include <stdbool.h>
-#include <stdlib.h>
+#include <stddef.h>
 #include "checksum.h"
 
 static void             init_crc32_tab( void );

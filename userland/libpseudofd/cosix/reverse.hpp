@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 #include <cloudabi_types.h>
+#include <stdio.h>
 #include "../../../fd/reverse_proto.hpp"
 
 namespace cosix {

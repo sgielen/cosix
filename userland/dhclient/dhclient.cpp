@@ -113,15 +113,17 @@ const argdata_t *ad_from_map(argdata_t *ad, std::string needle) {
 	const argdata_t *key;
 	const argdata_t *value;
 	argdata_map_iterate(ad, &it);
-	while (argdata_map_next(&it, &key, &value)) {
+	while (argdata_map_get(&it, &key, &value)) {
 		const char *keystr;
 		if(argdata_get_str_c(key, &keystr) != 0) {
+			argdata_map_next(&it);
 			continue;
 		}
 
 		if(strcmp(keystr, needle.c_str()) == 0) {
 			return value;
 		}
+		argdata_map_next(&it);
 	}
 	return nullptr;
 }
@@ -189,8 +191,9 @@ std::vector<std::string> get_v4addr() {
 	argdata_seq_iterator_t it;
 	argdata_seq_iterate(v4addrs, &it);
 	const argdata_t *v4addr;
-	while(argdata_seq_next(&it, &v4addr)) {
+	while(argdata_seq_get(&it, &v4addr)) {
 		res.push_back(string_from_ad(v4addr));
+		argdata_seq_next(&it);
 	}
 	return res;
 }
@@ -763,9 +766,10 @@ void program_main(const argdata_t *ad) {
 	const argdata_t *key;
 	const argdata_t *value;
 	argdata_map_iterate(ad, &it);
-	while (argdata_map_next(&it, &key, &value)) {
+	while (argdata_map_get(&it, &key, &value)) {
 		const char *keystr;
 		if(argdata_get_str_c(key, &keystr) != 0) {
+			argdata_map_next(&it);
 			continue;
 		}
 
@@ -779,6 +783,7 @@ void program_main(const argdata_t *ad) {
 			argdata_get_str(value, &ifstr, &iflen);
 			interface.assign(ifstr, iflen);
 		}
+		argdata_map_next(&it);
 	}
 
 	rawsock = -1;

@@ -108,9 +108,10 @@ void parse_params(const argdata_t *ad) {
 	bootfs = -1;
 	tmpdir = -1;
 	initrd = -1;
-	while (argdata_map_next(&it, &key, &value)) {
+	while (argdata_map_get(&it, &key, &value)) {
 		const char *keystr;
 		if(argdata_get_str_c(key, &keystr) != 0) {
+			argdata_map_next(&it);
 			continue;
 		}
 
@@ -127,6 +128,7 @@ void parse_params(const argdata_t *ad) {
 		} else if(strcmp(keystr, "initrd") == 0) {
 			argdata_get_fd(value, &initrd);
 		}
+		argdata_map_next(&it);
 	}
 }
 

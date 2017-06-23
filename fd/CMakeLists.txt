@@ -1,5 +1,4 @@
 if(BAREMETAL_ENABLED)
-	include_directories(${CMAKE_BINARY_DIR})
 	add_library(fd
 		fd.hpp
 		memory_fd.cpp memory_fd.hpp
@@ -17,4 +16,10 @@ if(BAREMETAL_ENABLED)
 		ifstoresock.cpp ifstoresock.hpp
 		rawsock.cpp rawsock.hpp
 	)
+
+	# for elf.h:
+	target_include_directories(fd SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/cloudlibc/src/include")
+
+	# for external_binaries.h:
+	target_include_directories(fd PRIVATE "${CMAKE_BINARY_DIR}")
 endif()

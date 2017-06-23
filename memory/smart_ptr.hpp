@@ -5,6 +5,8 @@
 #include <memory/allocator.hpp>
 #include <oslibc/utility.hpp>
 
+#include <cstddef>
+
 namespace cloudos {
 
 // TODO: make this entire struct respect atomics before enabling kernel
@@ -73,7 +75,7 @@ void initialize_enable_shared_ptr(shared_ptr<T>&);
 template <typename T>
 struct shared_ptr {
 	shared_ptr() : ptr(nullptr) {}
-	shared_ptr(nullptr_t) : shared_ptr() {}
+	shared_ptr(std::nullptr_t) : shared_ptr() {}
 
 	shared_ptr(shared_ptr &r) : shared_ptr() {
 		*this = r;
