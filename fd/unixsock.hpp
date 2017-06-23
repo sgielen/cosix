@@ -74,12 +74,9 @@ private:
 	cv_t listenqueue_cv;
 
 	/* if CONNECTED or SHUTDOWN */
-	static constexpr size_t MAX_SIZE_BUFFER = 1500;
-	static constexpr size_t MAX_NUM_BUFFERS = 20;
-	static constexpr size_t MAX_SIZE_BUFFERS = MAX_NUM_BUFFERS * MAX_SIZE_BUFFER;
+	static constexpr size_t MAX_SIZE_BUFFERS = 1024 * 1024;
 	static constexpr size_t MAX_FD_PER_MESSAGE = 20;
 
-	size_t num_recv_messages = 0;
 	size_t num_recv_bytes = 0;
 	unixsock_message_list *recv_messages = nullptr;
 	cv_t recv_messages_cv;

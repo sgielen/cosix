@@ -530,29 +530,15 @@ void unixsock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *out)
 	assert(type == CLOUDABI_FILETYPE_SOCKET_DGRAM
 	    || type == CLOUDABI_FILETYPE_SOCKET_STREAM);
 
-	// space in receive buffers?
-	if(other->num_recv_messages == MAX_NUM_BUFFERS) {
-		error = ENOBUFS;
-		return;
-	}
-
 	size_t total_message_size = 0;
 	for(size_t i = 0; i < in->si_data_len; ++i) {
 		const cloudabi_ciovec_t &data = in->si_data[i];
-		if(data.buf_len > MAX_SIZE_BUFFER) {
-			// guard against overflow
-			error = EMSGSIZE;
-			return;
-		}
+		// TODO: guard against overflow
 		total_message_size += data.buf_len;
 	}
 
-	if(total_message_size > MAX_SIZE_BUFFER) {
-		error = EMSGSIZE;
-		return;
-	}
-
-	if(total_message_size + other->num_recv_bytes == MAX_SIZE_BUFFERS) {
+	if(total_message_size + other->num_recv_bytes > MAX_SIZE_BUFFERS) {
+		// TODO: block for the messages to be read off the socket?
 		error = ENOBUFS;
 		return;
 	}
@@ -585,6 +571,7 @@ void unixsock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *out)
 
 	auto *message_item = allocate<unixsock_message_list>(message);
 	append(&other->recv_messages, message_item);
+	other->num_recv_bytes += total_message_size;
 	other->recv_messages_cv.notify();
 	out->so_datalen = total_message_size;
 	error = 0;
