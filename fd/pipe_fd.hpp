@@ -23,10 +23,10 @@ struct pipe_fd : fd_t {
 	 */
 	size_t read(void *dest, size_t count) override;
 
-	/** putstring() blocks until there is capacity for at least count
+	/** write() blocks until there is capacity for at least count
 	 * bytes, then, it appends the given buffer to the stored one.
 	 */
-	void putstring(const char * /*str*/, size_t /*count*/) override;
+	size_t write(const char * /*str*/, size_t /*count*/) override;
 
 private:
 	char *buffer;

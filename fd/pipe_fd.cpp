@@ -38,12 +38,10 @@ size_t pipe_fd::read(void *dest, size_t count)
 	return num_bytes;
 }
 
-void pipe_fd::putstring(const char *str, size_t count)
+size_t pipe_fd::write(const char *str, size_t count)
 {
 	if(count > capacity) {
-		// TODO: write only a part
-		error = EINVAL;
-		return;
+		count = capacity;
 	}
 
 	while(used + count > capacity) {
@@ -54,4 +52,5 @@ void pipe_fd::putstring(const char *str, size_t count)
 	used += count;
 	readcv.broadcast();
 	error = 0;
+	return count;
 }

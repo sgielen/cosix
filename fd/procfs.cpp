@@ -33,7 +33,7 @@ struct procfs_uptime_fd : public memory_fd {
 struct procfs_alloctrack_fd : public fd_t {
 	procfs_alloctrack_fd(const char *n) : fd_t(CLOUDABI_FILETYPE_REGULAR_FILE, n) {}
 
-	void putstring(const char *buf, size_t count) override;
+	size_t write(const char *buf, size_t count) override;
 };
 
 }
@@ -149,12 +149,12 @@ size_t procfs_uptime_fd::read(void *dest, size_t count) {
 	return res;
 }
 
-void procfs_alloctrack_fd::putstring(const char *buf, size_t count) {
+size_t procfs_alloctrack_fd::write(const char *buf, size_t count) {
 	error = 0;
 	// TODO: static_assert 'if get_allocator()->get_allocator()->start_tracking() exists'
 #ifndef NDEBUG
 	if(count == 0) {
-		return;
+		return 0;
 	}
 	char b = buf[0];
 	if(b == '1') {
@@ -170,6 +170,7 @@ void procfs_alloctrack_fd::putstring(const char *buf, size_t count) {
 		}
 	}
 #endif
+	return count;
 }
 
 shared_ptr<fd_t> procfs::get_root_fd() {

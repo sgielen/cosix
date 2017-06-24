@@ -24,7 +24,7 @@ struct pseudo_fd : public seekable_fd_t {
 
 	/* For memory, pipes and files */
 	size_t read(void *dest, size_t count) override;
-	void putstring(const char *str, size_t count) override;
+	size_t write(const char *str, size_t count) override;
 
 	/* For directories */
 	shared_ptr<fd_t> openat(const char *path, size_t pathlen, cloudabi_oflags_t oflags, const cloudabi_fdstat_t * fdstat) override;

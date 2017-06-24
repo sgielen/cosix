@@ -248,7 +248,7 @@ cloudabi_errno_t cloudos::syscall_fd_write(syscall_context &c)
 	for(size_t i = 0; i < iovcnt; ++i) {
 		auto buf = iov[i].buf;
 		auto len = iov[i].buf_len;
-		mapping->fd->putstring(reinterpret_cast<const char*>(buf), len);
+		mapping->fd->write(reinterpret_cast<const char*>(buf), len);
 		c.result += len;
 		if(mapping->fd->error) {
 			return mapping->fd->error;

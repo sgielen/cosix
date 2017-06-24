@@ -10,11 +10,12 @@ namespace cloudos {
 struct vga_fd : public fd_t {
 	inline vga_fd(const char *n) : fd_t(CLOUDABI_FILETYPE_FIFO, n) {}
 
-	inline void putstring(const char *str, size_t count) override {
+	inline size_t write(const char *str, size_t count) override {
 		for(size_t i = 0; i < count; ++i) {
 			get_vga_stream() << str[i];
 		}
 		error = 0;
+		return count;
 	}
 };
 

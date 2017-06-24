@@ -67,8 +67,9 @@ struct fd_t {
 		error = EINVAL;
 		return 0;
 	}
-	virtual void putstring(const char * /*str*/, size_t /*count*/) {
+	virtual size_t write(const char * /*str*/, size_t /*count*/) {
 		error = EINVAL;
+		return 0;
 	}
 
 	virtual cloudabi_errno_t get_read_signaler(thread_condition_signaler **s) {

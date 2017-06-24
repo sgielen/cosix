@@ -16,7 +16,7 @@ struct sock_t : public fd_t {
 	};
 
 	size_t read(void *dest, size_t count) override;
-	void putstring(const char *str, size_t count) override;
+	size_t write(const char *str, size_t count) override;
 
 	void sock_bind(cloudabi_sa_family_t /*family*/, shared_ptr<fd_t> /*fd*/, void * /*address*/, size_t /*address_len*/) override
 	{

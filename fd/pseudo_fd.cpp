@@ -36,13 +36,11 @@ Blk pseudo_fd::send_request(reverse_request_t *request, const char *buffer, reve
 
 	char *msg = reinterpret_cast<char*>(request);
 	assert(reverse_fd->type == CLOUDABI_FILETYPE_SOCKET_STREAM);
-	reverse_fd->putstring(msg, sizeof(reverse_request_t));
-	if(reverse_fd->error != 0) {
+	if(reverse_fd->write(msg, sizeof(reverse_request_t)) != sizeof(reverse_request_t) || reverse_fd->error != 0) {
 		goto error;
 	}
 	if(request->send_length > 0) {
-		reverse_fd->putstring(buffer, request->send_length);
-		if(reverse_fd->error != 0) {
+		if(reverse_fd->write(buffer, request->send_length) != request->send_length || reverse_fd->error != 0) {
 			goto error;
 		}
 	}
@@ -141,7 +139,7 @@ size_t pseudo_fd::read(void *dest, size_t count)
 	return response.send_length;
 }
 
-void pseudo_fd::putstring(const char *str, size_t size)
+size_t pseudo_fd::write(const char *str, size_t size)
 {
 	reverse_request_t request;
 	request.pseudofd = pseudo_id;
@@ -154,9 +152,10 @@ void pseudo_fd::putstring(const char *str, size_t size)
 	maybe_deallocate(send_request(&request, str, &response));
 	if(response.result < 0) {
 		error = -response.result;
-		return;
+	} else {
+		error = 0;
 	}
-	error = 0;
+	return size;
 }
 
 shared_ptr<fd_t> pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_oflags_t oflags, const cloudabi_fdstat_t * fdstat)

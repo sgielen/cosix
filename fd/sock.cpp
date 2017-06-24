@@ -30,7 +30,7 @@ size_t sock_t::read(void *dest, size_t count)
 	return recv_out[0].ro_datalen;
 }
 
-void sock_t::putstring(const char *str, size_t count)
+size_t sock_t::write(const char *str, size_t count)
 {
 	cloudabi_ciovec_t iovec[1];
 	iovec[0].buf = str;
@@ -47,5 +47,5 @@ void sock_t::putstring(const char *str, size_t count)
 	send_out[0].so_datalen = 0;
 
 	sock_send(send_in, send_out);
-	/* TODO: send_out[0].so_datalen is amount of bytes written */
+	return send_out[0].so_datalen;
 }
