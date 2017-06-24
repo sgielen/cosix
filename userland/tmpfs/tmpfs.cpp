@@ -136,13 +136,8 @@ size_t tmpfs::pread(pseudofd_t pseudo, off_t offset, char *dest, size_t requeste
 void tmpfs::pwrite(pseudofd_t pseudo, off_t offset, const char *buf, size_t length)
 {
 	auto entry = get_file_entry_from_pseudo(pseudo);
-	if(offset > entry->contents.size()) {
-		// TODO: should we increase to this size?
-		throw cloudabi_system_error(EINVAL /* The specified file offset is invalid */);
-	}
-
 	if(entry->contents.size() < offset + length) {
-		entry->contents.resize(offset + length);
+		entry->contents.resize(offset + length, 0);
 	}
 
 	entry->contents.replace(offset, length, std::string(buf, length));

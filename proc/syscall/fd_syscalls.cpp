@@ -108,14 +108,71 @@ cloudabi_errno_t cloudos::syscall_fd_dup(syscall_context &c)
 	return 0;
 }
 
-cloudabi_errno_t cloudos::syscall_fd_pread(syscall_context &)
+cloudabi_errno_t cloudos::syscall_fd_pread(syscall_context &c)
 {
-	return ENOSYS;
+	auto args = arguments_t<cloudabi_fd_t, const cloudabi_iovec_t *, size_t, size_t, size_t *>(c);
+	auto fdnum = args.first();
+	fd_mapping_t *mapping;
+	auto res = c.process()->get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FD_READ | CLOUDABI_RIGHT_FD_SEEK);
+	if(res != 0) {
+		return res;
+	}
+
+	auto iov = args.second();
+	auto iovcnt = args.third();
+	auto offset = args.fourth();
+
+	if(iovcnt == 0) {
+		c.result = 0;
+		return 0;
+	}
+
+	// TODO: pass iov, iovcnt to read() instead of calling read() multiple
+	// times
+	size_t r;
+	size_t i = 0;
+	size_t read = 0;
+	do {
+		auto buf = iov[i].buf;
+		auto len = iov[i].buf_len;
+		r = mapping->fd->pread(buf, len, offset + read);
+		if(mapping->fd->error) {
+			return mapping->fd->error;
+		}
+		read += r;
+		i++;
+	} while(r > 0 && i < iovcnt);
+	c.result = read;
+	return 0;
 }
 
-cloudabi_errno_t cloudos::syscall_fd_pwrite(syscall_context &)
+cloudabi_errno_t cloudos::syscall_fd_pwrite(syscall_context &c)
 {
-	return ENOSYS;
+	auto args = arguments_t<cloudabi_fd_t, const cloudabi_ciovec_t*, size_t, size_t, size_t*>(c);
+	auto fdnum = args.first();
+	auto iov = args.second();
+	auto iovcnt = args.third();
+	auto offset = args.fourth();
+
+	fd_mapping_t *mapping;
+	auto res = c.process()->get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FD_WRITE | CLOUDABI_RIGHT_FD_SEEK);
+	if(res != 0) {
+		return res;
+	}
+
+	// TODO: pass iov, iovcnt to pwrite() instead of calling pwrite() multiple
+	// times
+	c.result = 0;
+	for(size_t i = 0; i < iovcnt; ++i) {
+		auto buf = iov[i].buf;
+		auto len = iov[i].buf_len;
+		mapping->fd->pwrite(reinterpret_cast<const char*>(buf), len, offset + c.result);
+		c.result += len;
+		if(mapping->fd->error) {
+			return mapping->fd->error;
+		}
+	}
+	return 0;
 }
 
 cloudabi_errno_t cloudos::syscall_fd_read(syscall_context &c)

@@ -146,7 +146,7 @@ size_t pseudo_fd::write(const char *str, size_t size)
 	request.op = reverse_request_t::operation::pwrite;
 	request.inode = 0;
 	request.flags = 0;
-	request.offset = 0; /* TODO */
+	request.offset = pos;
 	request.send_length = size;
 	reverse_response_t response;
 	maybe_deallocate(send_request(&request, str, &response));
@@ -155,6 +155,7 @@ size_t pseudo_fd::write(const char *str, size_t size)
 	} else {
 		error = 0;
 	}
+	pos += size;
 	return size;
 }
 

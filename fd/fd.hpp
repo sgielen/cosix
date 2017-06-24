@@ -71,6 +71,14 @@ struct fd_t {
 		error = EINVAL;
 		return 0;
 	}
+	virtual size_t pread(void * /*str*/, size_t /*count*/, size_t /*offset*/) {
+		error = EPIPE;
+		return 0;
+	}
+	virtual size_t pwrite(const char * /*str*/, size_t /*count*/, size_t /*offset*/) {
+		error = EPIPE;
+		return 0;
+	}
 
 	virtual cloudabi_errno_t get_read_signaler(thread_condition_signaler **s) {
 		*s = nullptr;
@@ -201,6 +209,42 @@ protected:
 
 struct seekable_fd_t : public fd_t {
 	cloudabi_filesize_t pos;
+
+	virtual size_t pread(void *str, size_t count, size_t offset) override {
+		auto oldpos = pos;
+		error = 0;
+		seek(offset, CLOUDABI_WHENCE_SET);
+		if(error) {
+			return 0;
+		}
+		assert(pos == offset);
+		auto readcnt = read(str, count);
+		auto read_error = error;
+
+		seek(oldpos, CLOUDABI_WHENCE_SET);
+		if(read_error) {
+			error = read_error;
+		}
+		return readcnt;
+	}
+
+	virtual size_t pwrite(const char *str, size_t count, size_t offset) override {
+		auto oldpos = pos;
+		error = 0;
+		seek(offset, CLOUDABI_WHENCE_SET);
+		if(error) {
+			return 0;
+		}
+		assert(pos == offset);
+		auto written = write(str, count);
+		auto write_error = error;
+
+		seek(oldpos, CLOUDABI_WHENCE_SET);
+		if(write_error) {
+			error = write_error;
+		}
+		return written;
+	}
 
 	virtual cloudabi_filesize_t seek(cloudabi_filedelta_t offset, cloudabi_whence_t whence) override {
 		if(whence == CLOUDABI_WHENCE_CUR) {
