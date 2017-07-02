@@ -1,4 +1,5 @@
-#include "hw/driver_store.hpp"
+#include <hw/driver_store.hpp>
+#include <memory/allocation.hpp>
 
 using namespace cloudos;
 
@@ -13,9 +14,6 @@ void driver_store::register_driver(driver *d) {
 	}
 #endif
 
-	driver_list *new_entry = get_allocator()->allocate<driver_list>();
-	new_entry->data = d;
-	new_entry->next = nullptr;
-
+	driver_list *new_entry = allocate<driver_list>(d);
 	append(&drivers_, new_entry);
 }

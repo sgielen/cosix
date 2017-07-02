@@ -1,14 +1,13 @@
-#include "thread.hpp"
-#include "process_fd.hpp"
-#include "scheduler.hpp"
-#include "pipe_fd.hpp"
-#include <memory/page_allocator.hpp>
-#include <memory/allocator.hpp>
-#include "global.hpp"
-#include <rng/rng.hpp>
+#include <fd/pipe_fd.hpp>
+#include <fd/process_fd.hpp>
+#include <fd/scheduler.hpp>
+#include <fd/thread.hpp>
+#include <global.hpp>
+#include <memory/allocation.hpp>
 #include <oslibc/assert.hpp>
-#include <time/clock_store.hpp>
 #include <proc/syscalls.hpp>
+#include <rng/rng.hpp>
+#include <time/clock_store.hpp>
 
 using namespace cloudos;
 

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "global.hpp"
-#include "memory/allocator.hpp"
 #include "oslibc/list.hpp"
 
 namespace cloudos {

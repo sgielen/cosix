@@ -4,6 +4,8 @@
 
 namespace cloudos {
 
+struct multiboot_module;
+
 struct initrdfs {
 	initrdfs(multiboot_module *initrd);
 

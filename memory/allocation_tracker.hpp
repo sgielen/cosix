@@ -1,11 +1,12 @@
 #pragma once
 
-#include <stdint.h>
-#include <stddef.h>
+#include <cloudabi/headers/cloudabi_types.h>
+#include <global.hpp>
 #include <memory/allocation.hpp>
 #include <oslibc/assert.hpp>
 #include <oslibc/string.h>
-#include <cloudabi/headers/cloudabi_types.h>
+#include <stddef.h>
+#include <stdint.h>
 
 namespace cloudos {
 

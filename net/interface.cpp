@@ -3,7 +3,6 @@
 #include "global.hpp"
 #include "oslibc/string.h"
 #include "oslibc/in.h"
-#include "memory/allocator.hpp"
 #include "fd/rawsock.hpp"
 
 using namespace cloudos;

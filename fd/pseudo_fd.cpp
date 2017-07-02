@@ -1,6 +1,5 @@
 #include "pseudo_fd.hpp"
 #include <fd/scheduler.hpp>
-#include <memory/allocator.hpp>
 
 using namespace cloudos;
 

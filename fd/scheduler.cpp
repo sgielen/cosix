@@ -3,7 +3,6 @@
 #include <fd/process_fd.hpp>
 #include <hw/interrupt.hpp>
 #include <hw/segments.hpp>
-#include <memory/allocator.hpp>
 
 extern "C" void switch_thread(void **old_sp, void *sp);
 

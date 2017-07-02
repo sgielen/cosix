@@ -2,7 +2,6 @@
 #include <fd/memory_fd.hpp>
 #include "global.hpp"
 #include <oslibc/numeric.h>
-#include <memory/allocator.hpp>
 #include "userland/external_binaries.h"
 
 using namespace cloudos;

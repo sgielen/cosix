@@ -1,10 +1,9 @@
-#include "hw/net/virtio.hpp"
-#include "global.hpp"
-#include "memory/allocator.hpp"
-#include "memory/page_allocator.hpp"
-#include "oslibc/error.h"
-#include "oslibc/string.h"
-#include "oslibc/checksum.h"
+#include <global.hpp>
+#include <hw/net/virtio.hpp>
+#include <memory/map_virtual.hpp>
+#include <oslibc/checksum.h>
+#include <oslibc/error.h>
+#include <oslibc/string.h>
 
 extern uint32_t _kernel_virtual_base;
 
@@ -136,9 +135,7 @@ device *virtio_net_driver::probe_pci_device(pci_bus *bus, int device)
 		return nullptr;
 	}
 
-	auto *res = get_allocator()->allocate<virtio_net_device>();
-	new(res) virtio_net_device(bus, device);
-	return res;
+	return allocate<virtio_net_device>(bus, device);
 }
 
 const char *virtio_net_driver::description()
@@ -249,8 +246,7 @@ cloudabi_errno_t virtio_net_device::eth_init()
 		write16(queue_select, queue);
 		auto number_of_entries = read16(queue_size);
 
-		virtq *q = get_allocator()->allocate<virtq>();
-		new(q) virtq(queue, number_of_entries);
+		virtq *q = allocate<virtq>(queue, number_of_entries);
 
 		uint64_t virtq_addr_phys = reinterpret_cast<uint64_t>(q->get_virtq_addr_phys());
 		if((virtq_addr_phys % PAGE_SIZE) != 0) {
@@ -276,12 +272,11 @@ cloudabi_errno_t virtio_net_device::eth_init()
 		buffer->flags = VIRTQ_DESC_F_WRITE;
 		buffer->next = 0;
 
-		address_mapping *mapping = get_allocator()->allocate<address_mapping>();
-		address_mapping_list *mappingl = get_allocator()->allocate<address_mapping_list>();
+		address_mapping *mapping = allocate<address_mapping>();
 		mapping->logical = address;
 		mapping->physical = reinterpret_cast<void*>(buffer->addr);
-		mappingl->data = mapping;
-		mappingl->next = nullptr;
+
+		address_mapping_list *mappingl = allocate<address_mapping_list>(mapping);
 		append(&mappings, mappingl);
 
 		auto res = add_buffer_to_avail(readq, i);

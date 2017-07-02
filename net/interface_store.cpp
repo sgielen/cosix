@@ -3,7 +3,6 @@
 #include "hw/vga_stream.hpp"
 #include "oslibc/string.h"
 #include "global.hpp"
-#include "memory/allocator.hpp"
 
 using namespace cloudos;
 
@@ -57,10 +56,7 @@ cloudabi_errno_t interface_store::register_interface_fixed_name(interface *i, co
 
 	i->set_name(name);
 
-	interface_list *next_entry = get_allocator()->allocate<interface_list>();
-	next_entry->data = i;
-	next_entry->next = nullptr;
-
+	interface_list *next_entry = allocate<interface_list>(i);
 	append(&interfaces_, next_entry);
 	return 0;
 }

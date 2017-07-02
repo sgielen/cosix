@@ -1,8 +1,8 @@
 #pragma once
 
-#include <oslibc/assert.hpp>
+#include <hw/vga_stream.hpp>
 #include <memory/allocation.hpp>
-#include <memory/allocator.hpp>
+#include <oslibc/assert.hpp>
 #include <oslibc/utility.hpp>
 
 #include <cstddef>

@@ -1,7 +1,6 @@
 #include "net/ethernet_interface.hpp"
 #include "hw/net/ethernet_device.hpp"
 #include "global.hpp"
-#include "memory/allocator.hpp"
 #include "oslibc/string.h"
 #include "oslibc/in.h"
 

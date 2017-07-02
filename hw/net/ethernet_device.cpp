@@ -2,7 +2,6 @@
 #include "net/ethernet_interface.hpp"
 #include "net/interface_store.hpp"
 #include "global.hpp"
-#include "memory/allocator.hpp"
 #include "oslibc/string.h"
 
 using namespace cloudos;

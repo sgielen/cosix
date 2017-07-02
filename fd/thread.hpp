@@ -3,7 +3,6 @@
 #include <oslibc/list.hpp>
 #include <hw/interrupt.hpp>
 #include <cloudabi/headers/cloudabi_types.h>
-#include <memory/allocation.hpp>
 #include <memory/smart_ptr.hpp>
 
 namespace cloudos {

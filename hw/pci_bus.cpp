@@ -1,8 +1,10 @@
-#include "hw/pci_bus.hpp"
-#include "hw/driver_store.hpp"
-#include "hw/cpu_io.hpp"
+#include <global.hpp>
+#include <hw/cpu_io.hpp>
+#include <hw/driver_store.hpp>
+#include <hw/pci_bus.hpp>
+#include <memory/map_virtual.hpp>
 #include <oslibc/numeric.h>
-#include "global.hpp"
+#include <oslibc/string.h>
 
 using namespace cloudos;
 
@@ -15,9 +17,7 @@ const char *pci_driver::description() {
 }
 
 device *pci_driver::probe_root_device(device *root) {
-	auto *driver = get_allocator()->allocate<pci_bus>();
-	new(driver) pci_bus(root);
-	return driver;
+	return allocate<pci_bus>(root);
 }
 
 pci_bus::pci_bus(device *parent)

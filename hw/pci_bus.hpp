@@ -1,9 +1,9 @@
 #pragma once
 
-#include "hw/driver.hpp"
-#include "hw/device.hpp"
-#include <stdint.h>
+#include <hw/device.hpp>
+#include <hw/driver.hpp>
 #include <memory/allocation.hpp>
+#include <stdint.h>
 
 namespace cloudos {
 

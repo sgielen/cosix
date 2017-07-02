@@ -1,11 +1,10 @@
-#include "hw/net/intel_i217.hpp"
-#include "global.hpp"
-#include "memory/allocator.hpp"
-#include "memory/page_allocator.hpp"
-#include "oslibc/error.h"
-#include "oslibc/string.h"
-#include "oslibc/checksum.h"
-#include "hw/net/intel_i217_flags.hpp"
+#include <global.hpp>
+#include <hw/net/intel_i217.hpp>
+#include <hw/net/intel_i217_flags.hpp>
+#include <memory/map_virtual.hpp>
+#include <oslibc/checksum.h>
+#include <oslibc/error.h>
+#include <oslibc/string.h>
 
 using namespace cloudos;
 

@@ -1,7 +1,8 @@
-#include "mem_mapping.hpp"
-#include "global.hpp"
-#include "process_fd.hpp"
-#include "memory/page_allocator.hpp"
+#include <fd/mem_mapping.hpp>
+#include <fd/process_fd.hpp>
+#include <global.hpp>
+#include <memory/map_virtual.hpp>
+#include <memory/page_allocator.hpp>
 
 using namespace cloudos;
 

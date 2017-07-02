@@ -13,15 +13,3 @@ allocator::allocator()
 #endif
 {
 }
-
-void *allocator::allocate(size_t n) {
-	Blk allocation = get_allocator()->allocate(n);
-	//get_vga_stream() << "Warning: " << allocation.size << " bytes leaking because of old allocator usage\n";
-	return allocation.ptr;
-}
-
-void *allocator::allocate_aligned(size_t n, size_t alignment) {
-	Blk allocation = get_allocator()->allocate_aligned(n, alignment);
-	//get_vga_stream() << "Warning: " << allocation.size << " bytes leaking because of old allocator usage\n";
-	return allocation.ptr;
-}

@@ -12,14 +12,14 @@ class allocator {
 public:
 	allocator();
 
-	void *allocate(size_t x);
+	inline Blk allocate(size_t x)
+	{ return get_allocator()->allocate(x); }
 
-	void *allocate_aligned(size_t x, size_t alignment);
+	inline Blk allocate_aligned(size_t x, size_t alignment)
+	{ return get_allocator()->allocate_aligned(x, alignment); }
 
-	template <typename T>
-	T *allocate(size_t x = sizeof(T)) {
-		return reinterpret_cast<T*>(allocate(x));
-	}
+	inline void deallocate(Blk b)
+	{ return get_allocator()->deallocate(b); }
 
 private:
 	Bucketizer<map_virtual, 512, 4096, 256> large_bucketizer;

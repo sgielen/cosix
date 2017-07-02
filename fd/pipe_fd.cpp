@@ -1,5 +1,4 @@
 #include "pipe_fd.hpp"
-#include <memory/allocator.hpp>
 
 using namespace cloudos;
 

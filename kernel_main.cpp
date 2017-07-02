@@ -153,8 +153,7 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	rng.seed(98764);
 	global.random = &rng;
 
-	global.init = get_allocator()->allocate<process_fd>();
-	new (global.init) process_fd("init");
+	global.init = allocate<process_fd>("init");
 	stream << "Init process created\n";
 
 	global.init->install_page_directory();
@@ -179,14 +178,11 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	}
 
 	global.clock_store = allocate<clock_store>();
-
-	global.driver_store = get_allocator()->allocate<driver_store>();
-	new(global.driver_store) driver_store();
+	global.driver_store = allocate<driver_store>();
 
 #define REGISTER_DRIVER(TYPE) \
 	do { \
-		auto driver = get_allocator()->allocate<TYPE>(); \
-		new(driver) TYPE(); \
+		auto driver = allocate<TYPE>(); \
 		get_driver_store()->register_driver(driver); \
 	} while(0);
 
@@ -195,17 +191,14 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	REGISTER_DRIVER(virtio_net_driver);
 	REGISTER_DRIVER(intel_i217_driver);
 
-	global.interface_store = get_allocator()->allocate<interface_store>();
-	new(global.interface_store) interface_store();
+	global.interface_store = allocate<interface_store>();
 
-	loopback_interface *loopback = get_allocator()->allocate<loopback_interface>();
-	new(loopback) loopback_interface();
+	loopback_interface *loopback = allocate<loopback_interface>();
 	if(global.interface_store->register_interface_fixed_name(loopback, "lo") != 0) {
 		kernel_panic("Failed to register loopback interface");
 	}
 
-	global.root_device = get_allocator()->allocate<root_device>();
-	new(global.root_device) root_device();
+	global.root_device = allocate<root_device>();
 	global.root_device->init();
 	dump_device_descriptions(stream, global.root_device);
 

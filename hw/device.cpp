@@ -1,6 +1,6 @@
-#include "hw/device.hpp"
-#include "memory/allocator.hpp"
-#include "global.hpp"
+#include <global.hpp>
+#include <hw/device.hpp>
+#include <memory/allocation.hpp>
 
 using namespace cloudos;
 
