@@ -37,12 +37,12 @@ build:
 
 There are various targets to build or run the kernel in various ways:
 
-  boot      - run inside qemu
-  fastboot  - run inside qemu, don't build first
-  gdbboot   - run inside qemu with -S -s, i.e. wait for debugger to attach
-  iso       - build an ISO file using mkisofs/genisoimage/xorriso
-  isoboot   - boot ISO using qemu
-  bochsboot - run inside bochs
+    boot      - run inside qemu
+    fastboot  - run inside qemu, don't build first
+    gdbboot   - run inside qemu with -S -s, i.e. wait for debugger to attach
+    iso       - build an ISO file using mkisofs/genisoimage/xorriso
+    isoboot   - boot ISO using qemu
+    bochsboot - run inside bochs
 
 Unit tests
 ==========
