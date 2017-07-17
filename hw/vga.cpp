@@ -96,6 +96,15 @@ void vga_buffer::putc(char c) {
 			--cursor_column;
 		}
 		break;
+	case '\t':
+		while(cursor_column % 8) {
+			putc(' ');
+		}
+		break;
+	case '\x1b':
+		putc('^');
+		putc('[');
+		break;
 	default:
 		putc_at(c, color, cursor_column, cursor_row);
 		if (++cursor_column == width) {

@@ -36,6 +36,14 @@ memcpy(void *d, const void *s, size_t n) {
 	return d;
 }
 
+void *
+memmove(void *dst, const void *src, size_t len) {
+	char buf[len];
+	memcpy(buf, src, len);
+	memcpy(dst, buf, len);
+	return dst;
+}
+
 int
 memcmp(const void *l, const void *r, size_t n) {
 	const uint8_t *left = l;
