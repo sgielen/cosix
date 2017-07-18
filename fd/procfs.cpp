@@ -88,7 +88,7 @@ bool procfs_directory_fd::to_string(char *buf, size_t length) {
 }
 
 shared_ptr<fd_t> procfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi_oflags_t oflags, const cloudabi_fdstat_t *) {
-	if(pathname == 0 || pathlen == 0 || pathname[0] == 0 || pathname[0] == '/') {
+	if(pathname == nullptr || pathlen == 0 || pathname[0] == 0 || pathname[0] == '/') {
 		error = EINVAL;
 		return nullptr;
 	}

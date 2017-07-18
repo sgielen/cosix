@@ -121,7 +121,7 @@ void mem_mapping_t::ensure_backed(size_t page)
 	auto *page_entry = ensure_get_page_entry(page);
 	if(!(*page_entry & 0x1)) {
 		Blk b = get_map_virtual()->allocate(PAGE_SIZE);
-		if(b.ptr == 0) {
+		if(b.ptr == nullptr) {
 			kernel_panic("Failed to allocate page to back a mapping");
 		}
 

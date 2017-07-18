@@ -75,20 +75,20 @@ struct thread : enable_shared_from_this<thread> {
 	void signal_userspace_cv(_Atomic(cloudabi_condvar_t) *condvar, cloudabi_nthreads_t nwaiters);
 
 private:
-	process_fd *process = 0;
+	process_fd *process = nullptr;
 	// note: only the bottom 30 bits may be used
 	cloudabi_tid_t thread_id = 0;
 	bool exited = false;
 
 	friend struct cloudos::scheduler;
-	void *esp = 0;
+	void *esp = nullptr;
 
 	bool blocked = false;
 	bool unscheduled = false;
 
 	interrupt_state_t state;
 	sse_state_t sse_state;
-	void *userland_stack_top = 0;
+	void *userland_stack_top = nullptr;
 	Blk kernel_stack_alloc;
 	size_t kernel_stack_size = 0;
 };

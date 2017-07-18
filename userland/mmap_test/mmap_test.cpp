@@ -32,7 +32,7 @@ void program_main(const argdata_t *ad) {
 	fswap(stderr, out);
 
 	errno = 0;
-	unsigned char *addr = reinterpret_cast<unsigned char*>(mmap(0, 4096 * 4, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, CLOUDABI_MAP_ANON_FD, 0));
+	unsigned char *addr = reinterpret_cast<unsigned char*>(mmap(nullptr, 4096 * 4, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, CLOUDABI_MAP_ANON_FD, 0));
 	if(addr == MAP_FAILED) {
 		perror("mmap failed");
 		exit(1);

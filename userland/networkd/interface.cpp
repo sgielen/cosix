@@ -147,7 +147,7 @@ cloudabi_errno_t interface::send_frame(std::vector<iovec> iov) {
 	in.si_data = const_cast<cloudabi_ciovec_t*>(
 		reinterpret_cast<const cloudabi_ciovec_t*>(iov.data()));
 	in.si_data_len = iov.size();
-	in.si_fds = 0;
+	in.si_fds = nullptr;
 	in.si_fds_len = 0;
 	in.si_flags = 0;
 	cloudabi_send_out_t out;
@@ -169,7 +169,7 @@ void interface::run() {
 		cloudabi_recv_in_t in;
 		in.ri_data = &ri_vec;
 		in.ri_data_len = 1;
-		in.ri_fds = 0;
+		in.ri_fds = nullptr;
 		in.ri_fds_len = 0;
 		in.ri_flags = 0;
 

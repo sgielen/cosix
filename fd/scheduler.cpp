@@ -87,7 +87,7 @@ void scheduler::schedule_next()
 	auto old_thread = running;
 	running = nullptr;
 
-	if(old_thread != 0 && !old_thread->data->is_exited() && !old_thread->data->is_blocked()) {
+	if(old_thread != nullptr && !old_thread->data->is_exited() && !old_thread->data->is_blocked()) {
 		// add this thread to the ready list, since we can reschedule it immediately
 		assert(old_thread->data->get_process()->is_running());
 		append(&ready, old_thread);
@@ -116,7 +116,7 @@ void scheduler::schedule_next()
 	}
 
 	if(old_thread != running) {
-		if(old_thread != 0) {
+		if(old_thread != nullptr) {
 			assert(old_thread->next == nullptr);
 			old_thread->data->save_sse_state();
 
@@ -137,7 +137,7 @@ void scheduler::schedule_next()
 			}
 		}
 
-		if(running != 0) {
+		if(running != nullptr) {
 			running->data->get_process()->install_page_directory();
 			get_gdt()->set_fsbase(running->data->get_fsbase());
 			get_gdt()->set_kernel_stack(running->data->get_kernel_stack_top());

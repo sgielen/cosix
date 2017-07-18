@@ -64,8 +64,8 @@ struct AllocationTracker {
 	Blk allocate_aligned(size_t s, size_t alignment) {
 		size_t actual_size = s + alignment + sizeof(tracked_allocation) + sizeof(tracked_allocation::alloc_prefix) + sizeof(tracked_allocation::alloc_suffix);
 		Blk res = allocator->allocate(actual_size);
-		assert(res.ptr == 0 || res.size == actual_size);
-		if(res.ptr == 0) {
+		assert(res.ptr == nullptr || res.size == actual_size);
+		if(res.ptr == nullptr) {
 			return {};
 		}
 
@@ -85,8 +85,8 @@ struct AllocationTracker {
 	Blk allocate(size_t s) {
 		size_t actual_size = s + sizeof(tracked_allocation) + sizeof(tracked_allocation::alloc_prefix) + sizeof(tracked_allocation::alloc_suffix);
 		Blk res = allocator->allocate(actual_size);
-		assert(res.ptr == 0 || res.size == actual_size);
-		if(res.ptr == 0) {
+		assert(res.ptr == nullptr || res.size == actual_size);
+		if(res.ptr == nullptr) {
 			return {};
 		}
 

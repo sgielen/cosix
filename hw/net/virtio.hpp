@@ -33,12 +33,12 @@ private:
 	cloudabi_errno_t check_new_packets();
 
 	uint8_t mac[6];
-	int last_readq_used_idx;
-	int last_writeq_idx;
+	int last_readq_used_idx = 0;
+	int last_writeq_idx = 0;
 	uint64_t drv_features = 0;
-	virtq *readq;
-	virtq *writeq;
-	address_mapping_list *mappings;
+	virtq *readq = nullptr;
+	virtq *writeq = nullptr;
+	address_mapping_list *mappings = nullptr;
 };
 
 struct virtio_net_driver : public driver {

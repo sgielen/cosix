@@ -162,7 +162,7 @@ void interrupt_handler::handle_irq(uint8_t irq) {
 	}
 
 	auto handler = irq_handlers[irq];
-	if(handler != 0) {
+	if(handler != nullptr) {
 		handler->handle_irq(irq);
 	} else {
 		get_vga_stream() << "Unknown kernel interrupt " << irq << "\n";

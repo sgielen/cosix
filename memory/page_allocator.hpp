@@ -50,9 +50,9 @@ struct page_allocator {
 	static const int PAGE_SIZE = 4096 /* bytes */;
 
 private:
-	page_list *used_pages;
-	page_list *free_pages;
-	page_list *free_pages_tail;
+	page_list *used_pages = nullptr;
+	page_list *free_pages = nullptr;
+	page_list *free_pages_tail = nullptr;
 };
 
 }

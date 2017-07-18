@@ -26,7 +26,7 @@ process_fd::process_fd(const char *n)
 : fd_t(CLOUDABI_FILETYPE_PROCESS, n)
 {
 	Blk page_directory_alloc = allocate_aligned(PAGE_SIZE, PAGE_SIZE);
-	if(page_directory_alloc.ptr == 0) {
+	if(page_directory_alloc.ptr == nullptr) {
 		kernel_panic("Couldn't allocate page directory for new process");
 	}
 	page_directory = reinterpret_cast<uint32_t*>(page_directory_alloc.ptr);
@@ -35,7 +35,7 @@ process_fd::process_fd(const char *n)
 	get_map_virtual()->fill_kernel_pages(page_directory);
 
 	Blk page_tables_alloc = allocate(0x300 * sizeof(uint32_t*));
-	if(page_tables_alloc.ptr == 0) {
+	if(page_tables_alloc.ptr == nullptr) {
 		kernel_panic("Couldn't allocate page tables list for new process");
 	}
 	page_tables = reinterpret_cast<uint32_t**>(page_tables_alloc.ptr);
@@ -72,7 +72,7 @@ process_fd::~process_fd()
 
 	deallocate({page_directory, PAGE_SIZE});
 	for(size_t i = 0; i < 0x300; ++i) {
-		if(page_tables[i] != 0) {
+		if(page_tables[i] != nullptr) {
 			deallocate({page_tables[i], PAGE_SIZE});
 		}
 	}
@@ -178,12 +178,12 @@ cloudabi_fd_t process_fd::add_fd(shared_ptr<fd_t> fd, cloudabi_rights_t rights_b
 }
 
 cloudabi_errno_t process_fd::get_fd(fd_mapping_t **r_mapping, cloudabi_fd_t num, cloudabi_rights_t has_rights) {
-	*r_mapping = 0;
+	*r_mapping = nullptr;
 	if(num >= fd_capacity) {
 		return EBADF;
 	}
 	fd_mapping_t *mapping = fds[num];
-	if(mapping == 0 || !mapping->fd) {
+	if(mapping == nullptr || !mapping->fd) {
 		return EBADF;
 	}
 	if((mapping->rights_base & has_rights) != has_rights) {
@@ -200,7 +200,7 @@ cloudabi_errno_t process_fd::close_fd(cloudabi_fd_t num) {
 	if(res == 0) {
 		mapping->fd.reset();
 		deallocate(fds[num]);
-		fds[num] = 0;
+		fds[num] = nullptr;
 	}
 	return res;
 }
@@ -226,7 +226,7 @@ uint32_t *process_fd::ensure_get_page_table(int i) {
 
 	// allocate page table
 	Blk table_alloc = allocate_aligned(PAGE_SIZE, PAGE_SIZE);
-	if(table_alloc.ptr == 0) {
+	if(table_alloc.ptr == nullptr) {
 		kernel_panic("Failed to allocate page table");
 	}
 
@@ -398,7 +398,7 @@ cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping
 	size_t total_size = 0;
 	do {
 		Blk blk = allocate(4096);
-		assert(blk.ptr != 0); // TODO: deallocate
+		assert(blk.ptr != nullptr); // TODO: deallocate
 		size_t read = fd->read(blk.ptr, blk.size);
 		if(read == 0) {
 			deallocate(blk);
@@ -454,7 +454,7 @@ cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping
 	strncat(name, fd->name, sizeof(name) - strlen(name) - 1);
 
 	Blk page_directory_alloc = allocate_aligned(PAGE_SIZE, PAGE_SIZE);
-	if(page_directory_alloc.ptr == 0) {
+	if(page_directory_alloc.ptr == nullptr) {
 		kernel_panic("Failed to allocate process paging directory");
 	}
 	page_directory = reinterpret_cast<uint32_t*>(page_directory_alloc.ptr);
@@ -463,7 +463,7 @@ cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping
 	get_map_virtual()->fill_kernel_pages(page_directory);
 
 	Blk page_tables_alloc = allocate(0x300 * sizeof(uint32_t*));
-	if(page_tables_alloc.ptr == 0) {
+	if(page_tables_alloc.ptr == nullptr) {
 		kernel_panic("Failed to allocate page table list");
 	}
 	page_tables = reinterpret_cast<uint32_t**>(page_tables_alloc.ptr);
@@ -518,7 +518,7 @@ cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping
 		fds[i] = new_fds[i];
 	}
 	for(cloudabi_fd_t i = fdslen; i < fd_capacity; ++i) {
-		fds[i] = 0;
+		fds[i] = nullptr;
 	}
 
 	// temporarily re-install the old page directory, so we unmap from the old page directory
@@ -541,7 +541,7 @@ cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping
 
 	deallocate({old_page_directory, PAGE_SIZE});
 	for(size_t i = 0; i < 0x300; ++i) {
-		if(old_page_tables[i] != 0) {
+		if(old_page_tables[i] != nullptr) {
 			deallocate({old_page_tables[i], PAGE_SIZE});
 		}
 	}

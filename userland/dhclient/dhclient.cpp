@@ -67,10 +67,10 @@ size_t send_if_command(std::string command, std::string arg, char *buf, size_t b
 	argdata_t *req = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 
 	size_t len;
-	argdata_serialized_length(req, &len, 0);
+	argdata_serialized_length(req, &len, nullptr);
 
 	char rbuf[len];
-	argdata_serialize(req, rbuf, 0);
+	argdata_serialize(req, rbuf, nullptr);
 
 	argdata_free(keys[0]);
 	argdata_free(keys[1]);
@@ -242,10 +242,10 @@ void set_property(std::string property, std::string value) {
 	argdata_t *req = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 
 	size_t len;
-	argdata_serialized_length(req, &len, 0);
+	argdata_serialized_length(req, &len, nullptr);
 
 	char rbuf[len];
-	argdata_serialize(req, rbuf, 0);
+	argdata_serialize(req, rbuf, nullptr);
 
 	argdata_free(keys[0]);
 	argdata_free(keys[1]);

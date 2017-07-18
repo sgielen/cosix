@@ -26,7 +26,7 @@ struct external_binary_t {
 
 constexpr cloudos::external_binary_t external_binaries_table[] = {
 @EXTERNAL_BINARY_DEFINITIONS@
-	{nullptr, nullptr, 0}
+	{nullptr, nullptr, nullptr}
 };
 
 #undef DEFINE_BINARY

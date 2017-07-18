@@ -108,7 +108,7 @@ void program_main(const argdata_t *ad) {
 		exit(1);
 	}
 	DIR *dir = opendirat(tmpdir, dirname);
-	if(dir == 0) {
+	if(dir == nullptr) {
 		dprintf(stdout, "Failed to opendirat: %s\n", strerror(errno));
 		exit(1);
 	}

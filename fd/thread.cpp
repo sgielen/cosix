@@ -59,12 +59,12 @@ thread::thread(process_fd *p, void *stack_bottom, size_t stack_len, void *auxv_a
 	if(thread_id == MAIN_THREAD) {
 		// initialize stack so that it looks like _start(auxv_address) is called
 		*allocate_on_stack<void*>(state.useresp) = auxv_address;
-		*allocate_on_stack<void*>(state.useresp) = 0;
+		*allocate_on_stack<void*>(state.useresp) = nullptr;
 	} else {
 		// initialize stack so that it looks like threadentry_t(tid, auxv_address) is called
 		*allocate_on_stack<void*>(state.useresp) = auxv_address;
 		*allocate_on_stack<uint32_t>(state.useresp) = thread_id;
-		*allocate_on_stack<void*>(state.useresp) = 0;
+		*allocate_on_stack<void*>(state.useresp) = nullptr;
 	}
 
 	// initial instruction pointer

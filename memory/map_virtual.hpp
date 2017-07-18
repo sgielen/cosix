@@ -37,7 +37,7 @@ struct map_virtual {
 		// are unsupported
 		if((4096 % alignment) == 0) {
 			auto res = allocate(s);
-			assert(res.ptr == 0 || reinterpret_cast<uintptr_t>(res.ptr) % alignment == 0);
+			assert(res.ptr == nullptr || reinterpret_cast<uintptr_t>(res.ptr) % alignment == 0);
 			return res;
 		} else {
 			return {};

@@ -20,8 +20,8 @@ struct Segregator {
 		} else {
 			res = large->allocate_aligned(s, alignment);
 		}
-		assert(res.ptr == 0 || res.size == s);
-		assert(res.ptr == 0 || reinterpret_cast<uintptr_t>(res.ptr) % alignment == 0);
+		assert(res.ptr == nullptr || res.size == s);
+		assert(res.ptr == nullptr || reinterpret_cast<uintptr_t>(res.ptr) % alignment == 0);
 		return res;
 	}
 
@@ -32,7 +32,7 @@ struct Segregator {
 		} else {
 			res = large->allocate(s);
 		}
-		assert(res.ptr == 0 || res.size == s);
+		assert(res.ptr == nullptr || res.size == s);
 		return res;
 	}
 

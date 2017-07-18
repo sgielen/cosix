@@ -157,17 +157,17 @@ private:
 	fd_mapping_t **fds = nullptr;
 
 	// Page directory, filled with physical addresses to page tables
-	uint32_t *page_directory = 0;
+	uint32_t *page_directory = nullptr;
 	// The actual backing table virtual addresses; only the first 0x300
 	// entries are valid, the others are in page_allocator.kernel_page_tables
-	uint32_t **page_tables = 0;
+	uint32_t **page_tables = nullptr;
 
 	// The memory mappings used by this process.
-	mem_mapping_list *mappings = 0;
+	mem_mapping_list *mappings = nullptr;
 
 	// The kernel managed lock & condvar information for this process.
-	userland_lock_waiters_list *userland_locks = 0;
-	userland_condvar_waiters_list *userland_condvars = 0;
+	userland_lock_waiters_list *userland_locks = nullptr;
+	userland_condvar_waiters_list *userland_condvars = nullptr;
 
 	bool running = false;
 	cloudabi_exitcode_t exitcode = 0;

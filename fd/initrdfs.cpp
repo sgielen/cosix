@@ -145,12 +145,12 @@ shared_ptr<fd_t> initrdfs::get_root_fd() {
 }
 
 shared_ptr<fd_t> initrdfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi_oflags_t, const cloudabi_fdstat_t *) {
-	if(pathname == 0 || pathname[0] == 0 || pathname[0] == '/') {
+	if(pathname == nullptr || pathname[0] == 0 || pathname[0] == '/') {
 		error = EINVAL;
 		return nullptr;
 	}
 
-	if(initrd_start == 0) {
+	if(initrd_start == nullptr) {
 		error = ENOENT;
 		return nullptr;
 	}

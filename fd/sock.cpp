@@ -18,7 +18,7 @@ size_t sock_t::read(void *dest, size_t count)
 	cloudabi_recv_in_t recv_in[1];
 	recv_in[0].ri_data = &iovec[0];
 	recv_in[0].ri_data_len = 1;
-	recv_in[0].ri_fds = 0;
+	recv_in[0].ri_fds = nullptr;
 	recv_in[0].ri_fds_len = 0;
 	recv_in[0].ri_flags = 0;
 
@@ -39,7 +39,7 @@ size_t sock_t::write(const char *str, size_t count)
 	cloudabi_send_in_t send_in[1];
 	send_in[0].si_data = &iovec[0];
 	send_in[0].si_data_len = 1;
-	send_in[0].si_fds = 0;
+	send_in[0].si_fds = nullptr;
 	send_in[0].si_fds_len = 0;
 	send_in[0].si_flags = 0;
 

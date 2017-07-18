@@ -37,7 +37,7 @@ map_virtual::map_virtual(page_allocator *p)
 	// Allocate memory for 1 GB of kernel pages
 	for(size_t i = 0; i < NUM_KERNEL_PAGE_TABLES; ++i) {
 		Blk b = pa->allocate_phys();
-		if(b.ptr == 0) {
+		if(b.ptr == nullptr) {
 			kernel_panic("Failed to allocate kernel paging table");
 		}
 		assert((reinterpret_cast<uint32_t>(b.ptr) & 0xfff) == 0);
@@ -46,7 +46,7 @@ map_virtual::map_virtual(page_allocator *p)
 
 	// Allocate memory for the stage2 page directory
 	paging_directory_stage2 = pa->allocate_phys();
-	if(paging_directory_stage2.ptr == 0) {
+	if(paging_directory_stage2.ptr == nullptr) {
 		kernel_panic("Failed to allocate page directory for stage2 paging");
 	}
 
@@ -80,16 +80,16 @@ map_virtual::map_virtual(page_allocator *p)
 }
 
 void *map_virtual::to_physical_address(const void *logical) {
-	return to_physical_address(0, logical);
+	return to_physical_address(nullptr, logical);
 }
 
 void *map_virtual::to_physical_address(process_fd *fd, const void *logical) {
-	if(logical == 0) {
-		return 0;
+	if(logical == nullptr) {
+		return nullptr;
 	}
 
 	uint16_t page_table_num = reinterpret_cast<uint64_t>(logical) >> 22;
-	uint32_t *page_table = 0;
+	uint32_t *page_table = nullptr;
 	if(page_table_num >= KERNEL_PAGE_OFFSET) {
 		page_table = kernel_page_tables[page_table_num - KERNEL_PAGE_OFFSET];
 	} else if(fd) {
@@ -98,9 +98,9 @@ void *map_virtual::to_physical_address(process_fd *fd, const void *logical) {
 		kernel_panic("to_physical_address for userspace page, but no process fd given");
 	}
 
-	if(page_table == 0) {
+	if(page_table == nullptr) {
 		// not mapped
-		return 0;
+		return nullptr;
 	}
 
 	uint16_t page_entry_num = reinterpret_cast<uint64_t>(logical) >> 12 & 0x03ff;
@@ -108,7 +108,7 @@ void *map_virtual::to_physical_address(process_fd *fd, const void *logical) {
 
 	if(!(page_entry & 0x1)) {
 		// not mapped
-		return 0;
+		return nullptr;
 	}
 
 	uint32_t page_address = page_entry & 0xfffff000;
@@ -130,7 +130,7 @@ Blk map_virtual::allocate_contiguous_phys(size_t size) {
 	}
 
 	Blk phys_alloc = pa->allocate_contiguous_phys(num_pages);
-	if(phys_alloc.ptr == 0) {
+	if(phys_alloc.ptr == nullptr) {
 		get_vga_stream() << "allocate_contiguous_phys() called, but no physical contiguous block could be found\n";
 		return {};
 	}
@@ -180,7 +180,7 @@ Blk map_virtual::allocate(size_t size) {
 		assert(entry == 0);
 
 		Blk b = pa->allocate_phys();
-		if(b.ptr == 0) {
+		if(b.ptr == nullptr) {
 			get_vga_stream() << "allocate() called, but there are no pages left\n";
 			// TODO: free earlier acquired pages
 			return {};
@@ -206,7 +206,7 @@ void map_virtual::deallocate(Blk b) {
 	for(size_t page = 0; page < num_pages; ++page) {
 		void *ptr = reinterpret_cast<void*>(reinterpret_cast<uint32_t>(b.ptr) + PAGE_SIZE * page);
 		auto *phys_addr = to_physical_address(ptr);
-		assert(phys_addr != 0);
+		assert(phys_addr != nullptr);
 
 		// Unmap virtual page
 		unmap_page_only(ptr);
@@ -291,7 +291,7 @@ void map_virtual::load_paging_stage2() {
 }
 
 void map_virtual::free_paging_stage2() {
-	assert(paging_directory_stage2.ptr != 0);
+	assert(paging_directory_stage2.ptr != nullptr);
 	pa->deallocate_phys(paging_directory_stage2);
-	paging_directory_stage2.ptr = 0;
+	paging_directory_stage2.ptr = nullptr;
 }

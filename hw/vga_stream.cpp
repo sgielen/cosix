@@ -76,12 +76,12 @@ vga_stream &cloudos::operator<<(vga_stream &s, char val) {
 }
 
 vga_stream &cloudos::operator<<(vga_stream &s, const char *str) {
-	s.write(str == NULL ? "(null)" : str);
+	s.write(str == nullptr ? "(null)" : str);
 	return s;
 }
 
 vga_stream &cloudos::operator<<(vga_stream &s, void *ptr) {
-	if(ptr == NULL) {
+	if(ptr == nullptr) {
 		s.write("(null)");
 	} else {
 		uint64_t addr = reinterpret_cast<uint64_t>(ptr);

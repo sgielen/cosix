@@ -28,7 +28,7 @@ void deallocate(Blk b);
 template <typename T, class... Args>
 T *allocate(Args&&... args) {
 	Blk b = allocate(sizeof(T));
-	if(b.ptr != 0) {
+	if(b.ptr != nullptr) {
 		assert(b.size == sizeof(T));
 		new (b.ptr) T(args...);
 	}

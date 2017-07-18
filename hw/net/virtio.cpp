@@ -54,7 +54,7 @@ struct virtq_used {
 
 struct virtq {
 	virtq(uint16_t q, uint32_t s)
-	: data(0), queue_select(q), queue_size(s), padding_used(0) {
+	: queue_select(q), queue_size(s) {
 		/* Each virtq occupies two or more physically-contiguous pages (usually defined as
 		   4096 bytes, but depending on the transport; henceforth referred to as Queue Align) */
 		size_t iovirtq_bytes = 0;
@@ -104,10 +104,10 @@ struct virtq {
 	}
 
 private:
-	uint8_t *data;
+	uint8_t *data = nullptr;
 	uint16_t queue_select;
 	uint16_t queue_size;
-	uint32_t padding_used;
+	uint32_t padding_used = 0;
 };
 }
 
@@ -151,11 +151,6 @@ const char *virtio_net_device::description()
 virtio_net_device::virtio_net_device(pci_bus *parent, int d)
 : device(parent)
 , pci_device(parent, d)
-, last_readq_used_idx(0)
-, last_writeq_idx(0)
-, readq(nullptr)
-, writeq(nullptr)
-, mappings(0)
 {
 }
 

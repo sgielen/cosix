@@ -18,7 +18,7 @@ struct BucketizerBin {
 
 	void fill() {
 		Blk b = parent->allocate(PageAllocator::PAGE_SIZE);
-		if(b.ptr == 0) {
+		if(b.ptr == nullptr) {
 			kernel_panic("Failed to allocate a page");
 		}
 
@@ -176,8 +176,8 @@ struct Bucketizer {
 			bin.fill();
 		}
 		auto allocation = bin.allocate();
-		assert(allocation.ptr == 0 || allocation.size >= s);
-		if(allocation.ptr != 0) {
+		assert(allocation.ptr == nullptr || allocation.size >= s);
+		if(allocation.ptr != nullptr) {
 			allocation.size = s;
 		}
 		return allocation;

@@ -27,7 +27,7 @@ void check_same_directory_fd(int a, int b) {
 	}
 
 	DIR *dir = opendirat(a, "fd_received");
-	if(dir != 0) {
+	if(dir != nullptr) {
 		dprintf(stdout, "[UNIXSOCK] Directory already existed\n");
 		exit(1);
 	}
@@ -37,7 +37,7 @@ void check_same_directory_fd(int a, int b) {
 	}
 
 	dir = opendirat(a, "fd_received");
-	if(dir == 0) {
+	if(dir == nullptr) {
 		perror("opendirat");
 		exit(1);
 	}
@@ -48,7 +48,7 @@ void check_same_directory_fd(int a, int b) {
 	}
 
 	dir = opendirat(a, "fd_received");
-	if(dir != 0) {
+	if(dir != nullptr) {
 		dprintf(stdout, "[UNIXSOCK] Directory still exists\n");
 		exit(1);
 	}
@@ -173,7 +173,7 @@ void program_main(const argdata_t *ad) {
 		}
 
 		struct cmsghdr *cmsg = CMSG_FIRSTHDR(&message);
-		if(cmsg == 0) {
+		if(cmsg == nullptr) {
 			dprintf(stdout, "[UNIXSOCK] No fds attached to message 4!\n");
 			exit(1);
 		}

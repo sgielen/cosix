@@ -13,7 +13,7 @@ static void stack_up(uintptr_t * &ebp, void * &eip) {
 
 tracked_allocation::tracked_allocation() {
 	{
-		uintptr_t *ebp;
+		uintptr_t *ebp = nullptr;
 		asm volatile("mov %%ebp, %0" : "=r"(ebp));
 		void *eip = nullptr;
 		stack_up(ebp, eip);

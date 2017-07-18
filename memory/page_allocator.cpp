@@ -7,8 +7,6 @@ extern uint32_t _kernel_virtual_base;
 using namespace cloudos;
 
 page_allocator::page_allocator(void *h, memory_map_entry *mmap, size_t mmap_size)
-: used_pages(0)
-, free_pages(0)
 {
 	uint64_t physical_handout = reinterpret_cast<uint64_t>(h) - _kernel_virtual_base;
 
@@ -46,7 +44,7 @@ page_allocator::page_allocator(void *h, memory_map_entry *mmap, size_t mmap_size
 
 			begin_addr += PAGE_SIZE;
 
-			if(free_pages == 0) {
+			if(free_pages == nullptr) {
 				free_pages = free_pages_tail = page_entry;
 			} else {
 				assert(free_pages_tail->next == nullptr);
