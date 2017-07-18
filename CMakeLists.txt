@@ -16,6 +16,18 @@ get_testing_baremetal_enabled(TESTING_ENABLED BAREMETAL_ENABLED)
 include_directories(${CMAKE_SOURCE_DIR})
 
 if(TESTING_ENABLED)
+	# forcibly enable ASAN if possible with this compiler
+	include(wubwubcmake/flag_compiles.cmake)
+	set(flags "-fsanitize=address" "-faddress-sanitizer")
+	flag_compiles(FLAGS ${flags} WORKING_FLAG asan_flag)
+	if(asan_flag)
+		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${asan_flag}")
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${asan_flag}")
+		set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${asan_flag}")
+		set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${asan_flag}")
+		set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${asan_flag}")
+	endif()
+
 	add_definitions(-DTESTING_ENABLED)
 	set(TESTING_CATCH_INCLUDE ${CMAKE_SOURCE_DIR}/catch/include)
 	include_directories(${CMAKE_SOURCE_DIR}/cloudabi/headers)
