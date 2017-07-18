@@ -67,6 +67,7 @@ const char *int_num_to_name(int int_no, bool *err_code) {
 	return str;
 }
 
+#ifndef TESTING_ENABLED
 static void dump_stack(uintptr_t *ebp, void *eip) {
 	auto &stream = get_vga_stream();
 	stream << dec;
@@ -134,11 +135,15 @@ __attribute__((noreturn)) static void fatal_exception(int int_no, int err_code, 
 	stream << "\n";
 	kernel_panic("A fatal exception occurred.");
 }
+#endif
 
 void interrupt_handler::setup(interrupt_table &table) {
-	/* use reinterpret_cast<uint64_t> for testing builds on 8-byte ptr archs. */
+#ifdef TESTING_ENABLED
+	(void)table;
+#else
+
 #define INT(NUM) \
-	table.set_entry(NUM, reinterpret_cast<uint64_t>(isr ## NUM), 0x08, 0x8e);
+	table.set_entry(NUM, reinterpret_cast<uintptr_t>(isr ## NUM), 0x08, 0x8e);
 	/* Interrupts thrown by the processor */
 	INT(0); INT(1); INT(2); INT(3); INT(4); INT(5); INT(6); INT(7); INT(8);
 	INT(9); INT(10); INT(11); INT(12); INT(13); INT(14); INT(15); INT(16);
@@ -152,6 +157,7 @@ void interrupt_handler::setup(interrupt_table &table) {
 	table.set_entry(128, reinterpret_cast<uint64_t>(isr128), 0x08, 0xee);
 
 	table.load();
+#endif
 }
 
 void interrupt_handler::handle_irq(uint8_t irq) {
@@ -171,6 +177,9 @@ void interrupt_handler::handle_irq(uint8_t irq) {
 }
 
 void interrupt_handler::handle(interrupt_state_t *regs) {
+#ifdef TESTING_ENABLED
+	(void)regs;
+#else
 	int int_no = regs->int_no;
 	int err_code = regs->err_code;
 
@@ -221,6 +230,7 @@ void interrupt_handler::handle(interrupt_state_t *regs) {
 		}
 		running_thread->get_return_state(regs);
 	}
+#endif
 }
 
 void interrupt_handler::enable_interrupts() {

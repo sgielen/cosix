@@ -176,7 +176,7 @@ TEST_CASE("remove_one_first") {
 	REQUIRE(remove_one(&list, [](linked_list<body*>*){
 		FAIL("Functor called on empty list");
 		return true;
-	}, [](body*) {
+	}, [](linked_list<body*>*) {
 		FAIL("Deallocator called on empty list");
 	}) == false);
 
@@ -190,7 +190,7 @@ TEST_CASE("remove_one_first") {
 		REQUIRE(item == list);
 		called = true;
 		return false;
-	}, [](body*) {
+	}, [](linked_list<body*>*) {
 		FAIL("Deallocator called wrongly");
 	}) == false);
 	REQUIRE(called == true);
@@ -207,9 +207,9 @@ TEST_CASE("remove_one_first") {
 		REQUIRE(item == list);
 		called = true;
 		return true;
-	}, [&deallocator_called, list](body *b) {
+	}, [&deallocator_called, list](linked_list<body*> *b) {
 		REQUIRE(deallocator_called == false);
-		REQUIRE(b == list->data);
+		REQUIRE(b == list);
 		deallocator_called = true;
 	}) == true);
 	/* the only item was removed */
@@ -245,8 +245,8 @@ TEST_CASE("remove_one_second") {
 	REQUIRE(remove_one(&list, [&values_seen](linked_list<body*> *item) {
 		values_seen.push_back(item->data->value);
 		return item->data->value > 30;
-	}, [&values_destructed](body *data) {
-		values_destructed.push_back(data->value);
+	}, [&values_destructed](linked_list<body*> *data) {
+		values_destructed.push_back(data->data->value);
 	}) == true);
 	REQUIRE(values_seen.size() == 2);
 	REQUIRE(values_seen[0] == 22);

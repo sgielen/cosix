@@ -4,10 +4,13 @@
 
 using namespace cloudos;
 
+#ifndef TESTING_ENABLED
 #define CPUID_REG_EDX 3
 #define CPUID_FEAT_EDX_SSE 1 << 25
+#endif
 
 void cloudos::sse_enable() {
+#ifndef TESTING_ENABLED
 	uint32_t features[4];
 	cpuid(1, features);
 	if(!(features[CPUID_REG_EDX] & CPUID_FEAT_EDX_SSE)) {
@@ -25,4 +28,5 @@ void cloudos::sse_enable() {
 		"or $0x400, %%ax\n"     // Enable SSE exceptions CR4.OSXMMEXCPT
 		"mov %%eax, %%cr4\n"
 		: : : "eax");
+#endif
 }

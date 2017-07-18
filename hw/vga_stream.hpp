@@ -1,7 +1,8 @@
 #pragma once
 
-#include "hw/vga.hpp"
-#include "oslibc/error.h"
+#include <hw/vga.hpp>
+#include <oslibc/error.h>
+#include <oslibc/utility.hpp>
 
 namespace cloudos {
 
@@ -33,6 +34,13 @@ vga_stream &operator<<(vga_stream &, uint8_t);
 vga_stream &operator<<(vga_stream &, uint16_t);
 vga_stream &operator<<(vga_stream &, uint32_t);
 vga_stream &operator<<(vga_stream &, uint64_t);
+
+template <typename enable_if<!is_same<size_t, uint64_t>::value, int>::type = 0>
+vga_stream &operator<<(vga_stream &s, size_t sz)
+{
+	s << static_cast<uint64_t>(sz);
+	return s;
+}
 
 vga_stream &operator<<(vga_stream &, int8_t);
 vga_stream &operator<<(vga_stream &, int16_t);

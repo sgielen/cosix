@@ -32,7 +32,7 @@ list(APPEND hw_tests
 	test/test_vga_stream.cpp
 	test/test_multiboot.cpp
 	test/test_segments.cpp)
-target_link_libraries(hw oslibc)
+target_link_libraries(hw oslibc memory)
 
 if(TESTING_ENABLED)
 	add_executable(hw_test ${hw_tests} test/test_main.cpp)

@@ -224,7 +224,7 @@ void pci_device::init_pci_device()
 		mem_size = ~(mem_size & 0xfffffff0) + 1;
 
 		mapping = get_map_virtual()->map_pages_only(phys_base, mem_size);
-		base_address = reinterpret_cast<uint32_t>(mapping.ptr);
+		base_address = reinterpret_cast<uintptr_t>(mapping.ptr);
 	}
 }
 

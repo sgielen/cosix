@@ -163,7 +163,7 @@ cloudabi_errno_t intel_i217_device::eth_init()
 	assert(sizeof(rx_desc_bufs) / sizeof(rx_desc_bufs[0]) == E1000_NUM_RX_DESC);
 	for(size_t i = 0; i < E1000_NUM_RX_DESC; ++i) {
 		rx_desc_bufs[i] = reinterpret_cast<uint8_t*>(rx_buffers_start + i * buffer_size);
-		rx_descs[i].addr = reinterpret_cast<uint64_t>(
+		rx_descs[i].addr = reinterpret_cast<uintptr_t>(
 			get_map_virtual()->to_physical_address(rx_desc_bufs[i]));
 		rx_descs[i].status = 0;
 	}
@@ -171,16 +171,17 @@ cloudabi_errno_t intel_i217_device::eth_init()
 	assert(sizeof(tx_desc_bufs) / sizeof(tx_desc_bufs[0]) == E1000_NUM_TX_DESC);
 	for(size_t i = 0; i < E1000_NUM_TX_DESC; ++i) {
 		tx_desc_bufs[i] = reinterpret_cast<uint8_t*>(tx_buffers_start + i * buffer_size);
-		tx_descs[i].addr = reinterpret_cast<uint64_t>(
+		tx_descs[i].addr = reinterpret_cast<uintptr_t>(
 			get_map_virtual()->to_physical_address(tx_desc_bufs[i]));
 		tx_descs[i].cmd = 0;
 		tx_descs[i].status = TSTA_DD;
 	}
 
 	asm volatile ("": : :"memory");
-	write32(REG_RXDESCLO, reinterpret_cast<uint32_t>(
-		get_map_virtual()->to_physical_address(rx_descs)));
-	write32(REG_RXDESCHI, 0 /* upper 32 bits of address */);
+	uint64_t addr = reinterpret_cast<uintptr_t>(
+		get_map_virtual()->to_physical_address(rx_descs));
+	write32(REG_RXDESCLO, addr & 0xffffff);
+	write32(REG_RXDESCHI, addr >> 32);
 	write32(REG_RXDESCLEN, E1000_NUM_RX_DESC * sizeof(e1000_rx_desc));
 	write32(REG_RXDESCHEAD, 0);
 	write32(REG_RXDESCTAIL, E1000_NUM_RX_DESC - 1);
@@ -189,9 +190,10 @@ cloudabi_errno_t intel_i217_device::eth_init()
 	write32(REG_RCTRL, RCTL_EN | RCTL_SBP | RCTL_UPE | RCTL_MPE | RCTL_LBM_NONE
 		| RTCL_RDMTS_HALF | RCTL_BAM | RCTL_SECRC | buffer_size_tag);
 
-	write32(REG_TXDESCLO, reinterpret_cast<uint32_t>(
-		get_map_virtual()->to_physical_address(tx_descs)));
-	write32(REG_TXDESCHI, 0 /* upper 32 bits of address */);
+	addr = reinterpret_cast<uintptr_t>(
+		get_map_virtual()->to_physical_address(tx_descs));
+	write32(REG_TXDESCLO, addr & 0xffffff);
+	write32(REG_TXDESCHI, addr >> 32);
 	write32(REG_TXDESCLEN, E1000_NUM_TX_DESC * sizeof(e1000_tx_desc));
 	write32(REG_TXDESCHEAD, 0);
 	write32(REG_TXDESCTAIL, E1000_NUM_TX_DESC - 1);

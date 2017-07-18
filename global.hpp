@@ -3,6 +3,10 @@
 #include "hw/vga_stream.hpp"
 #include "oslibc/assert.hpp"
 
+#ifdef TESTING_ENABLED
+#include <iostream>
+#endif
+
 namespace cloudos {
 
 struct global_state;
@@ -44,11 +48,16 @@ struct global_state {
 };
 
 __attribute__((noreturn)) inline void kernel_panic(const char *message) {
+#ifdef TESTING_ENABLED
+	std::cerr << "Kernel panic occurred during testing: " << message << "\n";
+	abort();
+#else
 	if(global_state_ && global_state_->vga) {
 		*(global_state_->vga) << "!!! KERNEL PANIC - HALTING !!!\n" << message;
 	}
 	asm volatile("cli; halted: hlt; jmp halted;");
 	while(1) {}
+#endif
 }
 
 #define GET_GLOBAL(NAME, TYPE, MEMBER) \

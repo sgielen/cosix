@@ -2,16 +2,23 @@
 #include <rng/rng.hpp>
 #include <time/clock_store.hpp>
 
+#ifdef TESTING_ENABLED
+#include <stdlib.h>
+#endif
+
 using namespace cloudos;
 
+#ifndef TESTING_ENABLED
 static void stack_up(uintptr_t * &ebp, void * &eip) {
 	if(ebp) {
 		eip = reinterpret_cast<void*>(*(ebp + 1));
 		ebp = reinterpret_cast<uintptr_t*>(*ebp);
 	}
 }
+#endif
 
 tracked_allocation::tracked_allocation() {
+#ifndef TESTING_ENABLED
 	{
 		uintptr_t *ebp = nullptr;
 		asm volatile("mov %%ebp, %0" : "=r"(ebp));
@@ -29,15 +36,25 @@ tracked_allocation::tracked_allocation() {
 	r->get(alloc_suffix, sizeof(alloc_suffix));
 
 	time = cloudos::track_detail::get_time();
+#else
+	for(size_t i = 0; i < NUM_ELEMENTS(caller); ++i) {
+		caller[i] = 0;
+	}
+	arc4random_buf(alloc_prefix, sizeof(alloc_prefix));
+	arc4random_buf(alloc_suffix, sizeof(alloc_suffix));
+	time = 0;
+#endif
 }
 
 cloudabi_timestamp_t cloudos::track_detail::get_time() {
+#ifndef TESTING_ENABLED
 	if(global_state_ && global_state_->clock_store) {
 		auto c = get_clock_store()->get_clock(CLOUDABI_CLOCK_MONOTONIC);
 		if(c) {
 			return c->get_time(0);
 		}
 	}
+#endif
 	return 0;
 }
 

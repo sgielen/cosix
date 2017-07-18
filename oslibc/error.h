@@ -2,6 +2,10 @@
 
 #include <cloudabi_types.h>
 
+#ifdef TESTING_ENABLED
+#include <errno.h>
+#else
+
 #define E2BIG CLOUDABI_E2BIG
 #define EACCES CLOUDABI_EACCES
 #define EADDRINUSE CLOUDABI_EADDRINUSE
@@ -78,3 +82,5 @@
 #define ETXTBSY CLOUDABI_ETXTBSY
 #define EXDEV CLOUDABI_EXDEV
 #define ENOTCAPABLE CLOUDABI_ENOTCAPABLE
+
+#endif

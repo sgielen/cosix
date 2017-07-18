@@ -1,10 +1,11 @@
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
-#include "memory/segregator.hpp"
-#include "memory/bucketizer.hpp"
-#include "memory/map_virtual.hpp"
-#include "memory/allocation_tracker.hpp"
+#include <memory/segregator.hpp>
+#include <memory/bucketizer.hpp>
+#include <memory/map_virtual.hpp>
+#include <memory/allocation_tracker.hpp>
+#include <memory/mallocator.hpp>
 
 namespace cloudos {
 
@@ -22,6 +23,10 @@ public:
 	{ return get_allocator()->deallocate(b); }
 
 private:
+#ifdef TESTING_ENABLED
+	Mallocator mallocator;
+	AllocationTracker<decltype(mallocator)> allocation_tracker;
+#else
 	Bucketizer<map_virtual, 512, 4096, 256> large_bucketizer;
 	Bucketizer<map_virtual, 0, 512, 32> small_bucketizer;
 
@@ -35,6 +40,7 @@ private:
 
 #ifndef NDEBUG
 	AllocationTracker<decltype(small_segregator)> allocation_tracker;
+#endif
 #endif
 
 public:

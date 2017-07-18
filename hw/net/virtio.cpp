@@ -298,13 +298,13 @@ cloudabi_errno_t virtio_net_device::check_new_packets() {
 		uint32_t nethdr_phys = buffer->addr & 0xffffffff;
 
 		address_mapping_list *found = find(mappings, [nethdr_phys](address_mapping_list *item) {
-			return reinterpret_cast<uint32_t>(item->data->physical) == nethdr_phys;
+			return reinterpret_cast<uintptr_t>(item->data->physical) == nethdr_phys;
 		});
 		if(found == nullptr) {
 			kernel_panic("Did not find logical address for physical kernel address of nethdr");
 		}
 		uint8_t *nethdr = reinterpret_cast<uint8_t*>(found->data->logical);
-		assert(reinterpret_cast<uint32_t>(nethdr) >= _kernel_virtual_base);
+		assert(reinterpret_cast<uintptr_t>(nethdr) >= _kernel_virtual_base);
 		auto res = ethernet_frame_received(nethdr + 12, length - 12);
 
 		last_readq_used_idx++;

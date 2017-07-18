@@ -2,6 +2,7 @@
 #include <global.hpp>
 #include <hw/cpu_io.hpp>
 #include <oslibc/assert.hpp>
+#include <oslibc/ctype.h>
 #include <oslibc/string.h>
 
 using namespace cloudos;
@@ -339,7 +340,7 @@ void x86_kbd::set_ledstate() {
 
 void x86_kbd::handle_irq(uint8_t irq) {
 	assert(irq == 1);
-	UNUSED(irq);
+	(void)irq;
 
 	if(ignore_irq) {
 		// don't get_scancode(); any scancodes we might miss will be

@@ -95,7 +95,7 @@ void segment_table::set_fsbase(void *virtual_address)
 {
 	gdt_entry &entry = entries[fs_idx];
 
-	uint32_t base = reinterpret_cast<uint32_t>(virtual_address);
+	auto base = reinterpret_cast<uintptr_t>(virtual_address);
 	entry.base_lower = base & 0xffff;
 	entry.base_middle = (base >> 16) & 0xff;
 	entry.base_upper = (base >> 24) & 0xff;

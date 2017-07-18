@@ -9,6 +9,7 @@ add_library(oslibc
 	utility.hpp
 	bitmap.cpp bitmap.hpp
 	crc32.c checksum.h
+	ctype.cpp ctype.h
 )
 target_link_libraries(oslibc hw)
 list(APPEND oslibc_tests test/test_string.cpp test/test_numeric.cpp test/test_list.cpp)

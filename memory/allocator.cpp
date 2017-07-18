@@ -4,12 +4,17 @@
 using namespace cloudos;
 
 allocator::allocator()
+#ifdef TESTING_ENABLED
+: mallocator()
+, allocation_tracker(&mallocator)
+#else
 : large_bucketizer(get_map_virtual())
 , small_bucketizer(get_map_virtual())
 , large_segregator(&large_bucketizer, get_map_virtual())
 , small_segregator(&small_bucketizer, &large_segregator)
 #ifndef NDEBUG
 , allocation_tracker(&small_segregator)
+#endif
 #endif
 {
 }

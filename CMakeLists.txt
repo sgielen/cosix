@@ -18,6 +18,7 @@ include_directories(${CMAKE_SOURCE_DIR})
 if(TESTING_ENABLED)
 	add_definitions(-DTESTING_ENABLED)
 	set(TESTING_CATCH_INCLUDE ${CMAKE_SOURCE_DIR}/catch/include)
+	include_directories(${CMAKE_SOURCE_DIR}/cloudabi/headers)
 	enable_testing()
 endif()
 

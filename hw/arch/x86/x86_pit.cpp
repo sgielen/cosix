@@ -19,7 +19,7 @@ cloudabi_errno_t x86_pit::init() {
 
 void x86_pit::handle_irq(uint8_t irq) {
 	assert(irq == 0);
-	UNUSED(irq);
+	(void)irq;
 
 	get_root_device()->timer_event_recursive();
 	clock.tick();

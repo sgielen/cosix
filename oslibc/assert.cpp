@@ -2,6 +2,8 @@
 #include <hw/vga_stream.hpp>
 #include <global.hpp>
 
+#ifndef TESTING_ENABLED
+
 static void stack_up(uintptr_t * &ebp, void * &eip) {
 	if(ebp) {
 		eip = reinterpret_cast<void*>(*(ebp + 1));
@@ -27,3 +29,5 @@ __attribute__((noreturn)) void assertion_failed(const char *assertion, const cha
 
 	cloudos::kernel_panic("Assertion failed, halting.");
 }
+
+#endif

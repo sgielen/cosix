@@ -114,7 +114,7 @@ Blk page_allocator::allocate_contiguous_phys(size_t num) {
 
 void page_allocator::deallocate_phys(Blk b) {
 	assert(!empty(used_pages));
-	assert((reinterpret_cast<uint32_t>(b.ptr) & 0xfff) == 0);
+	assert((reinterpret_cast<uintptr_t>(b.ptr) & 0xfff) == 0);
 	assert((b.size % PAGE_SIZE) == 0);
 
 	int num = b.size / PAGE_SIZE;
@@ -122,7 +122,7 @@ void page_allocator::deallocate_phys(Blk b) {
 		page_list *item = used_pages;
 		used_pages = item->next;
 
-		item->data = reinterpret_cast<uint32_t>(b.ptr) + i * PAGE_SIZE;
+		item->data = reinterpret_cast<uintptr_t>(b.ptr) + i * PAGE_SIZE;
 		item->next = nullptr;
 		free_pages_tail->next = item;
 		free_pages_tail = item;

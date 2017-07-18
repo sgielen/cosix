@@ -56,9 +56,9 @@ struct AllocationTracker {
 		assert(memcmp(prefix, info->alloc_prefix, sizeof(info->alloc_prefix)) == 0);
 		assert(memcmp(suffix, info->alloc_suffix, sizeof(info->alloc_suffix)) == 0);
 		assert(size == info->user_size);
-		UNUSED(prefix);
-		UNUSED(suffix);
-		UNUSED(size);
+		(void)prefix;
+		(void)suffix;
+		(void)size;
 	}
 
 	Blk allocate_aligned(size_t s, size_t alignment) {
@@ -70,7 +70,7 @@ struct AllocationTracker {
 		}
 
 		// find the first ptr in this allocation that is aligned
-		uint32_t actual_ptr = reinterpret_cast<uint32_t>(res.ptr) + sizeof(tracked_allocation) + sizeof(tracked_allocation::alloc_prefix);
+		auto actual_ptr = reinterpret_cast<uintptr_t>(res.ptr) + sizeof(tracked_allocation) + sizeof(tracked_allocation::alloc_prefix);
 		auto misalignment = actual_ptr % alignment;
 		if(misalignment != 0) {
 			actual_ptr += alignment - misalignment;

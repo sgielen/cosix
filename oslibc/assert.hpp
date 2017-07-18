@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef TESTING_ENABLED
+#include <cassert>
+#else
+
 #ifdef NDEBUG
 #define assert(x)
 #else
@@ -10,3 +14,5 @@
 
 extern "C"
 __attribute__((noreturn)) void assertion_failed(const char *assertion, const char *filename, int lineno, const char *function);
+
+#endif

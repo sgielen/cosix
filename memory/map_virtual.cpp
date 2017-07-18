@@ -40,8 +40,8 @@ map_virtual::map_virtual(page_allocator *p)
 		if(b.ptr == nullptr) {
 			kernel_panic("Failed to allocate kernel paging table");
 		}
-		assert((reinterpret_cast<uint32_t>(b.ptr) & 0xfff) == 0);
-		kernel_page_tables[i] = reinterpret_cast<uint32_t*>(reinterpret_cast<uint32_t>(b.ptr) + _kernel_virtual_base);
+		assert((reinterpret_cast<uintptr_t>(b.ptr) & 0xfff) == 0);
+		kernel_page_tables[i] = reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(b.ptr) + _kernel_virtual_base);
 	}
 
 	// Allocate memory for the stage2 page directory
@@ -58,7 +58,7 @@ map_virtual::map_virtual(page_allocator *p)
 
 		for(size_t entry = 0; entry < PAGING_TABLE_SIZE; ++entry) {
 			uint32_t address = i * PAGING_TABLE_SIZE * PAGE_SIZE + entry * PAGE_SIZE;
-			if(address < reinterpret_cast<uint32_t>(first_free_page.ptr)) {
+			if(address < reinterpret_cast<uintptr_t>(first_free_page.ptr)) {
 				vmem_bitmap.set(i * PAGING_TABLE_SIZE + entry);
 				page_table[entry] = address | 0x03; // read-write kernel-only present entry
 			} else {
@@ -204,7 +204,7 @@ void map_virtual::deallocate(Blk b) {
 	size_t num_pages = num_pages_for_size(b.size);
 
 	for(size_t page = 0; page < num_pages; ++page) {
-		void *ptr = reinterpret_cast<void*>(reinterpret_cast<uint32_t>(b.ptr) + PAGE_SIZE * page);
+		void *ptr = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(b.ptr) + PAGE_SIZE * page);
 		auto *phys_addr = to_physical_address(ptr);
 		assert(phys_addr != nullptr);
 
@@ -254,7 +254,7 @@ void map_virtual::unmap_pages_only(Blk alloc) {
 }
 
 void map_virtual::unmap_page_only(void *virtual_address) {
-	uint32_t addr = reinterpret_cast<uint32_t>(virtual_address);
+	auto addr = reinterpret_cast<uintptr_t>(virtual_address);
 	uint16_t page_table_num = (addr >> 22) - KERNEL_PAGE_OFFSET;
 	uint16_t page_entry_num = addr >> 12 & 0x03ff;
 
@@ -280,6 +280,7 @@ void map_virtual::fill_kernel_pages(uint32_t *page_directory) {
 }
 
 void map_virtual::load_paging_stage2() {
+#ifndef TESTING_ENABLED
 	auto *page_directory = reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(paging_directory_stage2.ptr) + _kernel_virtual_base);
 	memset(page_directory, 0, PAGE_DIRECTORY_SIZE * sizeof(uint32_t));
 	fill_kernel_pages(page_directory);
@@ -287,7 +288,8 @@ void map_virtual::load_paging_stage2() {
 	assert(to_physical_address(reinterpret_cast<void*>(0xc00b8000)) == reinterpret_cast<void*>(0xb8000));
 	assert(to_physical_address(reinterpret_cast<void*>(0xc01031c6)) == reinterpret_cast<void*>(0x1031c6));
 
-	asm volatile("mov %0, %%cr3" : : "a"(reinterpret_cast<uint32_t>(paging_directory_stage2.ptr)) : "memory");
+	asm volatile("mov %0, %%cr3" : : "a"(reinterpret_cast<uintptr_t>(paging_directory_stage2.ptr)) : "memory");
+#endif
 }
 
 void map_virtual::free_paging_stage2() {
