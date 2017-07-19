@@ -47,6 +47,11 @@ void vga_buffer::get_cursor(size_t *row, size_t *column) {
 	if(column) *column = cursor_column;
 }
 
+void vga_buffer::get_size(size_t *w, size_t *h) {
+	if(w) *w = width;
+	if(h) *h = height;
+}
+
 void vga_buffer::putc_at(char c, vga_color fg, vga_color bg, size_t x, size_t y) {
 	putc_at(c, make_color(fg, bg), x, y);
 }
@@ -82,6 +87,9 @@ void vga_buffer::putc(char c) {
 		if(++cursor_row == height) {
 			scroll();
 		}
+		// TODO: \n should not fallthrough here; to move the cursor
+		// back to column 0 \r\n should be written (this is done by the
+		// terminal layer normally)
 		[[clang::fallthrough]];
 	case '\r':
 		cursor_column = 0;

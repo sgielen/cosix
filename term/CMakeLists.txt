@@ -1,5 +1,8 @@
 add_library(term
 	escape_codes.cpp escape_codes.hpp
+	console_terminal.cpp console_terminal.hpp
+	terminal.cpp terminal.hpp
+	terminal_store.cpp terminal_store.hpp
 )
 target_link_libraries(term oslibc)
 

@@ -18,6 +18,10 @@ struct vga_stream {
 		serial = s;
 	}
 
+	inline vga_buffer &get_vga_buffer() {
+		return vga_;
+	}
+
 private:
 	x86_serial *serial = nullptr;
 	vga_buffer &vga_;

@@ -32,6 +32,7 @@ struct vga_buffer {
 	void get_color(vga_color *fg, vga_color *bg);
 	void set_cursor(size_t row, size_t column);
 	void get_cursor(size_t *row, size_t *column);
+	void get_size(size_t *width, size_t *height);
 
 	void putc_at(char c, vga_color fg, vga_color bg, size_t x, size_t y);
 	void putc_at(char c, uint8_t color, size_t x, size_t y);

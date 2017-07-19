@@ -4,6 +4,8 @@
 #include <oslibc/assert.hpp>
 #include <oslibc/ctype.h>
 #include <oslibc/string.h>
+#include <term/terminal.hpp>
+#include <term/terminal_store.hpp>
 
 using namespace cloudos;
 
@@ -370,7 +372,6 @@ void x86_kbd::pump_character() {
 
 	// Send to console terminal
 	if(seqsize > 0) {
-		sequence[seqsize] = 0;
-		get_vga_stream() << sequence;
+		get_terminal_store()->get_terminal("console")->write_keystrokes(sequence, seqsize);
 	}
 }
