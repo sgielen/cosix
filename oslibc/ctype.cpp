@@ -14,3 +14,8 @@ int
 isalpha(int c) {
 	return (isupper(c) || islower(c)) ? 1 : 0;
 }
+
+int
+isdigit(int c) {
+	return (c >= 0x30 && c <= 0x39) ? 1 : 0;
+}

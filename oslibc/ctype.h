@@ -8,3 +8,6 @@ islower(int c);
 
 int
 isalpha(int c);
+
+int
+isdigit(int c);

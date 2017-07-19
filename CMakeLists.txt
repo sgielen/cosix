@@ -53,6 +53,7 @@ add_subdirectory(concur)
 add_subdirectory(rng)
 add_subdirectory(time)
 add_subdirectory(proc)
+add_subdirectory(term)
 
 if(BAREMETAL_ENABLED)
 	include_directories(${CMAKE_BINARY_DIR})
