@@ -180,7 +180,7 @@ cloudabi_errno_t intel_i217_device::eth_init()
 	asm volatile ("": : :"memory");
 	uint64_t addr = reinterpret_cast<uintptr_t>(
 		get_map_virtual()->to_physical_address(rx_descs));
-	write32(REG_RXDESCLO, addr & 0xffffff);
+	write32(REG_RXDESCLO, addr & 0xffffffff);
 	write32(REG_RXDESCHI, addr >> 32);
 	write32(REG_RXDESCLEN, E1000_NUM_RX_DESC * sizeof(e1000_rx_desc));
 	write32(REG_RXDESCHEAD, 0);
@@ -192,7 +192,7 @@ cloudabi_errno_t intel_i217_device::eth_init()
 
 	addr = reinterpret_cast<uintptr_t>(
 		get_map_virtual()->to_physical_address(tx_descs));
-	write32(REG_TXDESCLO, addr & 0xffffff);
+	write32(REG_TXDESCLO, addr & 0xffffffff);
 	write32(REG_TXDESCHI, addr >> 32);
 	write32(REG_TXDESCLEN, E1000_NUM_TX_DESC * sizeof(e1000_tx_desc));
 	write32(REG_TXDESCHEAD, 0);
