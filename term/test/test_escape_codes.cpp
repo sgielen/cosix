@@ -220,6 +220,17 @@ TEST_CASE( "term/escape_codes/next_token" ) {
 		expected_remaining_input = "\xe2\x82";
 	}
 
+	SECTION("Invalid characters") {
+		// Invalid UTF-8 characters should be passed one-by-one, so
+		// that even invalid input always progresses through the
+		// tokenizer
+		input = "\x85\x85\x85 foobar";
+		expected_tokens.push_back("\x85");
+		expected_tokens.push_back("\x85");
+		expected_tokens.push_back("\x85");
+		expected_tokens.push_back(" foobar");
+	}
+
 	SECTION("Short escape sequences") {
 		input = "Left key is \x1bOD or \x1b[D.\nF3 is \x1bOR.";
 		expected_tokens.push_back("Left key is ");

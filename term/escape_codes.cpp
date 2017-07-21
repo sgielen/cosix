@@ -38,7 +38,7 @@ bool cloudos::next_token(char *input, size_t *inputsz, char *next_token, size_t 
 		} else if(unicode_length == -1) {
 			// It is an invalid sequence; we'll allow this data through as separate bytes because
 			// what can you do
-			if(bytes_consumed > 0) {
+			if(bytes_consumed == 0) {
 				// Let at least one character through so we can recover after this
 				bytes_consumed = 1;
 			}
