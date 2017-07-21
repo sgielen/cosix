@@ -155,10 +155,10 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	rng.seed(98764);
 	global.random = &rng;
 
-	console_terminal term;
 	terminal_store term_store;
 	global.terminal_store = &term_store;
-	term_store.register_terminal(&term);
+	auto console = make_shared<console_terminal>();
+	term_store.register_terminal(console);
 
 	global.init = allocate<process_fd>("init");
 	stream << "Init process created\n";

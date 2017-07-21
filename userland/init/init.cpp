@@ -26,6 +26,7 @@ int initrd;
 int reversefd;
 int pseudofd;
 int ifstore;
+int termstore;
 
 long uptime() {
 	int uptimefd = openat(procfs, "kernel/uptime", O_RDONLY);
@@ -290,6 +291,7 @@ void program_main(const argdata_t *) {
 	bootfs = 3;
 	initrd = 4;
 	ifstore = 5;
+	termstore = 6;
 
 	dprintf(stdout, "Init starting up.\n");
 
@@ -308,8 +310,64 @@ void program_main(const argdata_t *) {
 	}
 
 	start_networked_binary("httpd", false);
+	start_networked_binary("pythonshell", false);
+
+	// readdir on the terminal store
+	dprintf(stdout, "Readdir on the terminal store!\n");
+	DIR *dir = fdopendir(termstore);
+	if(dir == nullptr) {
+		dprintf(stdout, "Failed to fdopendir: %s\n", strerror(errno));
+		exit(1);
+	}
+	struct dirent *ent;
+	while((ent = readdir(dir)) != nullptr) {
+		dprintf(stdout, "- \"%s\" (inode %llu, type %d)\n", ent->d_name, ent->d_ino, ent->d_type);
+	}
+	dprintf(stdout, "Done reading\n");
+
+	int consolefd = openat(termstore, "console", O_RDWR | O_APPEND);
+	if(consolefd < 0) {
+		dprintf(stdout, "Failed to open consolefd: %s\n", strerror(errno));
+		exit(1);
+	}
+	if(write(consolefd, "Console opened! \\o/\n", 20) < 0) {
+		dprintf(stdout, "Write failed: %s\n", strerror(errno));
+		exit(1);
+	}
 	while(1) {
-		start_networked_binary("pythonshell", true);
+		if(write(consolefd, "> ", 2) < 0) {
+			dprintf(stdout, "Write failed: %s\n", strerror(errno));
+		}
+		// read a line
+		char buf[128];
+		size_t line = 0;
+		while(1) {
+			ssize_t rd = read(consolefd, buf + line, sizeof(buf) - line);
+			if(rd < 0) {
+				dprintf(stdout, "Read failed: %s\n", strerror(errno));
+				break;
+			}
+			if(rd == 0) {
+				dprintf(stdout, "Blocking read returned 0?\n");
+				break;
+			}
+			size_t linestart = line;
+			line += rd;
+			for(ssize_t i = 0; i < rd; ++i) {
+				if(buf[linestart + i] == '\n') {
+					goto newline;
+				}
+			}
+			if(line == sizeof(buf)) {
+				buf[line-1] = '\n';
+				break;
+			}
+		}
+newline:	if(write(consolefd, "Got line: ", 10) < 0
+		|| write(consolefd, buf, line) < 0)
+		{
+			dprintf(stdout, "Write of received line failed: %s\n", strerror(errno));
+		}
 	}
 
 	pthread_mutex_t mtx;

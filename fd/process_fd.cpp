@@ -14,6 +14,7 @@
 #include <hw/vga_stream.hpp>
 #include <memory/map_virtual.hpp>
 #include <oslibc/string.h>
+#include <term/terminal_store.hpp>
 #include <userland/vdso_support.h>
 
 using namespace cloudos;
@@ -134,6 +135,17 @@ void process_fd::add_initial_fds() {
 
 	auto ifstore = make_shared<ifstoresock>("ifstoresock");
 	add_fd(ifstore, -1, -1);
+
+	add_fd(get_terminal_store()->get_root_fd(),
+		// base rights
+		CLOUDABI_RIGHT_FILE_OPEN |
+		CLOUDABI_RIGHT_FILE_READDIR |
+		CLOUDABI_RIGHT_FILE_STAT_FGET |
+		CLOUDABI_RIGHT_FILE_STAT_GET,
+		// inherited rights
+		CLOUDABI_RIGHT_FD_READ |
+		CLOUDABI_RIGHT_FD_WRITE
+	);
 }
 
 cloudabi_fd_t process_fd::add_fd(shared_ptr<fd_t> fd, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting) {

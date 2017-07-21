@@ -3,6 +3,7 @@ add_library(term
 	console_terminal.cpp console_terminal.hpp
 	terminal.cpp terminal.hpp
 	terminal_store.cpp terminal_store.hpp
+	terminal_fd.cpp terminal_fd.hpp
 )
 target_link_libraries(term oslibc)
 
