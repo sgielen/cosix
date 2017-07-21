@@ -84,6 +84,8 @@ cloudabi_errno_t terminal_impl::write_keystrokes(const char *data, size_t length
 	memcpy(keystroke_buffer + keystroke_buffer_used, data, copy_to_buffer);
 	keystroke_buffer_used += copy_to_buffer;
 
+	read_cv.broadcast();
+
 	if(echoing) {
 		// TODO: what if, somewhere in the middle, there is a keystroke that
 		// should turn off echoing? It's unlikely, since it will usually be
@@ -92,16 +94,22 @@ cloudabi_errno_t terminal_impl::write_keystrokes(const char *data, size_t length
 		// may cause automatic keystrokes which need to be *after* this input.
 		return write_output(data, length);
 	}
+
 	return 0;
 }
 
 cloudabi_errno_t terminal_impl::read_keystrokes(char *data, size_t *length) {
+	while(keystroke_buffer_used == 0) {
+		read_cv.wait();
+	}
+
 	if(*length > keystroke_buffer_used) {
 		*length = keystroke_buffer_used;
 	}
 
 	memcpy(data, keystroke_buffer, *length);
 	memmove(keystroke_buffer, keystroke_buffer + *length, sizeof(keystroke_buffer) - *length);
+	keystroke_buffer_used -= *length;
 	return 0;
 }
 

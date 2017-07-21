@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <cloudabi_types.h>
+#include <concur/cv.hpp>
 
 namespace cloudos {
 
@@ -25,6 +26,7 @@ struct terminal {
 	virtual const char *get_name() = 0;
 	virtual cloudabi_errno_t write_output(const char *data, size_t length) = 0;
 	virtual cloudabi_errno_t write_keystrokes(const char *data, size_t length) = 0;
+	// Blocks until there is at least one keystroke
 	virtual cloudabi_errno_t read_keystrokes(char *data, size_t *length) = 0;
 };
 
@@ -56,7 +58,7 @@ private:
 	char name[32];
 
 	char output_buffer[64];
-	size_t output_buffer_used;
+	size_t output_buffer_used = 0;
 
 	char keystroke_buffer[128];
 	size_t keystroke_buffer_used = 0;
@@ -66,6 +68,8 @@ private:
 
 	bool echoing = true;
 	bool lf_to_crlf = true;
+
+	cv_t read_cv;
 };
 
 }
