@@ -26,8 +26,8 @@ cloudabi_errno_t console_terminal::write_output_token(const char *token, size_t 
 
 	if(!is_escape_sequence(token, tokensz)) {
 		// control characters are handled by the vga_buffer itself
-		for(; tokensz > 0; --tokensz) {
-			vga.putc(token[0]);
+		for(size_t i = 0; i < tokensz; ++i) {
+			vga.putc(token[i]);
 		}
 	} else if(is_escape_code_get_terminal_size(token, tokensz)) {
 		size_t w, h;
