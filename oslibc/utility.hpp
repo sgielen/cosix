@@ -41,4 +41,7 @@ struct enable_if {};
 template<class T>
 struct enable_if<true, T> { typedef T type; };
 
+template<typename T>
+struct is_unsigned : integral_constant<bool, T(0) < T(-1)> {};
+
 }

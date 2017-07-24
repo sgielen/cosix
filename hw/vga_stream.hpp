@@ -34,22 +34,17 @@ void dec(vga_stream&);
 void hex(vga_stream&);
 vga_stream &operator<<(vga_stream &, modifier);
 
-vga_stream &operator<<(vga_stream &, uint8_t);
-vga_stream &operator<<(vga_stream &, uint16_t);
-vga_stream &operator<<(vga_stream &, uint32_t);
-vga_stream &operator<<(vga_stream &, uint64_t);
+vga_stream &operator<<(vga_stream &, signed char);
+vga_stream &operator<<(vga_stream &, short int);
+vga_stream &operator<<(vga_stream &, int);
+vga_stream &operator<<(vga_stream &, long int);
+vga_stream &operator<<(vga_stream &, long long int);
 
-template <typename enable_if<!is_same<size_t, uint64_t>::value, int>::type = 0>
-vga_stream &operator<<(vga_stream &s, size_t sz)
-{
-	s << static_cast<uint64_t>(sz);
-	return s;
-}
-
-vga_stream &operator<<(vga_stream &, int8_t);
-vga_stream &operator<<(vga_stream &, int16_t);
-vga_stream &operator<<(vga_stream &, int32_t);
-vga_stream &operator<<(vga_stream &, int64_t);
+vga_stream &operator<<(vga_stream &, unsigned char);
+vga_stream &operator<<(vga_stream &, unsigned short int);
+vga_stream &operator<<(vga_stream &, unsigned int);
+vga_stream &operator<<(vga_stream &, unsigned long int);
+vga_stream &operator<<(vga_stream &, unsigned long long int);
 
 vga_stream &operator<<(vga_stream &, bool);
 vga_stream &operator<<(vga_stream &, char);

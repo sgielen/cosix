@@ -1,6 +1,7 @@
-#include "hw/vga_stream.hpp"
-#include "oslibc/numeric.h"
 #include <hw/arch/x86/x86_serial.hpp>
+#include <hw/vga_stream.hpp>
+#include <oslibc/numeric.h>
+#include <oslibc/utility.hpp>
 
 using cloudos::vga_stream;
 
@@ -35,32 +36,37 @@ vga_stream &cloudos::operator<<(vga_stream &s, cloudos::modifier m)
 	return s;
 }
 
-//! Define an operator<< for given type. Producer must be a method with prototype
-//!   char * PRODUCER(TYPE, char*, size_t, int)
-//! MAXLENGTH should be the length of the largest character array required for
-//! fulfilling this PRODUCER call correctly in base 2.
-#define stream_using_producer(TYPE, PRODUCER, MAXLENGTH) \
+template <typename T>
+static void write_integral_to_stream(vga_stream &s, T value) {
+	char buf[64];
+	char *ptr = nullptr;
+	if(cloudos::is_unsigned<T>::value) {
+		ptr = ui64toa_s(value, &buf[0], sizeof(buf), s.base);
+	} else {
+		ptr = i64toa_s(value, &buf[0], sizeof(buf), s.base);
+	}
+	s.write(ptr);
+}
+
+#define TO_STREAM(TYPE) \
 vga_stream &cloudos::operator<<(vga_stream &s, TYPE value) { \
-	char buf[MAXLENGTH]; \
-	if(value < 0) { \
-		s.write("-"); \
-		value = -value; \
-	} \
-	s.write(PRODUCER(value, &buf[0], sizeof(buf), s.base)); \
+	write_integral_to_stream(s, value); \
 	return s; \
 }
 
-stream_using_producer(uint8_t, uitoa_s, 8);
-stream_using_producer(uint16_t, uitoa_s, 16);
-stream_using_producer(uint32_t, uitoa_s, 32);
-stream_using_producer(uint64_t, ui64toa_s, 64);
+TO_STREAM(signed char);
+TO_STREAM(short int);
+TO_STREAM(int);
+TO_STREAM(long int);
+TO_STREAM(long long int);
 
-stream_using_producer(int8_t, itoa_s, 8);
-stream_using_producer(int16_t, itoa_s, 16);
-stream_using_producer(int32_t, itoa_s, 32);
-stream_using_producer(int64_t, i64toa_s, 64);
+TO_STREAM(unsigned char);
+TO_STREAM(unsigned short int);
+TO_STREAM(unsigned int);
+TO_STREAM(unsigned long int);
+TO_STREAM(unsigned long long int);
 
-#undef stream_using_producer
+#undef TO_STREAM
 
 vga_stream &cloudos::operator<<(vga_stream &s, bool val) {
 	s.write(val ? "true" : "false");
