@@ -142,26 +142,16 @@ void program_main(const argdata_t *ad) {
 	}
 
 	// Socket C: bound to 0.0.0.0:1234, not connected, will accept() to respond to requests
-	// Send packet from B, D=accept(C), sock_stat_get(), recvfrom() from C, check addresses
+	// Send packet from B, D=accept(C), sock_stat_get(), recv() from C
 	// Respond from new socket D, read from B
 	int sockC = networkd_get_socket(SOCK_DGRAM, "", "0.0.0.0:1234");
 	if(write(sockB, "Baz quux", 8) != 8) {
 		dprintf(stdout, "Failed to write data over UDP (%s)\n", strerror(errno));
 		exit(1);
 	}
-	sockaddr_in address;
-	sockaddr *address_ptr = reinterpret_cast<sockaddr*>(&address);
-	size_t address_size = sizeof(address);
-	int sockD = accept(sockC, address_ptr, &address_size);
+	int sockD = accept(sockC, nullptr, nullptr);
 	if(sockD < 0) {
 		dprintf(stdout, "Failed to accept() UDP socket (%s)\n", strerror(errno));
-		exit(1);
-	}
-	char ip[16];
-	inet_ntop(address.sin_family, &address.sin_addr, ip, sizeof(ip));
-	if(address.sin_family != AF_INET || strcmp(ip, "127.0.0.1") != 0 /* peer port is random */)
-	{
-		dprintf(stdout, "Address on socket is incorrect\n");
 		exit(1);
 	}
 	cloudabi_sockstat_t sockstat;
@@ -170,27 +160,11 @@ void program_main(const argdata_t *ad) {
 		dprintf(stdout, "Failed to sys_sock_stat_get (%s)\n", strerror(res));
 		exit(1);
 	}
-	inet_ntop(sockstat.ss_peername.sa_family, &sockstat.ss_peername.sa_inet.addr[0], ip, sizeof(ip));
-	if(sockstat.ss_peername.sa_family != AF_INET || strcmp(ip, "127.0.0.1") != 0 || sockstat.ss_peername.sa_inet.port != 5678)
-	{
-		dprintf(stdout, "Address on socket is incorrect (%s:%d)\n", ip, sockstat.ss_peername.sa_inet.port);
-		exit(1);
-	}
-	address_size = sizeof(address);
-	if(recvfrom(sockD, buf, sizeof(buf), 0, address_ptr, &address_size) != 8
+	if(recv(sockD, buf, sizeof(buf), 0) != 8
 	|| memcmp(buf, "Baz quux", 8) != 0) {
-		dprintf(stdout, "Failed to recvfrom (%s)\n", strerror(res));
+		dprintf(stdout, "Failed to recv (%s)\n", strerror(res));
 		exit(1);
 	}
-	// TODO: address on recvform() is not supported
-	/*
-	inet_ntop(address.sin_family, &address.sin_addr, ip, sizeof(ip));
-	if(address.sin_family != AF_INET || strcmp(ip, "127.0.0.1") != 0 || address.sin_port != 5678)
-	{
-		dprintf(stdout, "Address on socket is incorrect (%s:%d)\n", ip, address.sin_port);
-		exit(1);
-	}
-	*/
 	if(write(sockD, "Noot noot", 9) != 9) {
 		dprintf(stdout, "Failed to write data over UDP (%s)\n", strerror(errno));
 		exit(1);
@@ -207,16 +181,9 @@ void program_main(const argdata_t *ad) {
 		dprintf(stdout, "Failed to write data over UDP (%s)\n", strerror(errno));
 		exit(1);
 	}
-	address_size = sizeof(address);
-	int sockF = accept(sockC, address_ptr, &address_size);
+	int sockF = accept(sockC, nullptr, nullptr);
 	if(sockF < 0) {
 		dprintf(stdout, "Failed to accept() UDP socket (%s)\n", strerror(errno));
-		exit(1);
-	}
-	inet_ntop(address.sin_family, &address.sin_addr, ip, sizeof(ip));
-	if(address.sin_family != AF_INET || strcmp(ip, "127.0.0.1") != 0 /* peer port is random */)
-	{
-		dprintf(stdout, "Address on socket is incorrect (%s:%d)\n", ip, address.sin_port);
 		exit(1);
 	}
 	res = cloudabi_sys_sock_stat_get(sockF, &sockstat, 0);
@@ -224,35 +191,11 @@ void program_main(const argdata_t *ad) {
 		dprintf(stdout, "Failed to sys_sock_stat_get (%s)\n", strerror(res));
 		exit(1);
 	}
-	inet_ntop(sockstat.ss_peername.sa_family, &sockstat.ss_peername.sa_inet.addr, ip, sizeof(ip));
-	if(sockstat.ss_peername.sa_family != AF_INET || strcmp(ip, "127.0.0.1") != 0)
-	{
-		dprintf(stdout, "Peer address on socket is incorrect (%s:%d)\n", ip, sockstat.ss_peername.sa_inet.port);
-		exit(1);
-	}
-	inet_ntop(sockstat.ss_sockname.sa_family, &sockstat.ss_sockname.sa_inet.addr, ip, sizeof(ip));
-	if(sockstat.ss_sockname.sa_family != AF_INET || strcmp(ip, "127.0.0.1") != 0
-	|| sockstat.ss_sockname.sa_inet.port != 1234)
-	{
-		dprintf(stdout, "Local address on socket is incorrect (%s:%d)\n", ip, sockstat.ss_sockname.sa_inet.port);
-		exit(1);
-	}
-	address_size = sizeof(address);
-	if(recvfrom(sockF, buf, sizeof(buf), 0, address_ptr, &address_size) != 12
+	if(recv(sockF, buf, sizeof(buf), 0) != 12
 	|| memcmp(buf, "Mumblebumble", 12) != 0) {
-		dprintf(stdout, "Failed to recvfrom (%s)\n", strerror(res));
+		dprintf(stdout, "Failed to recv (%s)\n", strerror(res));
 		exit(1);
 	}
-	// TODO: address on recvform() is not supported
-	/*
-	inet_ntop(address.sin_family, &address.sin_addr, ip, sizeof(ip));
-	if(address.sin_family != AF_INET || strcmp(ip, "127.0.0.1") != 0
-	|| address.sin_port == 5678 / * can't be 5678, that's already taken * /)
-	{
-		dprintf(stdout, "Address on socket is incorrect\n");
-		exit(1);
-	}
-	*/
 	if(write(sockF, "Dumbleflumble", 13) != 13) {
 		dprintf(stdout, "Failed to write data over UDP (%s)\n", strerror(errno));
 		exit(1);

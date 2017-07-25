@@ -442,12 +442,6 @@ void tcp_socket::sock_stat_get(cosix::pseudofd_t p, cloudabi_sockstat_t *ss)
 		return;
 	}
 
-	ss->ss_sockname.sa_family = AF_INET;
-	memcpy(ss->ss_sockname.sa_inet.addr, get_local_ip().c_str(), sizeof(ss->ss_sockname.sa_inet.addr));
-	ss->ss_sockname.sa_inet.port = get_local_port();
-	ss->ss_peername.sa_family = AF_INET;
-	memcpy(ss->ss_peername.sa_inet.addr, get_peer_ip().c_str(), sizeof(ss->ss_peername.sa_inet.addr));
-	ss->ss_peername.sa_inet.port = get_peer_port();
 	ss->ss_error = 0; /* TODO */
 	ss->ss_state = get_peer_ip().empty() ? CLOUDABI_SOCKSTATE_ACCEPTCONN : 0;
 }

@@ -132,19 +132,9 @@ void program_main(const argdata_t *ad) {
 		int listensock = networkd_get_socket(SOCK_STREAM, "", "0.0.0.0:1234");
 
 		// Accept a socket, read data, rot13 it, send it back
-		sockaddr_in address;
-		sockaddr *address_ptr = reinterpret_cast<sockaddr*>(&address);
-		size_t address_size = sizeof(address);
-		int accepted = accept(listensock, address_ptr, &address_size);
+		int accepted = accept(listensock, nullptr, nullptr);
 		if(accepted < 0) {
 			dprintf(stdout, "Failed to accept() TCP socket (%s)\n", strerror(errno));
-			exit(1);
-		}
-		char ip[16];
-		inet_ntop(address.sin_family, &address.sin_addr, ip, sizeof(ip));
-		if(address.sin_family != AF_INET || strcmp(ip, "127.0.0.1") != 0 /* port is random */)
-		{
-			dprintf(stdout, "Address on socket is incorrect (%s:%hu)\n", ip, address.sin_port);
 			exit(1);
 		}
 		char buf[16];
