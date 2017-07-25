@@ -40,8 +40,12 @@ tracked_allocation::tracked_allocation() {
 	for(size_t i = 0; i < NUM_ELEMENTS(caller); ++i) {
 		caller[i] = 0;
 	}
-	arc4random_buf(alloc_prefix, sizeof(alloc_prefix));
-	arc4random_buf(alloc_suffix, sizeof(alloc_suffix));
+	for(size_t i = 0; i < sizeof(alloc_prefix); ++i) {
+		alloc_prefix[i] = rand() % 256;
+	}
+	for(size_t i = 0; i < sizeof(alloc_suffix); ++i) {
+		alloc_suffix[i] = rand() % 256;
+	}
 	time = 0;
 #endif
 }
