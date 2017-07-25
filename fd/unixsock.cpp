@@ -132,14 +132,10 @@ size_t unixsock::write(const char *str, size_t count)
 	return send_out[0].so_datalen;
 }
 
-void unixsock::sock_bind(cloudabi_sa_family_t family, shared_ptr<fd_t> fd, void *a, size_t address_len)
+void unixsock::sock_bind(shared_ptr<fd_t> fd, void *a, size_t address_len)
 {
 	if(status != sockstatus_t::IDLE) {
 		error = EINVAL;
-		return;
-	}
-	if(family != CLOUDABI_AF_UNIX) {
-		error = EAFNOSUPPORT;
 		return;
 	}
 	assert(fd);
@@ -164,7 +160,7 @@ void unixsock::sock_bind(cloudabi_sa_family_t family, shared_ptr<fd_t> fd, void 
 	error = 0;
 }
 
-void unixsock::sock_connect(cloudabi_sa_family_t family, shared_ptr<fd_t> fd, void *address, size_t address_len)
+void unixsock::sock_connect(shared_ptr<fd_t> fd, void *address, size_t address_len)
 {
 	if(status == sockstatus_t::CONNECTING || status == sockstatus_t::CONNECTED || status == sockstatus_t::SHUTDOWN) {
 		error = EISCONN;
@@ -177,11 +173,6 @@ void unixsock::sock_connect(cloudabi_sa_family_t family, shared_ptr<fd_t> fd, vo
 		return;
 	}
 	assert(status == sockstatus_t::IDLE);
-
-	if(family != CLOUDABI_AF_UNIX) {
-		error = EAFNOSUPPORT;
-		return;
-	}
 
 	cloudabi_filestat_t stat;
 	status = sockstatus_t::CONNECTING;
@@ -294,14 +285,10 @@ void unixsock::queue_connect(shared_ptr<unixsock> connectingsock)
 	listenqueue_cv.notify();
 }
 
-shared_ptr<fd_t> unixsock::sock_accept(cloudabi_sa_family_t family, void *, size_t *address_len)
+shared_ptr<fd_t> unixsock::sock_accept(void *, size_t *address_len)
 {
 	if(status != sockstatus_t::LISTENING) {
 		error = EINVAL;
-		return nullptr;
-	}
-	if(family != CLOUDABI_AF_UNIX) {
-		error = EAFNOSUPPORT;
 		return nullptr;
 	}
 
@@ -342,12 +329,6 @@ void unixsock::sock_shutdown(cloudabi_sdflags_t how)
 void unixsock::sock_stat_get(cloudabi_sockstat_t* buf, cloudabi_ssflags_t flags)
 {
 	assert(buf);
-	buf->ss_sockname.sa_family = CLOUDABI_AF_UNIX;
-	if(status == sockstatus_t::CONNECTING || status == sockstatus_t::CONNECTED) {
-		buf->ss_peername.sa_family = CLOUDABI_AF_UNIX;
-	} else {
-		buf->ss_peername.sa_family = CLOUDABI_AF_UNSPEC;
-	}
 	buf->ss_error = error;
 	buf->ss_state = status == sockstatus_t::LISTENING ? CLOUDABI_SOCKSTATE_ACCEPTCONN : 0;
 
@@ -358,8 +339,6 @@ void unixsock::sock_stat_get(cloudabi_sockstat_t* buf, cloudabi_ssflags_t flags)
 
 void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 {
-	out->ro_sockname.sa_family = CLOUDABI_AF_UNIX;
-	out->ro_peername.sa_family = CLOUDABI_AF_UNIX;
 	out->ro_flags = 0;
 	out->ro_datalen = 0;
 	out->ro_fdslen = 0;

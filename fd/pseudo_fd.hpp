@@ -35,10 +35,10 @@ struct pseudo_fd : public seekable_fd_t {
 	void file_stat_fget(cloudabi_filestat_t *buf) override;
 
 	/* For sockets */
-	void sock_bind(cloudabi_sa_family_t family, shared_ptr<fd_t> fd, void * address, size_t address_len) override;
-	void sock_connect(cloudabi_sa_family_t family, shared_ptr<fd_t> fd, void * address, size_t address_len) override;
+	void sock_bind(shared_ptr<fd_t> fd, void * address, size_t address_len) override;
+	void sock_connect(shared_ptr<fd_t> fd, void * address, size_t address_len) override;
 	void sock_listen(cloudabi_backlog_t backlog) override;
-	shared_ptr<fd_t> sock_accept(cloudabi_sa_family_t family, void * address, size_t* address_len) override;
+	shared_ptr<fd_t> sock_accept(void * address, size_t* address_len) override;
 	void sock_shutdown(cloudabi_sdflags_t how) override;
 	void sock_stat_get(cloudabi_sockstat_t* buf, cloudabi_ssflags_t flags) override;
 	void sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t* out) override;

@@ -32,7 +32,6 @@ void ifstoresock::sock_shutdown(cloudabi_sdflags_t how)
 void ifstoresock::sock_stat_get(cloudabi_sockstat_t* buf, cloudabi_ssflags_t flags)
 {
 	assert(buf);
-	buf->ss_peername.sa_family = CLOUDABI_AF_UNIX;
 	buf->ss_error = error;
 	buf->ss_state = 0;
 
@@ -89,8 +88,6 @@ void ifstoresock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *o
 	// TODO: what if fds are truncated? move to next message?
 	out->ro_datalen = datalen;
 	out->ro_fdslen = fds_set;
-	out->ro_sockname.sa_family = CLOUDABI_AF_UNIX;
-	out->ro_peername.sa_family = CLOUDABI_AF_UNIX;
 	out->ro_flags = 0;
 
 	deallocate(message_buf);

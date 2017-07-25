@@ -16,7 +16,7 @@ cloudabi_errno_t cloudos::syscall_sock_accept(syscall_context &c)
 		return res;
 	}
 
-	auto conn = mapping->fd->sock_accept(CLOUDABI_AF_UNIX, nullptr, nullptr);
+	auto conn = mapping->fd->sock_accept(nullptr, nullptr);
 	if(mapping->fd->error != 0) {
 		return mapping->fd->error;
 	}
@@ -52,7 +52,7 @@ cloudabi_errno_t cloudos::syscall_sock_bind(syscall_context &c)
 	}
 	auto dirfd = mapping->fd;
 
-	sock->sock_bind(CLOUDABI_AF_UNIX, dirfd, dir, dirlen);
+	sock->sock_bind(dirfd, dir, dirlen);
 	return sock->error;
 }
 
@@ -76,7 +76,7 @@ cloudabi_errno_t cloudos::syscall_sock_connect(syscall_context &c)
 	}
 	auto dirfd = mapping->fd;
 
-	sock->sock_connect(CLOUDABI_AF_UNIX, dirfd, dir, dirlen);
+	sock->sock_connect(dirfd, dir, dirlen);
 	return sock->error;
 }
 

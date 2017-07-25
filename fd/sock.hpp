@@ -18,12 +18,12 @@ struct sock_t : public fd_t {
 	size_t read(void *dest, size_t count) override;
 	size_t write(const char *str, size_t count) override;
 
-	void sock_bind(cloudabi_sa_family_t /*family*/, shared_ptr<fd_t> /*fd*/, void * /*address*/, size_t /*address_len*/) override
+	void sock_bind(shared_ptr<fd_t> /*fd*/, void * /*address*/, size_t /*address_len*/) override
 	{
 		error = EINVAL;
 	}
 
-	void sock_connect(cloudabi_sa_family_t /*family*/, shared_ptr<fd_t> /*fd*/, void * /*address*/, size_t /*address_len*/) override
+	void sock_connect(shared_ptr<fd_t> /*fd*/, void * /*address*/, size_t /*address_len*/) override
 	{
 		if(status == sockstatus_t::CONNECTING || status == sockstatus_t::CONNECTED || status == sockstatus_t::SHUTDOWN) {
 			error = EISCONN;
@@ -41,7 +41,7 @@ struct sock_t : public fd_t {
 		}
 	}
 
-	shared_ptr<fd_t> sock_accept(cloudabi_sa_family_t /*family*/, void * /*address*/, size_t* /*address_len*/) override
+	shared_ptr<fd_t> sock_accept(void * /*address*/, size_t* /*address_len*/) override
 	{
 		error = EINVAL;
 		return nullptr;
@@ -59,7 +59,6 @@ struct sock_t : public fd_t {
 	void sock_stat_get(cloudabi_sockstat_t *buf, cloudabi_ssflags_t flags) override
 	{
 		assert(buf);
-		buf->ss_peername.sa_family = CLOUDABI_AF_UNSPEC;
 		buf->ss_error = error;
 		buf->ss_state = status == sockstatus_t::LISTENING ? CLOUDABI_SOCKSTATE_ACCEPTCONN : 0;
 

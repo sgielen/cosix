@@ -157,12 +157,12 @@ struct fd_t {
 	}
 
 	/* For sockets */
-	virtual void sock_bind(cloudabi_sa_family_t /*family*/, shared_ptr<fd_t> /*fd*/, void * /*address*/, size_t /*address_len*/)
+	virtual void sock_bind(shared_ptr<fd_t> /*fd*/, void * /*address*/, size_t /*address_len*/)
 	{
 		error = ENOTSOCK;
 	}
 
-	virtual void sock_connect(cloudabi_sa_family_t /*family*/, shared_ptr<fd_t> /*fd*/, void * /*address*/, size_t /*address_len*/)
+	virtual void sock_connect(shared_ptr<fd_t> /*fd*/, void * /*address*/, size_t /*address_len*/)
 	{
 		error = ENOTSOCK;
 	}
@@ -172,7 +172,7 @@ struct fd_t {
 		error = ENOTSOCK;
 	}
 
-	virtual shared_ptr<fd_t> sock_accept(cloudabi_sa_family_t /*family*/, void * /*address*/, size_t* /*address_len*/)
+	virtual shared_ptr<fd_t> sock_accept(void * /*address*/, size_t* /*address_len*/)
 	{
 		error = ENOTSOCK;
 		return nullptr;

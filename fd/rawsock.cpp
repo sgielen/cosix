@@ -42,7 +42,6 @@ void rawsock::sock_shutdown(cloudabi_sdflags_t how)
 void rawsock::sock_stat_get(cloudabi_sockstat_t* buf, cloudabi_ssflags_t flags)
 {
 	assert(buf);
-	buf->ss_peername.sa_family = CLOUDABI_AF_INET;
 	buf->ss_error = error;
 	buf->ss_state = 0;
 
@@ -88,8 +87,6 @@ void rawsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 
 	out->ro_datalen = datalen;
 	out->ro_fdslen = 0;
-	out->ro_sockname.sa_family = CLOUDABI_AF_INET;
-	out->ro_peername.sa_family = CLOUDABI_AF_INET;
 	out->ro_flags = 0;
 
 	deallocate(message_buf);

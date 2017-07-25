@@ -419,13 +419,13 @@ cloudabi_errno_t pseudo_fd::lookup_device_id() {
 	}
 }
 
-void pseudo_fd::sock_bind(cloudabi_sa_family_t, shared_ptr<fd_t>, void*, size_t)
+void pseudo_fd::sock_bind(shared_ptr<fd_t>, void*, size_t)
 {
 	// Can only bind to UNIX addresses, this is not supported at the moment
 	error = EINVAL;
 }
 
-void pseudo_fd::sock_connect(cloudabi_sa_family_t, shared_ptr<fd_t>, void*, size_t)
+void pseudo_fd::sock_connect(shared_ptr<fd_t>, void*, size_t)
 {
 	// Can only bind to UNIX addresses, this is not supported at the moment
 	error = EINVAL;
@@ -448,13 +448,13 @@ void pseudo_fd::sock_listen(cloudabi_backlog_t backlog)
 	error = 0;
 }
 
-shared_ptr<fd_t> pseudo_fd::sock_accept(cloudabi_sa_family_t family, void *address, size_t *address_len)
+shared_ptr<fd_t> pseudo_fd::sock_accept(void *address, size_t *address_len)
 {
 	reverse_request_t request;
 	request.pseudofd = pseudo_id;
 	request.op = reverse_request_t::operation::sock_accept;
 	request.inode = 0;
-	request.flags = family;
+	request.flags = 0;
 	request.recv_length = address_len == nullptr ? 0 : *address_len;
 
 	reverse_response_t response;

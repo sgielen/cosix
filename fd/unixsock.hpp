@@ -45,10 +45,10 @@ struct unixsock : public sock_t, public enable_shared_from_this<unixsock> {
 	size_t read(void *dest, size_t count) override;
 	size_t write(const char *str, size_t count) override;
 
-	void sock_bind(cloudabi_sa_family_t family, shared_ptr<fd_t> fd, void *address, size_t address_len) override;
-	void sock_connect(cloudabi_sa_family_t family, shared_ptr<fd_t> fd, void *address, size_t address_len) override;
+	void sock_bind(shared_ptr<fd_t> fd, void *address, size_t address_len) override;
+	void sock_connect(shared_ptr<fd_t> fd, void *address, size_t address_len) override;
 	void sock_listen(cloudabi_backlog_t backlog) override;
-	shared_ptr<fd_t> sock_accept(cloudabi_sa_family_t family, void *address, size_t *address_len) override;
+	shared_ptr<fd_t> sock_accept(void *address, size_t *address_len) override;
 	void sock_shutdown(cloudabi_sdflags_t how) override;
 	void sock_stat_get(cloudabi_sockstat_t* buf, cloudabi_ssflags_t flags) override;
 	void sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out) override;
