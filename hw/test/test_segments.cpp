@@ -1,5 +1,4 @@
 #include <hw/segments.hpp>
-#include <stdlib.h>
 #include <catch.hpp>
 
 TEST_CASE( "hw/segments" ) {

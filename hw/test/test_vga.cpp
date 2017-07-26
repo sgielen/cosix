@@ -1,5 +1,5 @@
 #include <hw/vga.hpp>
-#include <stdlib.h>
+#include <oslibc/string.h>
 #include <catch.hpp>
 
 #include <iostream>

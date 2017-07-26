@@ -1,6 +1,6 @@
 #include <hw/vga.hpp>
 #include <hw/vga_stream.hpp>
-#include <stdlib.h>
+#include <oslibc/string.h>
 #include <catch.hpp>
 
 #include <iostream>

@@ -61,6 +61,13 @@ TEST_CASE("iterate") {
 	REQUIRE(values_seen[0] == 23);
 	REQUIRE(values_seen[1] == 12);
 	REQUIRE(values_seen[2] == 45);
+
+	delete list->next->next->data;
+	delete list->next->next;
+	delete list->next->data;
+	delete list->next;
+	delete list->data;
+	delete list;
 }
 
 TEST_CASE("find") {

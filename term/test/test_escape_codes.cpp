@@ -1,5 +1,5 @@
 #include <catch.hpp>
-#include <stdlib.h>
+#include <oslibc/string.h>
 #include <term/escape_codes.hpp>
 
 TEST_CASE( "term/escape_codes/is_control_character" ) {
@@ -259,8 +259,9 @@ TEST_CASE( "term/escape_codes/next_token" ) {
 
 	CAPTURE(input);
 
-	char *c_input = strdup(input.c_str());
 	size_t inputsz = input.size();
+	char c_input[inputsz];
+	memcpy(c_input, input.c_str(), inputsz);
 
 	char token[32];
 
@@ -279,8 +280,6 @@ TEST_CASE( "term/escape_codes/next_token" ) {
 	for(size_t i = 0; i < tokens.size(); ++i) {
 		CHECK(tokens[i] == expected_tokens[i]);
 	}
-
-	free(c_input);
 }
 
 TEST_CASE( "term/escape_codes/next_token/bad" ) {
@@ -294,8 +293,9 @@ TEST_CASE( "term/escape_codes/next_token/bad" ) {
 		input = "\x1bOD";
 	}
 
-	char *c_input = strdup(input.c_str());
 	size_t inputsz = input.size();
+	char c_input[inputsz];
+	memcpy(c_input, input.c_str(), inputsz);
 
 	char token;
 	size_t tokensz = 1;

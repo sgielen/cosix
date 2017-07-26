@@ -1,5 +1,5 @@
 #include <hw/multiboot.hpp>
-#include <stdlib.h>
+#include <oslibc/string.h>
 #include <catch.hpp>
 
 TEST_CASE( "hw/multiboot" ) {

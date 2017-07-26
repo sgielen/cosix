@@ -1,5 +1,4 @@
 #include <oslibc/string.h>
-#include <string.h>
 #include <catch.hpp>
 
 TEST_CASE("strlen") {
