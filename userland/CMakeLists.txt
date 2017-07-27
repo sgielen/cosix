@@ -39,7 +39,7 @@ macro(add_external_binary BINARY_NAME)
 
 	if(BAREMETAL_ENABLED)
 		add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/external_binary_${BINARY_NAME}.o"
-			COMMAND ${OBJCOPY_COMMAND} --input-target binary
+			COMMAND ${CMAKE_OBJCOPY} --input-target binary
 				--output-target elf32-i386
 				--binary-architecture i386
 				"${BINARY_NAME}" "${CMAKE_CURRENT_BINARY_DIR}/external_binary_${BINARY_NAME}.o"
@@ -72,7 +72,7 @@ if(CLOUDABI_UNITTEST_BINARY AND BAREMETAL_ENABLED)
 		COMMAND ${CMAKE_COMMAND} -E copy "${CLOUDABI_UNITTEST_BINARY}" "unittests"
 		DEPENDS "${CLOUDABI_UNITTEST_BINARY}")
 	add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/external_binary_unittests.o"
-		COMMAND ${OBJCOPY_COMMAND} --input-target binary
+		COMMAND ${CMAKE_OBJCOPY} --input-target binary
 			--output-target elf32-i386
 			--binary-architecture i386
 			"unittests" "${CMAKE_CURRENT_BINARY_DIR}/external_binary_unittests.o"

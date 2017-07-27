@@ -17,4 +17,7 @@ if(CLOUDABI_PYTHON_BINARY AND CLOUDABI_PYTHON_LIBRARIES AND BAREMETAL_ENABLED)
 	add_custom_target(initrd
 		DEPENDS "${CMAKE_BINARY_DIR}/initrd"
 	)
+elseif(BAREMETAL_ENABLED)
+	message(WARNING "CloudABI Python not set in baremetal build; you will not be able to 'make boot'."
+		" Use -DCLOUDABI_PYTHON_BINARY and -DCLOUDABI_PYTHON_LIBRARIES to fix this")
 endif()
