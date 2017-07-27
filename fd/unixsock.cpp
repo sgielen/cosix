@@ -3,6 +3,11 @@
 
 using namespace cloudos;
 
+static bool unixsock_is_readable(void *r, thread_condition*) {
+	auto *unixsock = reinterpret_cast<struct unixsock*>(r);
+	return unixsock->has_messages();
+}
+
 unixsock_listen_store::~unixsock_listen_store() {
 	remove_all(&socks, [&](unixsock_list *) {
 		return true;
@@ -38,6 +43,7 @@ shared_ptr<unixsock> unixsock_listen_store::get_unixsock(cloudabi_device_t dev, 
 unixsock::unixsock(cloudabi_filetype_t sockettype, const char *n)
 : sock_t(sockettype, n)
 {
+	recv_signaler.set_already_satisfied_function(unixsock_is_readable, this);
 }
 
 unixsock::~unixsock()
@@ -77,6 +83,17 @@ unixsock::~unixsock()
 	}
 
 	assert(recv_messages == nullptr);
+}
+
+bool unixsock::has_messages() const
+{
+	return recv_messages != nullptr;
+}
+
+cloudabi_errno_t unixsock::get_read_signaler(thread_condition_signaler **s)
+{
+	*s = &recv_signaler;
+	return 0;
 }
 
 void unixsock::socketpair(shared_ptr<unixsock> other)
@@ -551,6 +568,7 @@ void unixsock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *out)
 	auto *message_item = allocate<unixsock_message_list>(message);
 	append(&other->recv_messages, message_item);
 	other->num_recv_bytes += total_message_size;
+	other->recv_signaler.condition_broadcast();
 	other->recv_messages_cv.notify();
 	out->so_datalen = total_message_size;
 	error = 0;

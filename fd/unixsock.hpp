@@ -1,7 +1,8 @@
 #pragma once
+#include <concur/condition.hpp>
+#include <fd/process_fd.hpp>
 #include <fd/sock.hpp>
 #include <oslibc/list.hpp>
-#include <fd/process_fd.hpp>
 
 namespace cloudos {
 
@@ -39,6 +40,9 @@ private:
 struct unixsock : public sock_t, public enable_shared_from_this<unixsock> {
 	unixsock(cloudabi_filetype_t sockettype, const char *n);
 	~unixsock() override;
+
+	bool has_messages() const;
+	cloudabi_errno_t get_read_signaler(thread_condition_signaler **s) override;
 
 	void socketpair(shared_ptr<unixsock> other);
 
@@ -80,6 +84,7 @@ private:
 	size_t num_recv_bytes = 0;
 	unixsock_message_list *recv_messages = nullptr;
 	cv_t recv_messages_cv;
+	thread_condition_signaler recv_signaler;
 };
 
 }
