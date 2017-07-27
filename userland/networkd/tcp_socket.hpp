@@ -82,7 +82,7 @@ private:
 	uint32_t send_seq_num = 0; // the next sequence nr to send
 	std::deque<tcp_outgoing_segment> outgoing_segments; // in order of sequence number
 	size_t send_window_size = 0;
-	cloudabi_timestamp_t next_ack_deadline = 0;
+	cloudabi_timestamp_t next_ack_deadline = UINT64_MAX;
 
 	std::mutex child_sockets_mtx;
 	std::map<cosix::pseudofd_t, std::shared_ptr<tcp_socket>> child_sockets;

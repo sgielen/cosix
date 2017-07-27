@@ -138,6 +138,7 @@ cloudabi_errno_t cosix::handle_request(int reversefd, reverse_handler *h, clouda
 				.type = CLOUDABI_EVENTTYPE_CLOCK,
 				.clock.clock_id = CLOUDABI_CLOCK_MONOTONIC,
 				.clock.flags = CLOUDABI_SUBSCRIPTION_CLOCK_ABSTIME,
+				.clock.timeout = poll_timeout,
 			},
 			{
 				.type = CLOUDABI_EVENTTYPE_FD_READ,

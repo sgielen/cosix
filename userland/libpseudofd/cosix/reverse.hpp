@@ -14,6 +14,8 @@ using reverse_proto::reverse_response_t;
 struct reverse_handler;
 
 char *handle_request(reverse_request_t *request, char *buf, reverse_response_t *response, reverse_handler *h);
+// poll_timeout is an absolute cloudabi_timestamp_t; if it is reached, this
+// function will return 0 without having handled any requests.
 cloudabi_errno_t handle_request(int reversefd, reverse_handler *h, cloudabi_timestamp_t poll_timeout = 0);
 void handle_requests(int reversefd, reverse_handler *h);
 

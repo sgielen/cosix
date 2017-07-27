@@ -35,11 +35,22 @@ void ip_socket::start()
 
 void ip_socket::run()
 {
+	const cloudabi_timestamp_t max_offset_from_now = 60ull * 1000 * 1000 * 1000; /* 60 seconds */
+	(void)max_offset_from_now;
 	try {
 		while(true) {
-			auto res = handle_request(reversefd, this, next_timeout());
+			auto next_ts = next_timeout();
+			assert(next_ts > 0);
+#ifndef NDEBUG
+			auto now = monotime();
+			assert(now < max_offset_from_now || (now - max_offset_from_now) < next_ts);
+#endif
+			auto res = handle_request(reversefd, this, next_ts);
 			if(res != 0) {
 				throw std::runtime_error("handle_request failed: " + std::string(strerror(res)));
+			}
+			if(monotime() > next_timeout()) {
+				timed_out();
 			}
 		}
 	} catch(std::exception &e) {
