@@ -40,6 +40,7 @@ void program_main(const argdata_t *ad) {
 
 	// reconfigure stderr
 	FILE *out = fdopen(stdout, "w");
+	setvbuf(out, nullptr, _IONBF, BUFSIZ);
 	fswap(stderr, out);
 
 	cosix::reverse_handler *fs = new tmpfs(device);

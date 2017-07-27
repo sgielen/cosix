@@ -76,6 +76,7 @@ void program_main(const argdata_t *ad) {
 	}
 
 	FILE *out = fdopen(stdout, "w");
+	setvbuf(out, nullptr, _IONBF, BUFSIZ);
 	fswap(stderr, out);
 
 	dprintf(stdout, "[UNIXSOCK] Creating SOCK_DGRAM socketpair\n");
@@ -194,15 +195,12 @@ void program_main(const argdata_t *ad) {
 		int fd1 = socket(AF_UNIX, SOCK_STREAM, 0);
 		if(fd1 < 0) {
 			perror("socket");
-			fflush(stderr);
 		}
 		if(bindat(fd1, tmpdir, "sock") < 0) {
 			perror("bindat");
-			fflush(stderr);
 		}
 		if(listen(fd1, SOMAXCONN) < 0) {
 			perror("listen");
-			fflush(stderr);
 		}
 		int pfd;
 		int ret = pdfork(&pfd);
@@ -233,7 +231,6 @@ void program_main(const argdata_t *ad) {
 		int fd3 = accept(fd1, NULL, NULL);
 		if(fd3 < 0) {
 			perror("accept");
-			fflush(stderr);
 		}
 		siginfo_t si;
 		pdwait(pfd, &si, 0);
@@ -244,7 +241,6 @@ void program_main(const argdata_t *ad) {
 		char buf[13];
 		if(read(fd3, buf, sizeof(buf)) != 12) {
 			perror("read");
-			fflush(stderr);
 		}
 		buf[12] = 0;
 		if(strcmp(buf, "Hello world!") != 0) {

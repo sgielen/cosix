@@ -35,6 +35,7 @@ void program_main(const argdata_t *ad) {
 	}
 
 	FILE *out = fdopen(stdout, "w");
+	setvbuf(out, nullptr, _IONBF, BUFSIZ);
 	fswap(stderr, out);
 
 	dprintf(stdout, "tmptest spawned, tmpdir is %d\n", tmpdir);

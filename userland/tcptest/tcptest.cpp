@@ -116,6 +116,7 @@ void program_main(const argdata_t *ad) {
 	}
 
 	FILE *out = fdopen(stdout, "w");
+	setvbuf(out, nullptr, _IONBF, BUFSIZ);
 	fswap(stderr, out);
 
 	// First test, to see IP stack sending behaviour in PCAP dumps:

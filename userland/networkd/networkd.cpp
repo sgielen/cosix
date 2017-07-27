@@ -307,6 +307,7 @@ void program_main(const argdata_t *ad) {
 
 	dprintf(stdout, "Networkd started!\n");
 	FILE *out = fdopen(stdout, "w");
+	setvbuf(out, nullptr, _IONBF, BUFSIZ);
 	fswap(stderr, out);
 
 	int listenfd = socket(AF_UNIX, SOCK_STREAM, 0);

@@ -116,6 +116,7 @@ void program_main(const argdata_t *ad) {
 	}
 
 	FILE *out = fdopen(stdout, "w");
+	setvbuf(out, nullptr, _IONBF, BUFSIZ);
 	fswap(stderr, out);
 
 	// Listen socket: bound to 0.0.0.0:80, listening

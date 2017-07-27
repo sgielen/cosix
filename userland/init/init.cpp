@@ -297,6 +297,7 @@ void program_main(const argdata_t *) {
 
 	// reconfigure stderr
 	FILE *out = fdopen(stdout, "w");
+	setvbuf(out, nullptr, _IONBF, BUFSIZ);
 	fswap(stderr, out);
 
 	open_pseudo();

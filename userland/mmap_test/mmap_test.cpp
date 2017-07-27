@@ -29,6 +29,7 @@ void program_main(const argdata_t *ad) {
 	}
 
 	FILE *out = fdopen(stdout, "w");
+	setvbuf(out, nullptr, _IONBF, BUFSIZ);
 	fswap(stderr, out);
 
 	errno = 0;

@@ -790,6 +790,7 @@ void program_main(const argdata_t *ad) {
 
 	dprintf(stdout, "dhclient started for interface %s\n", interface.c_str());
 	FILE *out = fdopen(stdout, "w");
+	setvbuf(out, nullptr, _IONBF, BUFSIZ);
 	fswap(stderr, out);
 
 	std::string hwtype = get_hwtype();
