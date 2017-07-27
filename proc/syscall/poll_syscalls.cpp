@@ -152,16 +152,17 @@ cloudabi_errno_t cloudos::syscall_poll(syscall_context &c)
 		}
 		case CLOUDABI_EVENTTYPE_FD_READ: {
 			auto fdnum = i.fd_readwrite.fd;
-			fd_mapping_t *proc_mapping;
+			fd_mapping_t *proc_mapping = nullptr;
 			auto res = c.process()->get_fd(&proc_mapping, fdnum, CLOUDABI_RIGHT_POLL_FD_READWRITE | CLOUDABI_RIGHT_FD_READ);
 			if(res != 0) {
 				userdata->error = res;
 				signaler = &null_signaler;
-			}
-			res = proc_mapping->fd->get_read_signaler(&signaler);
-			if(res != 0) {
-				userdata->error = res;
-				signaler = &null_signaler;
+			} else {
+				res = proc_mapping->fd->get_read_signaler(&signaler);
+				if(res != 0) {
+					userdata->error = res;
+					signaler = &null_signaler;
+				}
 			}
 			break;
 		}
