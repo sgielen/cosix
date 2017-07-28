@@ -1,0 +1,57 @@
+sudo: required
+language: cpp
+distro: trusty
+addons:
+  apt:
+    sources:
+    - llvm-toolchain-trusty-4.0
+    - sourceline: 'deb https://nuxi.nl/distfiles/cloudabi-ports/debian/ cloudabi cloudabi'
+      key_url: 'https://pgp.mit.edu/pks/lookup?op=get&search=0x0DA51B8531344B15'
+    - sourceline: 'deb http://ppa.launchpad.net/adrozdoff/cmake/ubuntu trusty main'
+      key_url: 'http://keyserver.ubuntu.com:11371/pks/lookup?op=get&search=0x4B7E4B9010BBFE68'
+    packages:
+    - clang-4.0
+    - lld-4.0
+    - qemu-system-x86
+    - apt-transport-https
+    - cmake-data
+    - cmake
+    - i686-unknown-cloudabi-cxx-runtime
+    - i686-unknown-cloudabi-python
+notifications:
+  irc:
+    channels:
+    - irc.efnet.org#cosix
+    template:
+    - "%{repository}/%{branch} (%{commit} - %{author}): %{build_url}: %{message}"
+matrix:
+  include:
+    # Unit tests running on host
+    - env:
+      - CMAKE_ARGS="-DCMAKE_C_COMPILER=clang-4.0 -DCMAKE_CXX_COMPILER=clang++-4.0"
+      - RUN_TESTS="host"
+    # Userland tests running in qemu
+    - env:
+      - CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=../cmake/Toolchain-i686-elf.cmake"
+      - RUN_TESTS="userland"
+before_install:
+  # install i686-unknown-cloudabi links
+  - sudo ln -s ld /usr/bin/i686-elf-ld
+  - sudo ln -s llvm-ar /usr/bin/i686-unknown-cloudabi-ar
+  - sudo ln -s llvm-nm /usr/bin/i686-unknown-cloudabi-nm
+  - sudo ln -s llvm-objdump /usr/bin/i686-unknown-cloudabi-objdump
+  - sudo ln -s llvm-ranlib /usr/bin/i686-unknown-cloudabi-ranlib
+  - sudo ln -s llvm-size /usr/bin/i686-unknown-cloudabi-size
+  - sudo ln -s ../lib/llvm-4.0/bin/lld /usr/bin/i686-unknown-cloudabi-ld
+  - sudo ln -s ../lib/llvm-4.0/bin/clang /usr/bin/i686-unknown-cloudabi-cc
+  - sudo ln -s ../lib/llvm-4.0/bin/clang /usr/bin/i686-unknown-cloudabi-c++
+  - sudo ln -s ../../i686-unknown-cloudabi /usr/lib/llvm-4.0/i686-unknown-cloudabi
+before_script:
+  - mkdir build && cd build
+script:
+  - cmake ${CMAKE_ARGS} -DCMAKE_BUILD_TYPE=Debug ..
+  - make VERBOSE=1
+  - if [ "${RUN_TESTS}" == "host" ]; then env CTEST_OUTPUT_ON_FAILURE=1 make test; fi
+  # TODO: run kernel in qemu with serial output, see if it still boots
+  # TODO: run userland test suite
+  # TODO: run cloudabi unit test suite

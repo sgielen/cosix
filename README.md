@@ -17,6 +17,8 @@ tested on real hardware yet.
 
 [0] http://nuxi.nl/cloudabi
 
+[![Build Status](https://travis-ci.org/sgielen/cosix.svg?branch=master)](https://travis-ci.org/sgielen/cosix)
+
 How to build it
 ===============
 
