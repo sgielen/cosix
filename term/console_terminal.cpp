@@ -35,12 +35,14 @@ cloudabi_errno_t console_terminal::write_output_token(const char *token, size_t 
 
 		char digits[32];
 
-		scancode[scancode_len++] = 8;
+		scancode[scancode_len++] = '8';
 		scancode[scancode_len++] = ';';
 		scancode_len = strlcat(scancode, uitoa_s(h, digits, sizeof(digits), 10), sizeof(scancode));
 		scancode[scancode_len++] = ';';
 		scancode_len = strlcat(scancode, uitoa_s(w, digits, sizeof(digits), 10), sizeof(scancode));
 		scancode[scancode_len++] = 't';
+
+		assert(scancode_len <= sizeof(scancode));
 		queue_keystrokes_during_write(scancode, scancode_len);
 	// TODO: coloring scan codes
 	// TODO: cursor moving scan codes

@@ -154,8 +154,18 @@ TEST_CASE( "term/escape_codes/escape_sequence_length" ) {
 	CHECK(escape_sequence_length("\x1b[11;11$$", 9) == 8);
 
 	// Incomplete escape sequence
-	CHECK(escape_sequence_length("\x1b[11;", 4) == -1);
-	CHECK(escape_sequence_length("\x1b[11;1~", 4) == -1);
+	CHECK(escape_sequence_length("\x1b[11;", 5) == -1);
+	CHECK(escape_sequence_length("\x1b[11;1~", 5) == -1);
+	CHECK(escape_sequence_length("\x1b[11;1~", 6) == -1);
+
+	// Escape sequence with three parameters
+	CHECK(escape_sequence_length("\x1b[8;80;24t", 10) == 10);
+	CHECK(escape_sequence_length("\x1b[8;80;24t~", 11) == 10);
+
+	// Incomplete escape sequence
+	CHECK(escape_sequence_length("\x1b[8;80;24t", 9) == -1);
+	CHECK(escape_sequence_length("\x1b[8;80;24t", 8) == -1);
+	CHECK(escape_sequence_length("\x1b[8;80;24t", 7) == -1);
 
 	// Other escape codes
 	CHECK(escape_sequence_length("\x1bOn", 3) == 3);

@@ -81,6 +81,12 @@ int escape_sequence_length(char const *token, size_t sz);
  *   Turn off LF -> CRLF conversion.
  * - CSI ? 8004 h
  *   Turn on LF -> CRLF conversion.
+ * - CSI ? 25 h
+ *   Make cursor visible.
+ * - CSI ? 25 l
+ *   Make cursor invisible.
+ * - CSI x ; y H
+ *   Move cursor to position (x,y) (1-indexed)
  * Many more escape codes can be found here:
  * http://invisible-island.net/xterm/ctlseqs/ctlseqs.html
  */
@@ -91,5 +97,8 @@ bool is_escape_code_echoing_off(const char *token, size_t sz);
 bool is_escape_code_echoing_on(const char *token, size_t sz);
 bool is_escape_code_crlf_off(const char *token, size_t sz);
 bool is_escape_code_crlf_on(const char *token, size_t sz);
+bool is_escape_code_cursor_visible(const char *token, size_t sz);
+bool is_escape_code_cursor_invisible(const char *token, size_t sz);
+bool is_escape_code_move_cursor(const char *token, size_t sz);
 
 }

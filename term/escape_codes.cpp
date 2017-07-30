@@ -182,10 +182,40 @@ int cloudos::escape_sequence_length(char const *token, size_t sz)
 	}
 }
 
+bool cloudos::is_escape_code_terminal_size(const char *token, size_t sz)
+{
+	// \x1b [ 8 ; <height> ; <width> t
+	if(sz < 8) {
+		return false;
+	}
+	if(strncmp(token, "\x1b[8;", 4) != 0) {
+		return false;
+	}
+	if(token[sz - 1] != 't') {
+		return false;
+	}
+	return true;
+}
+
+bool cloudos::is_escape_code_move_cursor(const char *token, size_t sz)
+{
+	// \x1b [ <x> ; <y> H
+	if(sz < 6) {
+		return false;
+	}
+	if(strncmp(token, "\x1b[", 2) != 0) {
+		return false;
+	}
+	if(token[sz - 1] != 'H') {
+		return false;
+	}
+	return true;
+}
+
 #define CMP_ESC(name, str) \
 bool cloudos::is_escape_code_##name(const char *token, size_t sz) \
 { \
-	return strncmp(token, str, sz) == 0; \
+	return sz == strlen(str) && strncmp(token, str, sz) == 0; \
 }
 
 CMP_ESC(get_terminal_size, "\x1b[18t")
@@ -194,5 +224,7 @@ CMP_ESC(echoing_off, "\x1b[?8001h")
 CMP_ESC(echoing_on, "\x1b[?8002h")
 CMP_ESC(crlf_off, "\x1b[?8003h")
 CMP_ESC(crlf_on, "\x1b[?8004h")
+CMP_ESC(cursor_visible, "\x1b[?25h")
+CMP_ESC(cursor_invisible, "\x1b[?25l")
 
 #undef CMP_ESC
