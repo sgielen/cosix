@@ -166,11 +166,15 @@ cloudabi_errno_t cloudos::syscall_poll(syscall_context &c)
 			}
 			break;
 		}
-		case CLOUDABI_EVENTTYPE_FD_WRITE:
-			get_vga_stream() << "Unimplemented fd-write eventtype, failing\n";
-			userdata->error = ENOSYS;
+		case CLOUDABI_EVENTTYPE_FD_WRITE: {
+			// TODO: this eventtype is unimplemented; for now, assume
+			// fd is always writable
+			auto fdnum = i.fd_readwrite.fd;
+			fd_mapping_t *proc_mapping = nullptr;
+			userdata->error = c.process()->get_fd(&proc_mapping, fdnum, CLOUDABI_RIGHT_POLL_FD_READWRITE | CLOUDABI_RIGHT_FD_WRITE);
 			signaler = &null_signaler;
 			break;
+		}
 		case CLOUDABI_EVENTTYPE_PROC_TERMINATE: {
 			cloudabi_fd_t proc_fdnum = i.proc_terminate.fd;
 			fd_mapping_t *proc_mapping;
@@ -188,6 +192,7 @@ cloudabi_errno_t cloudos::syscall_poll(syscall_context &c)
 					signaler = proc->get_termination_signaler();
 				}
 			}
+			break;
 		}
 		}
 		assert(signaler);
@@ -230,6 +235,11 @@ cloudabi_errno_t cloudos::syscall_poll(syscall_context &c)
 				o.error = EINVAL;
 				return;
 			}
+		} else if(i->type == CLOUDABI_EVENTTYPE_FD_READ || i->type == CLOUDABI_EVENTTYPE_FD_WRITE) {
+			o.fd_readwrite.fd = i->fd_readwrite.fd;
+			// TODO set nbytes and flags correctly
+			o.fd_readwrite.nbytes = o.error == 0 ? 0xffff : 0;
+			o.fd_readwrite.flags = 0;
 		}
 	});
 	remove_all(&satisfied, [](thread_condition_list*){
