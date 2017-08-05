@@ -595,4 +595,5 @@ void pseudo_fd::sock_send(const cloudabi_send_in_t *in, cloudabi_send_out_t *out
 		return;
 	}
 	out->so_datalen = response.recv_length;
+	error = 0;
 }
