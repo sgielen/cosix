@@ -10,6 +10,7 @@ struct reverse_request_t {
 		lookup /* path in buffer -> inode */,
 		stat_get,
 		stat_fget,
+		is_readable,
 		// all the calls below use the inode, not the path
 		stat_put,
 		open,
@@ -38,6 +39,7 @@ struct reverse_request_t {
 struct reverse_response_t {
 	int64_t result = 0; // < 0 is -errno, 0 is success, >= 0 is result (can be inode or pseudo-fd)
 	uint64_t flags = 0; // filetype in case of lookup
+	bool gratituous = false;
 	uint16_t send_length = 0; // bytes following this response
 	uint16_t recv_length = 0; // bytes actually read
 };

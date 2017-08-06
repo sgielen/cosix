@@ -1,8 +1,10 @@
 #pragma once
 #include "networkd.hpp"
-#include <string>
-#include <memory>
 #include <cosix/reverse.hpp>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <thread>
 
 namespace networkd {
 
@@ -38,6 +40,8 @@ protected:
 	inline int get_reverse_fd() { return reversefd; }
 	void stat_fget(cosix::pseudofd_t pseudo, cloudabi_filestat_t *statbuf) override;
 
+	void becomes_readable();
+
 private:
 	void run();
 
@@ -49,6 +53,8 @@ private:
 	std::string peer_ip;
 	uint16_t peer_port;
 
+	std::mutex reverse_mtx;
+	std::thread::id reverse_thread;
 	cosix::pseudofd_t pseudofd;
 	int reversefd;
 };

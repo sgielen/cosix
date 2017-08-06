@@ -45,6 +45,10 @@ void reverse_handler::close(pseudofd_t) {
 	throw cloudabi_system_error(EINVAL);
 }
 
+bool reverse_handler::is_readable(pseudofd_t) {
+	throw cloudabi_system_error(EINVAL);
+}
+
 size_t reverse_handler::pread(pseudofd_t, off_t, char*, size_t) {
 	throw cloudabi_system_error(EINVAL);
 }

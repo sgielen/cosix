@@ -67,7 +67,7 @@ bool tcp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 		c.payload_offset = payload_offset;
 		c.payload_length = payload_length;
 		waiting_connections.emplace(std::move(c));
-		incoming_cv.notify_all();
+		becomes_readable();
 		return true;
 	}
 
@@ -81,7 +81,7 @@ bool tcp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 				dprintf(0, "Got invalid SYN/ACK, dropping\n");
 				send_tcp_frame(false, false, std::string(), false, true /* rst */);
 				status = sockstatus_t::CLOSED;
-				incoming_cv.notify_all();
+				becomes_readable();
 				return true;
 			}
 			send_seq_num++;
@@ -89,7 +89,7 @@ bool tcp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 			send_ack_num = htonl(hdr->seqnum) + 1;
 			send_tcp_frame(false /* syn */, true /* ack */);
 			status = sockstatus_t::CONNECTED;
-			incoming_cv.notify_all();
+			becomes_readable();
 		} else if(hdr->flag_syn) {
 			// Getting a SYN onto a connecting socket is legal. It means that
 			// two machines were connecting to each other simultaneously. Send
@@ -98,11 +98,11 @@ bool tcp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 			send_ack_num = htonl(hdr->seqnum) + 1;
 			send_tcp_frame(true /* syn */, true /* ack */);
 			status = sockstatus_t::CONNECTED;
-			incoming_cv.notify_all();
+			becomes_readable();
 		} else if(hdr->flag_rst) {
 			// Connection rejected
 			status = sockstatus_t::CLOSED;
-			incoming_cv.notify_all();
+			becomes_readable();
 		} else {
 			dprintf(0, "Got non-SYN/RST packet on CONNECTING socket\n");
 			if(hdr->flag_syn) dprintf(0, "  (SYN is set)\n");
@@ -111,7 +111,7 @@ bool tcp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 			if(hdr->flag_fin) dprintf(0, "  (FIN is set)\n");
 			send_tcp_frame(false, false, std::string(), false, true /* rst */);
 			status = sockstatus_t::CLOSED;
-			incoming_cv.notify_all();
+			becomes_readable();
 		}
 		return true;
 	}
@@ -139,7 +139,7 @@ bool tcp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 			// TODO: handle overflow of sequence numbers
 			send_ack_num += payload_length;
 			send_tcp_frame(false /* syn */, true /* ack */);
-			incoming_cv.notify_all();
+			becomes_readable();
 		} else {
 			dprintf(0, "Dropped TCP data because sequence number is not as expected (%d vs %d)\n", htonl(hdr->seqnum), send_ack_num);
 		}
@@ -153,7 +153,7 @@ bool tcp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 	if(hdr->flag_rst) {
 		// Break down this connection after handling the last data
 		status = sockstatus_t::CLOSED;
-		incoming_cv.notify_all();
+		becomes_readable();
 		return true;
 	}
 
@@ -166,7 +166,7 @@ bool tcp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 		}
 		send_ack_num += 1;
 		send_tcp_frame(false, true /* ack */);
-		incoming_cv.notify_all();
+		becomes_readable();
 		return true;
 	}
 
@@ -385,6 +385,16 @@ size_t tcp_socket::pread(pseudofd_t p, off_t o, char *dest, size_t requested)
 	return res;
 }
 
+bool tcp_socket::is_readable(cosix::pseudofd_t p)
+{
+	if(p != get_pseudo_fd()) {
+		return get_child(p)->is_readable(p);
+	}
+
+	std::unique_lock<std::mutex> lock(wc_mtx);
+	return !recv_buffer.empty();
+}
+
 pseudofd_t tcp_socket::sock_accept(pseudofd_t pseudo, cloudabi_sockstat_t *ss)
 {
 	// only the root TCP socket may accept()
@@ -455,4 +465,10 @@ void tcp_socket::timed_out()
 cloudabi_timestamp_t tcp_socket::next_timeout()
 {
 	return next_ack_deadline;
+}
+
+void tcp_socket::becomes_readable()
+{
+	ip_socket::becomes_readable();
+	incoming_cv.notify_all();
 }

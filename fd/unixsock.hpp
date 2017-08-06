@@ -41,6 +41,7 @@ struct unixsock : public sock_t, public enable_shared_from_this<unixsock> {
 	unixsock(cloudabi_filetype_t sockettype, const char *n);
 	~unixsock() override;
 
+	size_t bytes_readable() const;
 	bool has_messages() const;
 	cloudabi_errno_t get_read_signaler(thread_condition_signaler **s) override;
 
@@ -57,6 +58,13 @@ struct unixsock : public sock_t, public enable_shared_from_this<unixsock> {
 	void sock_stat_get(cloudabi_sockstat_t* buf, cloudabi_ssflags_t flags) override;
 	void sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out) override;
 	void sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *out) override;
+
+protected:
+	// This function is called by another unixsock when bytes were just added to
+	// this sock's recv_messages / num_recv_bytes. Because it's virtual, this allows
+	// creating unixsocks with additional behaviour when bytes are received, such as
+	// the reverse_fd.
+	virtual void have_bytes_received();
 
 private:
 	weak_ptr<unixsock> othersock;

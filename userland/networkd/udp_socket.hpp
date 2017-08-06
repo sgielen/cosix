@@ -30,6 +30,7 @@ struct udp_socket : public ip_socket {
 private:
 	void pwrite(cosix::pseudofd_t, off_t, const char*, size_t) override;
 	size_t pread(cosix::pseudofd_t, off_t, char*, size_t) override;
+	bool is_readable(cosix::pseudofd_t) override;
 	cosix::pseudofd_t sock_accept(cosix::pseudofd_t pseudo, cloudabi_sockstat_t *ss) override;
 	void sock_stat_get(cosix::pseudofd_t pseudo, cloudabi_sockstat_t *ss) override;
 	std::shared_ptr<udp_socket> get_child(cosix::pseudofd_t ps);

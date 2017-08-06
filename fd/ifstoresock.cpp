@@ -1,12 +1,13 @@
 #include <fd/ifstoresock.hpp>
-#include <fd/scheduler.hpp>
-#include <oslibc/string.h>
-#include <oslibc/numeric.h>
-#include <net/interface_store.hpp>
-#include <net/interface.hpp>
-#include <fd/unixsock.hpp>
 #include <fd/pseudo_fd.hpp>
 #include <fd/rawsock.hpp>
+#include <fd/reverse_fd.hpp>
+#include <fd/scheduler.hpp>
+#include <fd/unixsock.hpp>
+#include <net/interface.hpp>
+#include <net/interface_store.hpp>
+#include <oslibc/numeric.h>
+#include <oslibc/string.h>
 
 using namespace cloudos;
 
@@ -145,8 +146,8 @@ void ifstoresock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *o
 		goto send;
 	} else if(strcmp(command, "PSEUDOPAIR") == 0) {
 		// Request a reverse/pseudo socketpair
-		auto my_reverse = make_shared<unixsock>(CLOUDABI_FILETYPE_SOCKET_STREAM, "my_reverse");
-		auto their_reverse = make_shared<unixsock>(CLOUDABI_FILETYPE_SOCKET_STREAM, "their_reverse");
+		auto my_reverse = make_shared<reversefd_t>(CLOUDABI_FILETYPE_SOCKET_STREAM, "reversefd_t");
+		auto their_reverse = make_shared<unixsock>(CLOUDABI_FILETYPE_SOCKET_STREAM, "reverse_unixsock");
 		my_reverse->socketpair(their_reverse);
 		assert(my_reverse->error == 0);
 		assert(their_reverse->error == 0);

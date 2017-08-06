@@ -47,6 +47,7 @@ bool udp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 		m.payload_offset = udp_offset + sizeof(udp_header);
 		m.payload_length = payload_length;
 		waiting_messages.emplace(std::move(m));
+		becomes_readable();
 		wm_cv.notify_all();
 	}
 	return true;
@@ -141,6 +142,16 @@ size_t udp_socket::pread(pseudofd_t p, off_t o, char *dest, size_t requested)
 	auto res = std::min(message.payload_length, requested);
 	memcpy(dest, message.frame.c_str() + message.payload_offset, res);
 	return res;
+}
+
+bool udp_socket::is_readable(cosix::pseudofd_t p)
+{
+	if(p != get_pseudo_fd()) {
+		return get_child(p)->is_readable(p);
+	}
+
+	std::unique_lock<std::mutex> lock(wm_mtx);
+	return !waiting_messages.empty();
 }
 
 pseudofd_t udp_socket::sock_accept(pseudofd_t pseudo, cloudabi_sockstat_t *ss)

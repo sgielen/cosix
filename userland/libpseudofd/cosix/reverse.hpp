@@ -15,9 +15,19 @@ struct reverse_handler;
 
 char *handle_request(reverse_request_t *request, char *buf, reverse_response_t *response, reverse_handler *h);
 // poll_timeout is an absolute cloudabi_timestamp_t; if it is reached, this
-// function will return 0 without having handled any requests.
+// function will return EAGAIN.
+cloudabi_errno_t wait_for_request(int reversefd, cloudabi_timestamp_t poll_timeout);
 cloudabi_errno_t handle_request(int reversefd, reverse_handler *h, cloudabi_timestamp_t poll_timeout = 0);
 void handle_requests(int reversefd, reverse_handler *h);
+
+// notify the kernel that the pseudo FD becomes readable
+// Since this writes messages to the reverse FD, this function is not threadsafe.
+// It is safe to call while handling a request.
+void pseudo_fd_becomes_readable(int reversefd, pseudofd_t);
+
+// Pseudo-related calls to the kernel
+// returns (reverse, pseudo)
+std::pair<int, int> open_pseudo(int ifstorefd, cloudabi_filetype_t type);
 
 struct cloudabi_system_error : public std::runtime_error {
 	cloudabi_system_error(cloudabi_errno_t e);
@@ -51,6 +61,7 @@ struct reverse_handler {
 	virtual void unlink(pseudofd_t pseudo, const char *path, size_t len, cloudabi_ulflags_t unlinkflags);
 	virtual cloudabi_inode_t create(pseudofd_t pseudo, const char *path, size_t len, cloudabi_filetype_t type);
 	virtual void close(pseudofd_t pseudo);
+	virtual bool is_readable(pseudofd_t pseudo);
 	virtual size_t pread(pseudofd_t pseudo, off_t offset, char *dest, size_t requested);
 	virtual void pwrite(pseudofd_t pseudo, off_t offset, const char *buf, size_t length);
 	virtual size_t readdir(pseudofd_t pseudo, char *buffer, size_t buflen, cloudabi_dircookie_t &cookie);

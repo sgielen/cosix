@@ -85,6 +85,11 @@ unixsock::~unixsock()
 	assert(recv_messages == nullptr);
 }
 
+size_t unixsock::bytes_readable() const
+{
+	return num_recv_bytes;
+}
+
 bool unixsock::has_messages() const
 {
 	return recv_messages != nullptr;
@@ -437,6 +442,7 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 		}
 
 		// TODO: what if fds are truncated? move to next message?
+		num_recv_bytes -= datalen;
 		out->ro_datalen = datalen;
 		out->ro_fdslen = fds_set;
 		error = 0;
@@ -503,6 +509,7 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 			deallocate(item);
 		});
 
+		num_recv_bytes -= total_written;
 		out->ro_datalen = total_written;
 		out->ro_fdslen = fds_set;
 		error = 0;
@@ -570,6 +577,10 @@ void unixsock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *out)
 	other->num_recv_bytes += total_message_size;
 	other->recv_signaler.condition_broadcast();
 	other->recv_messages_cv.notify();
+	other->have_bytes_received();
 	out->so_datalen = total_message_size;
 	error = 0;
+}
+
+void unixsock::have_bytes_received() {
 }

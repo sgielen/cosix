@@ -9,6 +9,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/uio.h>
 #include <unistd.h>
 
 #include <string>
@@ -49,6 +52,9 @@ char *cosix::handle_request(reverse_request_t *request, char *buf, reverse_respo
 		case op::close:
 			h->close(request->pseudofd);
 			response->result = 0;
+			break;
+		case op::is_readable:
+			response->result = h->is_readable(request->pseudofd);
 			break;
 		case op::pread:
 			res = reinterpret_cast<char*>(malloc(request->recv_length));
@@ -130,40 +136,49 @@ char *cosix::handle_request(reverse_request_t *request, char *buf, reverse_respo
 	return res;
 }
 
+cloudabi_errno_t cosix::wait_for_request(int reversefd, cloudabi_timestamp_t poll_timeout) {
+	cloudabi_subscription_t subscriptions[2] = {
+		{
+			.type = CLOUDABI_EVENTTYPE_CLOCK,
+			.clock.clock_id = CLOUDABI_CLOCK_MONOTONIC,
+			.clock.flags = CLOUDABI_SUBSCRIPTION_CLOCK_ABSTIME,
+			.clock.timeout = poll_timeout,
+		},
+		{
+			.type = CLOUDABI_EVENTTYPE_FD_READ,
+			.fd_readwrite.fd = static_cast<cloudabi_fd_t>(reversefd),
+			.fd_readwrite.flags = CLOUDABI_SUBSCRIPTION_FD_READWRITE_POLL
+		},
+	};
+	cloudabi_event_t events[2];
+	size_t nevents = 2;
+	cloudabi_errno_t error = cloudabi_sys_poll(subscriptions, events, nevents, &nevents);
+	if(error != 0) {
+		return error;
+	}
+	for(size_t i = 0; i < nevents; ++i) {
+		if(events[i].error != 0) {
+			return events[i].error;
+		}
+	}
+	if(nevents == 0) {
+		// ?
+		return EINVAL;
+	}
+	if(nevents == 1 && events[0].type == CLOUDABI_EVENTTYPE_CLOCK) {
+		// clock passed
+		return EAGAIN;
+	}
+
+	return 0;
+}
+
 cloudabi_errno_t cosix::handle_request(int reversefd, reverse_handler *h, cloudabi_timestamp_t poll_timeout) {
 	// if a timeout is given, wait until there is at least one byte to read
 	if(poll_timeout != 0) {
-		cloudabi_subscription_t subscriptions[2] = {
-			{
-				.type = CLOUDABI_EVENTTYPE_CLOCK,
-				.clock.clock_id = CLOUDABI_CLOCK_MONOTONIC,
-				.clock.flags = CLOUDABI_SUBSCRIPTION_CLOCK_ABSTIME,
-				.clock.timeout = poll_timeout,
-			},
-			{
-				.type = CLOUDABI_EVENTTYPE_FD_READ,
-				.fd_readwrite.fd = static_cast<cloudabi_fd_t>(reversefd),
-				.fd_readwrite.flags = CLOUDABI_SUBSCRIPTION_FD_READWRITE_POLL
-			},
-		};
-		cloudabi_event_t events[2];
-		size_t nevents = 2;
-		cloudabi_errno_t error = cloudabi_sys_poll(subscriptions, events, nevents, &nevents);
-		if(error != 0) {
-			return error;
-		}
-		for(size_t i = 0; i < nevents; ++i) {
-			if(events[i].error != 0) {
-				return events[i].error;
-			}
-		}
-		if(nevents == 0) {
-			// ?
-			return EINVAL;
-		}
-		if(nevents == 1 && events[0].type == CLOUDABI_EVENTTYPE_CLOCK) {
-			// clock passed
-			return 0;
+		auto res = wait_for_request(reversefd, poll_timeout);
+		if(res != 0) {
+			return res;
 		}
 	}
 
@@ -216,4 +231,40 @@ void cosix::handle_requests(int reversefd, reverse_handler *h) {
 			throw std::runtime_error("handle_request failed: " + std::string(strerror(res)));
 		}
 	}
+}
+
+void cosix::pseudo_fd_becomes_readable(int reversefd, pseudofd_t pseudo) {
+	reverse_response_t response;
+	response.gratituous = true;
+	response.result = pseudo;
+	response.flags = 1; /* pseudo became readable */
+	char *msg = reinterpret_cast<char*>(&response);
+	write(reversefd, msg, sizeof(response));
+	// TODO: response.recv_length = bytes that are readable now
+}
+
+std::pair<int, int> cosix::open_pseudo(int ifstore, cloudabi_filetype_t type) {
+	std::string message = "PSEUDOPAIR ";
+	message += (type == CLOUDABI_FILETYPE_SOCKET_DGRAM ? "SOCKET_DGRAM" : "SOCKET_STREAM");
+	write(ifstore, message.c_str(), message.size());
+	char buf[20];
+	buf[0] = 0;
+	struct iovec iov = {.iov_base = buf, .iov_len = sizeof(buf)};
+	alignas(struct cmsghdr) char control[CMSG_SPACE(2 * sizeof(int))];
+	struct msghdr msg = {
+		.msg_iov = &iov, .msg_iovlen = 1,
+		.msg_control = control, .msg_controllen = sizeof(control),
+	};
+	if(recvmsg(ifstore, &msg, 0) < 0 || strncmp(buf, "OK", 2) != 0) {
+		perror("Failed to retrieve pseudopair from ifstore");
+		exit(1);
+	}
+	struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+	if(cmsg == nullptr || cmsg->cmsg_level != SOL_SOCKET || cmsg->cmsg_len != CMSG_LEN(2 * sizeof(int))) {
+		fprintf(stderr, "Pseudopair requested, but not given\n");
+		exit(1);
+	}
+	int *fdbuf = reinterpret_cast<int*>(CMSG_DATA(cmsg));
+	// (reverse, pseudo)
+	return std::make_pair(fdbuf[0], fdbuf[1]);
 }

@@ -35,19 +35,28 @@ void ip_socket::start()
 
 void ip_socket::run()
 {
+	reverse_thread = std::this_thread::get_id();
 	const cloudabi_timestamp_t max_offset_from_now = 60ull * 1000 * 1000 * 1000; /* 60 seconds */
 	(void)max_offset_from_now;
 	try {
 		while(true) {
+			assert(reverse_thread == std::this_thread::get_id());
 			auto next_ts = next_timeout();
 			assert(next_ts > 0);
 #ifndef NDEBUG
 			auto now = monotime();
 			assert(now < max_offset_from_now || (now - max_offset_from_now) < next_ts);
 #endif
-			auto res = handle_request(reversefd, this, next_ts);
-			if(res != 0) {
-				throw std::runtime_error("handle_request failed: " + std::string(strerror(res)));
+			auto res = cosix::wait_for_request(reversefd, next_ts);
+			if(res != 0 && res != EAGAIN) {
+				throw std::runtime_error("wait_for_request failed: " + std::string(strerror(res)));
+			}
+			if(res != EAGAIN) {
+				std::lock_guard<std::mutex> lock(reverse_mtx);
+				res = handle_request(reversefd, this, next_ts);
+				if(res != 0) {
+					throw std::runtime_error("handle_request failed: " + std::string(strerror(res)));
+				}
 			}
 			if(monotime() > next_timeout()) {
 				timed_out();
@@ -75,4 +84,20 @@ void ip_socket::stat_fget(cosix::pseudofd_t, cloudabi_filestat_t *buf)
 	buf->st_atim = 0;
 	buf->st_mtim = 0;
 	buf->st_ctim = 0;
+}
+
+void ip_socket::becomes_readable()
+{
+	if(reverse_thread != std::this_thread::get_id()) {
+		// since we're not the thread handling requests on the reverse fd,
+		// that thread may be sending responses currently, so wait until
+		// we get a lock before we send this gratituous message
+		std::lock_guard<std::mutex> lock(reverse_mtx);
+		cosix::pseudo_fd_becomes_readable(reversefd, pseudofd);
+	} else {
+		// we are the thread handling requests, so we're not currently
+		// sending a response, we already have the lock and can send
+		// immediately
+		cosix::pseudo_fd_becomes_readable(reversefd, pseudofd);
+	}
 }

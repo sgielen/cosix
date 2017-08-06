@@ -95,29 +95,8 @@ std::string get_mac(std::string iface) {
 }
 
 std::pair<int, int> open_pseudo(cloudabi_filetype_t type) {
-	std::string message = "PSEUDOPAIR ";
-	message += (type == CLOUDABI_FILETYPE_SOCKET_DGRAM ? "SOCKET_DGRAM" : "SOCKET_STREAM");
 	std::lock_guard<std::mutex> lock(ifstore_mtx);
-	write(ifstore, message.c_str(), message.size());
-	char buf[20];
-	buf[0] = 0;
-	struct iovec iov = {.iov_base = buf, .iov_len = sizeof(buf)};
-	alignas(struct cmsghdr) char control[CMSG_SPACE(2 * sizeof(int))];
-	struct msghdr msg = {
-		.msg_iov = &iov, .msg_iovlen = 1,
-		.msg_control = control, .msg_controllen = sizeof(control),
-	};
-	if(recvmsg(ifstore, &msg, 0) < 0 || strncmp(buf, "OK", 2) != 0) {
-		perror("Failed to retrieve pseudopair from ifstore");
-		exit(1);
-	}
-	struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
-	if(cmsg == nullptr || cmsg->cmsg_level != SOL_SOCKET || cmsg->cmsg_len != CMSG_LEN(2 * sizeof(int))) {
-		dprintf(stdout, "Pseudopair requested, but not given\n");
-		exit(1);
-	}
-	int *fdbuf = reinterpret_cast<int*>(CMSG_DATA(cmsg));
-	return std::make_pair(fdbuf[0], fdbuf[1]);
+	return cosix::open_pseudo(ifstore, type);
 }
 
 using networkd::interface;

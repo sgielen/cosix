@@ -1,5 +1,6 @@
 #pragma once
 
+#include "reverse_fd.hpp"
 #include "fd.hpp"
 #include "reverse_proto.hpp"
 
@@ -19,12 +20,18 @@ using reverse_proto::pseudofd_t;
  * The other side of the reverse FD will create a new pseudo FDs in the open
  * call.
  */
-struct pseudo_fd : public seekable_fd_t {
-	pseudo_fd(pseudofd_t id, shared_ptr<fd_t> reverse_fd, cloudabi_filetype_t t, const char *n);
+struct pseudo_fd : public seekable_fd_t, public enable_shared_from_this<pseudo_fd> {
+	pseudo_fd(pseudofd_t id, shared_ptr<reversefd_t> reverse_fd, cloudabi_filetype_t t, const char *n);
+
+	inline pseudofd_t get_pseudo_id() { return pseudo_id; }
+	inline shared_ptr<reversefd_t> get_reverse_fd() { return reverse_fd; }
 
 	/* For memory, pipes and files */
 	size_t read(void *dest, size_t count) override;
 	size_t write(const char *str, size_t count) override;
+	bool is_readable();
+	cloudabi_errno_t get_read_signaler(thread_condition_signaler **s) override;
+	void became_readable();
 
 	/* For directories */
 	shared_ptr<fd_t> openat(const char *path, size_t pathlen, cloudabi_oflags_t oflags, const cloudabi_fdstat_t * fdstat) override;
@@ -51,8 +58,9 @@ private:
 	bool lookup_inode(const char *path, size_t length, cloudabi_oflags_t oflags, reverse_response_t *response);
 
 	pseudofd_t pseudo_id;
-	shared_ptr<fd_t> reverse_fd;
+	shared_ptr<reversefd_t> reverse_fd;
 	bool device_id_obtained = false;
+	thread_condition_signaler recv_signaler;
 };
 
 }

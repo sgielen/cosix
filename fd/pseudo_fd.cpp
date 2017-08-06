@@ -9,73 +9,21 @@ static void maybe_deallocate(Blk b) {
 	}
 }
 
-pseudo_fd::pseudo_fd(pseudofd_t id, shared_ptr<fd_t> r, cloudabi_filetype_t t, const char *n)
+static bool pseudofd_is_readable(void *r, thread_condition*) {
+	auto *fd = reinterpret_cast<pseudo_fd*>(r);
+	return fd->is_readable();
+}
+
+pseudo_fd::pseudo_fd(pseudofd_t id, shared_ptr<reversefd_t> r, cloudabi_filetype_t t, const char *n)
 : seekable_fd_t(t, n)
 , pseudo_id(id)
 , reverse_fd(r)
 {
+	recv_signaler.set_already_satisfied_function(pseudofd_is_readable, this);
 }
 
 Blk pseudo_fd::send_request(reverse_request_t *request, const char *buffer, reverse_response_t *response) {
-	// Lock the reverse_fd. Multiple pseudo FD's may have a reference to
-	// this reverse_fd, and another one may have an outstanding request
-	// already.
-	// Since we have no true 'locks' yet, we are uniprocessor and no
-	// kernel thread preemption, we can 'lock' an FD by setting its
-	// refcount (a currently unused parameter) to 2. We yield until we
-	// catch our reverse FD with a refcount of 1. This approach has many
-	// problems but it's acceptable for now.
-	while(reverse_fd->refcount == 2) {
-		get_scheduler()->thread_yield();
-	}
-	reverse_fd->refcount = 2;
-
-	size_t received = 0;
-	Blk recv_buf;
-
-	char *msg = reinterpret_cast<char*>(request);
-	assert(reverse_fd->type == CLOUDABI_FILETYPE_SOCKET_STREAM);
-	if(reverse_fd->write(msg, sizeof(reverse_request_t)) != sizeof(reverse_request_t) || reverse_fd->error != 0) {
-		goto error;
-	}
-	if(request->send_length > 0) {
-		if(reverse_fd->write(buffer, request->send_length) != request->send_length || reverse_fd->error != 0) {
-			goto error;
-		}
-	}
-
-	msg = reinterpret_cast<char*>(response);
-	while(received < sizeof(reverse_response_t)) {
-		size_t remaining = sizeof(reverse_response_t) - received;
-		received += reverse_fd->read(msg + received, remaining);
-		if(reverse_fd->error != 0) {
-			goto error;
-		}
-	}
-	assert(received == sizeof(reverse_response_t));
-	if(response->send_length > 0) {
-		received = 0;
-		recv_buf = allocate(response->send_length);
-		msg = reinterpret_cast<char*>(recv_buf.ptr);
-		while(received < response->send_length) {
-			size_t remaining = response->send_length - received;
-			received += reverse_fd->read(reinterpret_cast<char*>(recv_buf.ptr) + received, remaining);
-			if(reverse_fd->error != 0) {
-				goto error;
-			}
-		}
-		assert(received == response->send_length);
-	}
-	reverse_fd->refcount = 1;
-	return recv_buf;
-
-error:
-	get_vga_stream() << "Failed to send pseudo RPC or read response: " << reverse_fd->error << "\n";
-	response->result = -reverse_fd->error;
-	response->flags = 0;
-	response->send_length = 0;
-	maybe_deallocate(recv_buf);
-	return {};
+	return reverse_fd->send_request(request, buffer, response);
 }
 
 bool pseudo_fd::is_valid_path(const char *path, size_t length)
@@ -104,6 +52,38 @@ bool pseudo_fd::lookup_inode(const char *path, size_t length, cloudabi_oflags_t 
 	request.recv_length = 0;
 	maybe_deallocate(send_request(&request, path, response));
 	return true;
+}
+
+bool pseudo_fd::is_readable()
+{
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::is_readable;
+	request.inode = 0;
+	request.flags = 0;
+	request.offset = pos;
+	request.recv_length = 0;
+	reverse_response_t response;
+	maybe_deallocate(send_request(&request, nullptr, &response));
+	if(response.result < 0) {
+		error = -response.result;
+		return false;
+	} else {
+		error = 0;
+		return response.result == 1;
+	}
+}
+
+cloudabi_errno_t pseudo_fd::get_read_signaler(thread_condition_signaler **s)
+{
+	reverse_fd->subscribe_fd_read_events(shared_from_this());
+	*s = &recv_signaler;
+	return 0;
+}
+
+void pseudo_fd::became_readable()
+{
+	recv_signaler.condition_broadcast();
 }
 
 size_t pseudo_fd::read(void *dest, size_t count)

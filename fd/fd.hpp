@@ -34,10 +34,12 @@ inline vga_stream &operator<<(vga_stream &s, cloudabi_filetype_t type) {
 
 /** CloudOS file descriptors
  *
- * In CloudOS, file descriptors are refcounted objects which refer to a running
- * process, an open file or one of several other kinds of open handles. A
- * single file descriptor is held by the kernel, referring to the init process.
- * From there, file descriptors form a directed acyclic graph.
+ * In CloudOS, file descriptors are objects which refer to a running process,
+ * an open file or one of several other kinds of open handles. A single file
+ * descriptor is held by the kernel, referring to the init process. From
+ * there, file descriptors are held as shared pointers to each other and
+ * therefore form a directed graph. When no shared pointers reference a
+ * file descriptor anymore, it is destructed, and therefore closed.
  */
 
 struct fd_t {
@@ -48,9 +50,6 @@ struct fd_t {
 	 * be positie and unique for this filesystem
 	 */
 	cloudabi_device_t device = 0;
-
-	size_t refcount = 1;
-	bool invalid = false;
 
 	char name[64]; /* for debugging */
 	cloudabi_errno_t error = 0;
