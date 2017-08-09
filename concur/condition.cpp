@@ -140,7 +140,11 @@ void thread_condition_waiter::wait() {
 		}
 
 		if(c->signaler->already_satisfied(c)) {
-			c->satisfy();
+			// already_satisfied() might block; if it does, satisfy() might have
+			// already been called on the condition
+			if(!c->satisfied) {
+				c->satisfy();
+			}
 			initially_satisfied = true;
 		} else {
 			c->satisfied = false;
@@ -175,6 +179,8 @@ void thread_condition_waiter::wait() {
 }
 
 thread_condition_list *thread_condition_waiter::finish() {
+	assert(conditions != nullptr); /* no conditions at all? */
+
 	// remove all unsatisfied conditions
 	remove_all(&conditions, [&](thread_condition_list *item) {
 		return !item->data->satisfied;
