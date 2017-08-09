@@ -6,6 +6,9 @@ include(../../wubwubcmake/enable_cpp14.cmake)
 include(../../wubwubcmake/warning_settings.cmake)
 add_sane_warning_flags()
 
+add_subdirectory(../libcosix libcosix)
+
 add_executable(tcptest tcptest.cpp)
+target_link_libraries(tcptest cosix)
 
 install(TARGETS tcptest RUNTIME DESTINATION bin)

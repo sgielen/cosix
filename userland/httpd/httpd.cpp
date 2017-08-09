@@ -22,76 +22,11 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include <cosix/networkd.hpp>
+
 int stdout;
 int tmpdir;
 int networkd;
-
-int networkd_get_socket(int type, std::string connect, std::string bind) {
-	std::string command;
-	if(type == SOCK_DGRAM) {
-		command = "udpsock";
-	} else if(type == SOCK_STREAM) {
-		command = "tcpsock";
-	} else {
-		throw std::runtime_error("Unknown type of socket to get");
-	}
-
-	std::unique_ptr<argdata_t> keys[] =
-		{argdata_t::create_str("command"), argdata_t::create_str("connect"), argdata_t::create_str("bind")};
-	std::unique_ptr<argdata_t> values[] =
-		{argdata_t::create_str(command.c_str()), argdata_t::create_str(connect.c_str()), argdata_t::create_str(bind.c_str())};
-	std::vector<argdata_t*> key_ptrs;
-	std::vector<argdata_t*> value_ptrs;
-	
-	for(auto &key : mstd::range<std::unique_ptr<argdata_t>>(keys)) {
-		key_ptrs.push_back(key.get());
-	}
-	for(auto &value : mstd::range<std::unique_ptr<argdata_t>>(values)) {
-		value_ptrs.push_back(value.get());
-	}
-	auto map = argdata_t::create_map(key_ptrs, value_ptrs);
-
-	std::vector<unsigned char> rbuf;
-	map->serialize(rbuf);
-
-	write(networkd, rbuf.data(), rbuf.size());
-	// TODO: set non-blocking flag once kernel supports it
-	// this way, we can read until EOF instead of only 200 bytes
-	// TODO: for a generic implementation, MSG_PEEK to find the number
-	// of file descriptors
-	uint8_t buf[1500];
-	struct iovec iov = {.iov_base = buf, .iov_len = sizeof(buf)};
-	alignas(struct cmsghdr) char control[CMSG_SPACE(sizeof(int))];
-	struct msghdr msg = {
-		.msg_iov = &iov, .msg_iovlen = 1,
-		.msg_control = control, .msg_controllen = sizeof(control),
-	};
-	ssize_t size = recvmsg(networkd, &msg, 0);
-	if(size < 0) {
-		perror("read");
-		exit(1);
-	}
-	auto response = argdata_t::create_from_buffer(mstd::range<unsigned char const>(&buf[0], size));
-	int fdnum = -1;
-	for(auto i : response->as_map()) {
-		auto key = i.first->as_str();
-		if(key == "error") {
-			throw std::runtime_error("Failed to retrieve TCP socket from networkd: " + i.second->as_str().to_string());
-		} else if(key == "fd") {
-			fdnum = *i.second->get_fd();
-		}
-	}
-	if(fdnum != 0) {
-		throw std::runtime_error("Ifstore TCP socket not received");
-	}
-	struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
-	if(cmsg == nullptr || cmsg->cmsg_level != SOL_SOCKET || cmsg->cmsg_len != CMSG_LEN(sizeof(int))) {
-		dprintf(stdout, "Ifstore socket requested, but not given\n");
-		exit(1);
-	}
-	int *fdbuf = reinterpret_cast<int*>(CMSG_DATA(cmsg));
-	return fdbuf[0];
-}
 
 void program_main(const argdata_t *ad) {
 	argdata_map_iterator_t it;
@@ -120,7 +55,7 @@ void program_main(const argdata_t *ad) {
 	fswap(stderr, out);
 
 	// Listen socket: bound to 0.0.0.0:80, listening
-	int listensock = networkd_get_socket(SOCK_STREAM, "", "0.0.0.0:80");
+	int listensock = cosix::networkd::get_socket(networkd, SOCK_STREAM, "", "0.0.0.0:80");
 
 	while(1) {
 		int accepted = accept(listensock, nullptr, nullptr);

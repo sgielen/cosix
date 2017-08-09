@@ -6,6 +6,10 @@ include(../../wubwubcmake/enable_cpp11.cmake)
 include(../../wubwubcmake/warning_settings.cmake)
 add_sane_warning_flags()
 
+add_subdirectory(../libpseudofd libpseudofd)
+add_subdirectory(../libcosix libcosix)
+
 add_executable(init init.cpp)
+target_link_libraries(init cosix pseudofd)
 
 install(TARGETS init RUNTIME DESTINATION bin)

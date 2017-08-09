@@ -19,6 +19,8 @@
 #include <sys/capsicum.h>
 #include <cloudabi_syscalls.h>
 
+#include <cosix/reverse.hpp>
+
 int stdout;
 int procfs;
 int bootfs;
@@ -208,28 +210,9 @@ void rm_rf_contents(DIR *d) {
 }
 
 void open_pseudo() {
-	// get a pseudopair
-	write(ifstore, "PSEUDOPAIR", 10);
-	char buf[20];
-	buf[0] = 0;
-	struct iovec iov = {.iov_base = buf, .iov_len = sizeof(buf)};
-	alignas(struct cmsghdr) char control[CMSG_SPACE(2 * sizeof(int))];
-	struct msghdr msg = {
-		.msg_iov = &iov, .msg_iovlen = 1,
-		.msg_control = control, .msg_controllen = sizeof(control),
-	};
-	if(recvmsg(ifstore, &msg, 0) < 0 || strncmp(buf, "OK", 2) != 0) {
-		perror("Failed to retrieve pseudopair from ifstore");
-		exit(1);
-	}
-	struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
-	if(cmsg == nullptr || cmsg->cmsg_level != SOL_SOCKET || cmsg->cmsg_len != CMSG_LEN(2 * sizeof(int))) {
-		dprintf(stdout, "Pseudopair requested, but not given\n");
-		exit(1);
-	}
-	int *fdbuf = reinterpret_cast<int*>(CMSG_DATA(cmsg));
-	reversefd = fdbuf[0];
-	pseudofd = fdbuf[1];
+	auto pseudopair = cosix::open_pseudo(ifstore, CLOUDABI_FILETYPE_SOCKET_STREAM);
+	reversefd = pseudopair.first;
+	pseudofd = pseudopair.second;
 	cloudabi_fdstat_t fsb = {
 		.fs_rights_base =
 			CLOUDABI_RIGHT_POLL_FD_READWRITE |
