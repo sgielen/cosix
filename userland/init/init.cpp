@@ -87,7 +87,7 @@ void start_tmpfs() {
 	}
 }
 
-void start_networkd() {
+int copy_ifstorefd() {
 	// Copy the ifstorefd for the networkd
 	write(ifstore, "COPY", 10);
 	char buf[20];
@@ -108,7 +108,11 @@ void start_networkd() {
 		exit(1);
 	}
 	int *fdbuf = reinterpret_cast<int*>(CMSG_DATA(cmsg));
-	int new_ifstorefd = fdbuf[0];
+	return fdbuf[0];
+}
+
+void start_networkd() {
+	int new_ifstorefd = copy_ifstorefd();
 
 	int bfd = openat(bootfs, "networkd", O_RDONLY);
 	if(bfd < 0) {
@@ -285,6 +289,27 @@ void open_pseudo() {
 	}
 }
 
+void run_pseudotest() {
+	int new_ifstorefd = copy_ifstorefd();
+	int bfd = openat(bootfs, "pseudo_test", O_RDONLY);
+	if(bfd < 0) {
+		dprintf(stdout, "Can't run pseudo_test, because it failed to open: %s\n", strerror(errno));
+		return;
+	}
+
+	dprintf(stdout, "Running pseudo_test...\n");
+	argdata_t *keys[] = {argdata_create_string("stdout"), argdata_create_string("ifstore")};
+	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(new_ifstorefd)};
+	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
+
+	int pfd = program_spawn(bfd, ad);
+	if(pfd < 0) {
+		dprintf(stdout, "pseudo_test failed to spawn: %s\n", strerror(errno));
+	} else {
+		dprintf(stdout, "pseudo_test spawned, fd: %d\n", pfd);
+	}
+}
+
 void program_main(const argdata_t *) {
 	stdout = 0;
 	procfs = 2;
@@ -312,6 +337,10 @@ void program_main(const argdata_t *) {
 
 	start_networked_binary("httpd", false);
 	start_networked_binary("pythonshell", false);
+
+	for(size_t i = 0; i < 10; ++i) {
+		run_pseudotest();
+	}
 
 	// readdir on the terminal store
 	dprintf(stdout, "Readdir on the terminal store!\n");
