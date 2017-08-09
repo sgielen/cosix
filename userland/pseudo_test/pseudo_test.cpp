@@ -131,7 +131,7 @@ void program_main(const argdata_t *ad) {
 	struct timeval tv;
 	fd_set read_set;
 	tv.tv_usec = 0;
-	tv.tv_sec = 5;
+	tv.tv_sec = 10;
 	FD_ZERO(&read_set);
 	FD_SET(pseudofd, &read_set);
 

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <program.h>
 #include <argdata.h>
+#include <argdata.hpp>
 #include <fcntl.h>
 #include <errno.h>
 #include <string.h>
@@ -19,6 +20,7 @@
 #include <sys/capsicum.h>
 #include <cloudabi_syscalls.h>
 
+#include <cosix/networkd.hpp>
 #include <cosix/reverse.hpp>
 
 int stdout;
@@ -293,6 +295,26 @@ void run_pseudotest() {
 	}
 }
 
+void run_ircclient(int consolefd) {
+	int networkd = cosix::networkd::open(pseudofd);
+	//int ircd = cosix::networkd::get_socket(networkd, SOCK_STREAM, "138.201.39.100:6667", ""); // kassala
+	//int ircd = cosix::networkd::get_socket(networkd, SOCK_STREAM, "193.163.220.3:6667", ""); // efnet
+	int ircd = cosix::networkd::get_socket(networkd, SOCK_STREAM, "71.11.84.232:6667", ""); // freenode
+	close(networkd);
+
+	int bfd = openat(bootfs, "ircclient", O_RDONLY);
+	if(bfd < 0) {
+		dprintf(stdout, "Can't run ircclient, because it failed to open: %s\n", strerror(errno));
+		exit(1);
+	}
+
+	dprintf(stdout, "Running ircclient...\n");
+	argdata_t *keys[] = {argdata_create_string("terminal"), argdata_create_string("ircd"), argdata_create_string("nick")};
+	argdata_t *values[] = {argdata_create_fd(consolefd), argdata_create_fd(ircd), argdata_create_string("cosix")};
+	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
+	program_run("ircclient", bfd, ad);
+}
+
 void program_main(const argdata_t *) {
 	stdout = 0;
 	procfs = 2;
@@ -343,45 +365,13 @@ void program_main(const argdata_t *) {
 		dprintf(stdout, "Failed to open consolefd: %s\n", strerror(errno));
 		exit(1);
 	}
-	if(write(consolefd, "Console opened! \\o/\n", 20) < 0) {
-		dprintf(stdout, "Write failed: %s\n", strerror(errno));
-		exit(1);
+
+	{
+		struct timespec ts = {.tv_sec = 10, .tv_nsec = 0};
+		clock_nanosleep(CLOCK_MONOTONIC, 0, &ts);
 	}
-	while(1) {
-		if(write(consolefd, "> ", 2) < 0) {
-			dprintf(stdout, "Write failed: %s\n", strerror(errno));
-		}
-		// read a line
-		char buf[128];
-		size_t line = 0;
-		while(1) {
-			ssize_t rd = read(consolefd, buf + line, sizeof(buf) - line);
-			if(rd < 0) {
-				dprintf(stdout, "Read failed: %s\n", strerror(errno));
-				break;
-			}
-			if(rd == 0) {
-				dprintf(stdout, "Blocking read returned 0?\n");
-				break;
-			}
-			size_t linestart = line;
-			line += rd;
-			for(ssize_t i = 0; i < rd; ++i) {
-				if(buf[linestart + i] == '\n') {
-					goto newline;
-				}
-			}
-			if(line == sizeof(buf)) {
-				buf[line-1] = '\n';
-				break;
-			}
-		}
-newline:	if(write(consolefd, "Got line: ", 10) < 0
-		|| write(consolefd, buf, line) < 0)
-		{
-			dprintf(stdout, "Write of received line failed: %s\n", strerror(errno));
-		}
-	}
+
+	run_ircclient(consolefd);
 
 	pthread_mutex_t mtx;
 	pthread_mutex_init(&mtx, NULL);

@@ -38,6 +38,7 @@ dependencies:
 - At least the following CloudABI ports packages:
   - `i686-unknown-cloudabi-cxx-runtime`
   - `i686-unknown-cloudabi-python`
+  - `i686-unknown-cloudabi-libircclient`
 
 Other compile flags to use:
 

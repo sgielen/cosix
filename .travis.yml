@@ -16,6 +16,7 @@ addons:
     - apt-transport-https
     - cmake-data
     - cmake
+    - i686-unknown-cloudabi-libircclient
     - i686-unknown-cloudabi-cxx-runtime
     - i686-unknown-cloudabi-python
 notifications:

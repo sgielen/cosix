@@ -1,6 +1,6 @@
 #pragma once
 
-#ifdef TESTING_ENABLED
+#if defined(TESTING_ENABLED) || defined(COSIX_USERLAND)
 #include <cassert>
 #else
 
