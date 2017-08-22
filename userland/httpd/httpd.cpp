@@ -27,8 +27,14 @@
 int stdout;
 int tmpdir;
 int networkd;
+int port;
 
 void program_main(const argdata_t *ad) {
+	stdout = -1;
+	tmpdir = -1;
+	networkd = -1;
+	port = 80;
+
 	argdata_map_iterator_t it;
 	const argdata_t *key;
 	const argdata_t *value;
@@ -46,6 +52,8 @@ void program_main(const argdata_t *ad) {
 			argdata_get_fd(value, &networkd);
 		} else if(strcmp(keystr, "tmpdir") == 0) {
 			argdata_get_fd(value, &tmpdir);
+		} else if(strcmp(keystr, "port") == 0) {
+			argdata_get_int(value, &port);
 		}
 		argdata_map_next(&it);
 	}
@@ -54,8 +62,8 @@ void program_main(const argdata_t *ad) {
 	setvbuf(out, nullptr, _IONBF, BUFSIZ);
 	fswap(stderr, out);
 
-	// Listen socket: bound to 0.0.0.0:80, listening
-	int listensock = cosix::networkd::get_socket(networkd, SOCK_STREAM, "", "0.0.0.0:80");
+	// Listen socket: bound to 0.0.0.0:${port}, listening
+	int listensock = cosix::networkd::get_socket(networkd, SOCK_STREAM, "", "0.0.0.0:" + std::to_string(port));
 
 	while(1) {
 		int accepted = accept(listensock, nullptr, nullptr);
