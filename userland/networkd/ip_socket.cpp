@@ -47,17 +47,7 @@ void ip_socket::run()
 			auto now = monotime();
 			assert(now < max_offset_from_now || (now - max_offset_from_now) < next_ts);
 #endif
-			auto res = cosix::wait_for_request(reversefd, next_ts);
-			if(res != 0 && res != EAGAIN) {
-				throw std::runtime_error("wait_for_request failed: " + std::string(strerror(res)));
-			}
-			if(res != EAGAIN) {
-				std::lock_guard<std::mutex> lock(reverse_mtx);
-				res = handle_request(reversefd, this, next_ts);
-				if(res != 0) {
-					throw std::runtime_error("handle_request failed: " + std::string(strerror(res)));
-				}
-			}
+			cosix::handle_request(reversefd, this, reverse_mtx, next_ts);
 			if(monotime() > next_timeout()) {
 				timed_out();
 			}

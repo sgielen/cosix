@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <cloudabi_types.h>
 #include <stdio.h>
+#include <thread>
 #include "../../../fd/reverse_proto.hpp"
 
 namespace cosix {
@@ -17,7 +18,10 @@ char *handle_request(reverse_request_t *request, char *buf, reverse_response_t *
 // poll_timeout is an absolute cloudabi_timestamp_t; if it is reached, this
 // function will return EAGAIN.
 cloudabi_errno_t wait_for_request(int reversefd, cloudabi_timestamp_t poll_timeout);
+char *read_request(int reversefd, reverse_request_t *request);
+void write_response(int reversefd, reverse_response_t *response, char *buf);
 cloudabi_errno_t handle_request(int reversefd, reverse_handler *h, cloudabi_timestamp_t poll_timeout = 0);
+cloudabi_errno_t handle_request(int reversefd, reverse_handler *h, std::mutex&, cloudabi_timestamp_t poll_timeout = 0);
 void handle_requests(int reversefd, reverse_handler *h);
 
 // notify the kernel that the pseudo FD becomes readable

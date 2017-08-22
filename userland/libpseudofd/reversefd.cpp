@@ -173,7 +173,46 @@ cloudabi_errno_t cosix::wait_for_request(int reversefd, cloudabi_timestamp_t pol
 	return 0;
 }
 
-cloudabi_errno_t cosix::handle_request(int reversefd, reverse_handler *h, cloudabi_timestamp_t poll_timeout) {
+char *cosix::read_request(int reversefd, reverse_request_t *request) {
+	size_t received = 0;
+	char *buf = reinterpret_cast<char*>(request);
+	while(received < sizeof(reverse_request_t)) {
+		size_t remaining = sizeof(reverse_request_t) - received;
+		ssize_t count = read(reversefd, buf + received, remaining);
+		if(count <= 0) {
+			throw cloudabi_system_error(errno);
+		}
+		received += count;
+	}
+	if(request->send_length == 0) {
+		return nullptr;
+	}
+	received = 0;
+	buf = reinterpret_cast<char*>(malloc(request->send_length));
+	while(received < request->send_length) {
+		size_t remaining = request->send_length - received;
+		ssize_t count = read(reversefd, buf + received, remaining);
+		if(count <= 0) {
+			throw cloudabi_system_error(errno);
+		}
+		received += count;
+	}
+	return buf;
+}
+
+void cosix::write_response(int reversefd, reverse_response_t *response, char *buf) {
+	char *msg = reinterpret_cast<char*>(response);
+	if(write(reversefd, msg, sizeof(reverse_response_t)) <= 0) {
+		throw cloudabi_system_error(errno);
+	}
+	if(response->send_length > 0) {
+		if(write(reversefd, buf, response->send_length) <= 0) {
+			throw cloudabi_system_error(errno);
+		}
+	}
+}
+
+cloudabi_errno_t cosix::handle_request(int reversefd, reverse_handler *h, std::mutex &mtx, cloudabi_timestamp_t poll_timeout) {
 	// if a timeout is given, wait until there is at least one byte to read
 	if(poll_timeout != 0) {
 		auto res = wait_for_request(reversefd, poll_timeout);
@@ -185,43 +224,31 @@ cloudabi_errno_t cosix::handle_request(int reversefd, reverse_handler *h, clouda
 	reverse_request_t request;
 	reverse_response_t response;
 
-	size_t received = 0;
-	char *buf = reinterpret_cast<char*>(&request);
-	while(received < sizeof(reverse_request_t)) {
-		size_t remaining = sizeof(reverse_request_t) - received;
-		ssize_t count = read(reversefd, buf + received, remaining);
-		if(count <= 0) {
-			if(errno == 0) {
-				throw std::runtime_error("reversefd read() failed, but no errno present");
-			}
-			return errno;
+	char *buf = nullptr, *resbuf = nullptr;
+	cloudabi_errno_t res = 0;
+	try {
+		{
+			std::lock_guard<std::mutex> lock(mtx);
+			buf = read_request(reversefd, &request);
 		}
-		received += count;
-	}
-	received = 0;
-	buf = reinterpret_cast<char*>(malloc(request.send_length));
-	while(received < request.send_length) {
-		size_t remaining = request.send_length - received;
-		ssize_t count = read(reversefd, buf + received, remaining);
-		if(count <= 0) {
-			if(errno == 0) {
-				throw std::runtime_error("reversefd read() failed, but no errno present");
-			}
-			return errno;
+		resbuf = handle_request(&request, buf, &response, h);
+		{
+			std::lock_guard<std::mutex> lock(mtx);
+			write_response(reversefd, &response, resbuf);
 		}
-		received += count;
+	} catch(cloudabi_system_error &e) {
+		res = e.error;
 	}
-	char *resbuf = handle_request(&request, buf, &response, h);
+
 	free(buf);
-	char *msg = reinterpret_cast<char*>(&response);
-	write(reversefd, msg, sizeof(reverse_response_t));
-	if(response.send_length > 0) {
-		write(reversefd, resbuf, response.send_length);
-	}
-	if(resbuf) {
-		free(resbuf);
-	}
-	return 0;
+	free(resbuf);
+	return res;
+}
+
+cloudabi_errno_t cosix::handle_request(int reversefd, reverse_handler *h, cloudabi_timestamp_t poll_timeout) {
+	// always-unlocked mtx
+	std::mutex mtx;
+	return handle_request(reversefd, h, mtx, poll_timeout);
 }
 
 void cosix::handle_requests(int reversefd, reverse_handler *h) {
