@@ -315,6 +315,31 @@ void run_ircclient(int consolefd) {
 	program_run("ircclient", bfd, ad);
 }
 
+void run_pythonshell(int consolefd) {
+	int bfd = openat(bootfs, "pythonshell", O_RDONLY);
+	if(bfd < 0) {
+		fprintf(stderr, "Can't run pythonshell, because it failed to open: %s\n", strerror(errno));
+		exit(1);
+	}
+
+	int networkd = cosix::networkd::open(pseudofd);
+	argdata_t *keys[] = {argdata_create_string("terminal"),
+		argdata_create_string("networkd"),
+		argdata_create_string("procfs"),
+		argdata_create_string("bootfs"),
+		argdata_create_string("tmpdir"),
+		argdata_create_string("initrd")};
+	argdata_t *values[] = {argdata_create_fd(consolefd),
+		argdata_create_fd(networkd),
+		argdata_create_fd(procfs),
+		argdata_create_fd(bootfs),
+		argdata_create_fd(pseudofd),
+		argdata_create_fd(initrd)};
+	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
+	program_run("pythonshell", bfd, ad);
+	close(networkd);
+}
+
 void program_main(const argdata_t *) {
 	stdout = 0;
 	procfs = 2;
@@ -341,24 +366,7 @@ void program_main(const argdata_t *) {
 	}
 
 	start_networked_binary("httpd", false);
-	start_networked_binary("pythonshell", false);
-
-	for(size_t i = 0; i < 10; ++i) {
-		run_pseudotest();
-	}
-
-	// readdir on the terminal store
-	dprintf(stdout, "Readdir on the terminal store!\n");
-	DIR *dir = fdopendir(termstore);
-	if(dir == nullptr) {
-		dprintf(stdout, "Failed to fdopendir: %s\n", strerror(errno));
-		exit(1);
-	}
-	struct dirent *ent;
-	while((ent = readdir(dir)) != nullptr) {
-		dprintf(stdout, "- \"%s\" (inode %llu, type %d)\n", ent->d_name, ent->d_ino, ent->d_type);
-	}
-	dprintf(stdout, "Done reading\n");
+	run_pseudotest();
 
 	int consolefd = openat(termstore, "console", O_RDWR | O_APPEND);
 	if(consolefd < 0) {
@@ -366,11 +374,7 @@ void program_main(const argdata_t *) {
 		exit(1);
 	}
 
-	{
-		struct timespec ts = {.tv_sec = 10, .tv_nsec = 0};
-		clock_nanosleep(CLOCK_MONOTONIC, 0, &ts);
-	}
-
+	run_pythonshell(consolefd);
 	run_ircclient(consolefd);
 
 	pthread_mutex_t mtx;

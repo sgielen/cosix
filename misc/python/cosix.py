@@ -5,8 +5,9 @@ import time
 
 original_print = print
 def my_print(*args, **kwargs):
-  kwargs.pop('file', None)
-  original_print(*args, file=sys.stderr, **kwargs)
+  fh = kwargs.pop('file', sys.stdout)
+  fl = kwargs.pop('flush', True)
+  original_print(*args, file=fh, flush=fl, **kwargs)
 print = my_print
 
 class FDWrapper:
@@ -15,21 +16,28 @@ class FDWrapper:
   def fileno(self):
     return self.fd
 
-class SocketClosedError(Exception):
+class TerminalClosedError(Exception):
   pass
 
 class SockConsole(code.InteractiveConsole):
-  def __init__(self, sock, locals):
+  def __init__(self, terminal, locals):
     code.InteractiveConsole.__init__(self, locals, "<SockConsole>")
-    self.sock = sock
+    self.terminal = terminal
 
   def raw_input(self, prompt):
-    self.sock.send(bytearray(prompt, "UTF-8"))
-    file = self.sock.makefile()
-    res = file.readline()
+    sys.stdout.flush()
+    self.terminal.write(bytearray(prompt, "UTF-8"))
+    res = self.terminal.readline()
     if res == '':
-      raise SocketClosedError()
-    return res[:-1]
+      raise TerminalClosedError()
+    res = res[:-1].decode("UTF-8")
+    parsed = str()
+    for c in res:
+      if c == '\b':
+        parsed = parsed[:-1]
+      else:
+        parsed += c
+    return parsed
 
   def runsource(self, source, filename, symbol="single"):
     # Python has some pretty annoying quirks here. While eval(expr) returns
@@ -87,9 +95,6 @@ class SockConsole(code.InteractiveConsole):
       print("'%s'" % obj)
     else:
       print(str(obj))
-
-def this_conn():
-  return sys.stderr.sock
 
 def rm_rf(name, dir_fd):
   try:
@@ -170,7 +175,7 @@ def run_leak_analysis():
 def run_binary(binary):
   binfd = os.open(binary, os.O_RDONLY, dir_fd=sys.argdata['bootfs'])
   procfd = os.program_spawn(binfd,
-    {'stdout': this_conn(),
+    {'stdout': sys.argdata['terminal'],
      'tmpdir': FDWrapper(sys.argdata['tmpdir']),
      'networkd': sys.argdata['networkd'],
     })

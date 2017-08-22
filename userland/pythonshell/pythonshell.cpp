@@ -24,9 +24,9 @@
 #include <sys/stat.h>
 #include <sys/un.h>
 
-#include <cosix/networkd.hpp>
+#include <string>
 
-int stdout;
+int terminal;
 int tmpdir;
 int initrd;
 int networkd;
@@ -38,7 +38,7 @@ void parse_params(const argdata_t *ad) {
 	const argdata_t *key;
 	const argdata_t *value;
 	argdata_map_iterate(ad, &it);
-	stdout = -1;
+	terminal = -1;
 	networkd = -1;
 	procfs = -1;
 	bootfs = -1;
@@ -51,8 +51,8 @@ void parse_params(const argdata_t *ad) {
 			continue;
 		}
 
-		if(strcmp(keystr, "stdout") == 0) {
-			argdata_get_fd(value, &stdout);
+		if(strcmp(keystr, "terminal") == 0) {
+			argdata_get_fd(value, &terminal);
 		} else if(strcmp(keystr, "networkd") == 0) {
 			argdata_get_fd(value, &networkd);
 		} else if(strcmp(keystr, "procfs") == 0) {
@@ -71,31 +71,28 @@ void parse_params(const argdata_t *ad) {
 void program_main(const argdata_t *ad) {
 	parse_params(ad);
 
-	FILE *out = fdopen(stdout, "w");
+	FILE *out = fdopen(terminal, "w");
 	setvbuf(out, nullptr, _IONBF, BUFSIZ);
 	fswap(stderr, out);
-
-	// Listen socket: bound to 0.0.0.0:26, listening
-	int listensock = cosix::networkd::get_socket(networkd, SOCK_STREAM, "", "0.0.0.0:26");
 
 	// Find python on the initrd
 	int bfd = openat(initrd, "bin/python3.6", O_RDONLY);
 	if(bfd < 0) {
-		dprintf(stdout, "Won't run Python shell, because I failed to open it: %s\n", strerror(errno));
+		fprintf(stderr, "Won't run Python shell, because I failed to open it: %s\n", strerror(errno));
 		exit(1);
 	}
 
 	// Find python libs on the initrd
 	int libfd = openat(initrd, "lib/python3.6", O_RDONLY);
 	if(libfd < 0) {
-		dprintf(stdout, "Won't run Python shell, because I failed to open the libdir: %s\n", strerror(errno));
+		fprintf(stderr, "Won't run Python shell, because I failed to open the libdir: %s\n", strerror(errno));
 		exit(1);
 	}
 
 	// Find cosix libs on the initrd
 	int clibfd = openat(initrd, "lib/cosix", O_RDONLY);
 	if(clibfd < 0) {
-		dprintf(stdout, "Won't run Python shell, because I failed to open the Cosix libdir: %s\n", strerror(errno));
+		fprintf(stderr, "Won't run Python shell, because I failed to open the Cosix libdir: %s\n", strerror(errno));
 		exit(1);
 	}
 
@@ -109,18 +106,18 @@ void program_main(const argdata_t *ad) {
 	}
 
 	std::unique_ptr<argdata_t> args_keys[] = {
-		argdata_t::create_str("socket"),
 		argdata_t::create_str("procfs"),
 		argdata_t::create_str("bootfs"),
 		argdata_t::create_str("tmpdir"),
-		argdata_t::create_str("networkd")
+		argdata_t::create_str("networkd"),
+		argdata_t::create_str("terminal"),
 	};
 	std::unique_ptr<argdata_t> args_values[] = {
-		argdata_t::create_fd(listensock),
 		argdata_t::create_fd(procfs),
 		argdata_t::create_fd(bootfs),
 		argdata_t::create_fd(tmpdir),
 		argdata_t::create_fd(networkd),
+		argdata_t::create_fd(terminal),
 	};
 	std::vector<argdata_t*> args_key_ptrs;
 	std::vector<argdata_t*> args_value_ptrs;
@@ -135,57 +132,32 @@ void program_main(const argdata_t *ad) {
 	std::string command = R"PYTHON(
 import io
 import sys
+import traceback
 from cosix import *
 
-print("Python shell started!")
-sys.stderr.flush()
+sys.stdout = sys.stderr
+sys.terminal = sys.argdata['terminal']
 
-class Output(io.IOBase):
-  def __init__(self, file):
-    self.file = file
-    self.sock = None
+try:
+  cons = SockConsole(sys.terminal, globals())
+  cons.runsource("from cosix import *", "<init>")
+  cons.interact()
+except TerminalClosedError:
+  pass
+except ConnectionError:
+  pass
+except Exception as e:
+  traceback.print_exc(file=sys.stderr)
 
-  def fileno(self):
-    return self.file.fileno()
-
-  def write(self, string):
-    self.file.write(string)
-    self.file.flush()
-    if self.sock is not None:
-      try:
-        self.sock.send(bytearray(string, "UTF-8"))
-      except Exception as e:
-        self.sock = None
-        self.write("Failed to write string to socket: " + str(e) + "\n")
-        raise
-
-listensock = sys.argdata['socket']
-output = Output(sys.stderr)
-sys.stdout = output
-sys.stderr = output
-while listensock:
-  (conn, address) = listensock.accept()
-  file = conn.makefile('w')
-  output.sock = conn
-  try:
-    cons = SockConsole(conn, globals())
-    cons.runsource("from cosix import *", "<init>")
-    cons.interact()
-  except SocketClosedError:
-    pass
-  except ConnectionError:
-    pass
-  except Exception as e:
-    output.write("Exception occurred: " + str(e) + "\n")
-  output.sock = None
-  conn.close()
+sys.stdout.flush()
+sys.terminal.flush()
 )PYTHON";
 
 	std::unique_ptr<argdata_t> keys[] =
 		{argdata_t::create_str("stderr"), argdata_t::create_str("path"),
 		argdata_t::create_str("args"), argdata_t::create_str("command")};
 	std::unique_ptr<argdata_t> values[] =
-		{argdata_t::create_fd(stdout), argdata_t::create_seq(path_ptrs),
+		{argdata_t::create_fd(terminal), argdata_t::create_seq(path_ptrs),
 		 argdata_t::create_map(args_key_ptrs, args_value_ptrs), argdata_t::create_str(command.c_str())};
 	std::vector<argdata_t*> key_ptrs;
 	std::vector<argdata_t*> value_ptrs;
@@ -199,6 +171,6 @@ while listensock:
 	auto python_ad = argdata_t::create_map(key_ptrs, value_ptrs);
 
 	int res = program_exec(bfd, python_ad.get());
-	dprintf(stdout, "Failed to spawn python: %s\n", strerror(res));
+	fprintf(stderr, "Failed to spawn python: %s\n", strerror(res));
 	exit(1);
 }
