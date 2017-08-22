@@ -65,6 +65,7 @@ add_external_binary(tcptest)
 add_external_binary(pythonshell)
 add_external_binary(httpd)
 add_external_binary(ircclient)
+add_external_binary(telnetd)
 
 set(CLOUDABI_UNITTEST_BINARY "" CACHE FILEPATH "Path to the CloudABI unittest binary, will be run by init if given")
 if(CLOUDABI_UNITTEST_BINARY AND BAREMETAL_ENABLED)

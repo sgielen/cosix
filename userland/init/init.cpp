@@ -137,7 +137,15 @@ void start_networkd() {
 	}
 }
 
-int start_networked_binary(const char *name, bool wait = true) {
+int start_networked_binary(const char *name, int port, bool wait = true) {
+	int new_ifstorefd = copy_ifstorefd();
+
+	int shellfd = openat(bootfs, "pythonshell", O_RDONLY);
+	if(shellfd < 0) {
+		fprintf(stderr, "Failed to open shell: %s\n", strerror(errno));
+		return 1;
+	}
+
 	int bfd = openat(bootfs, name, O_RDONLY);
 	if(bfd < 0) {
 		dprintf(stdout, "Failed to open %s: %s\n", name, strerror(errno));
@@ -161,13 +169,21 @@ int start_networked_binary(const char *name, bool wait = true) {
 		argdata_create_string("initrd"),
 		argdata_create_string("networkd"),
 		argdata_create_string("procfs"),
-		argdata_create_string("bootfs")};
+		argdata_create_string("bootfs"),
+		argdata_create_string("port"),
+		argdata_create_string("shell"),
+		argdata_create_string("ifstore"),
+	};
 	argdata_t *values[] = {argdata_create_fd(stdout),
 		argdata_create_fd(pseudofd),
 		argdata_create_fd(initrd),
 		argdata_create_fd(networkfd),
 		argdata_create_fd(procfs),
-		argdata_create_fd(bootfs)};
+		argdata_create_fd(bootfs),
+		argdata_create_int(port),
+		argdata_create_fd(shellfd),
+		argdata_create_fd(new_ifstorefd),
+	};
 	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 
 	if(wait) {
@@ -365,8 +381,9 @@ void program_main(const argdata_t *) {
 		clock_nanosleep(CLOCK_MONOTONIC, 0, &ts);
 	}
 
-	start_networked_binary("httpd", false);
 	run_pseudotest();
+	start_networked_binary("httpd", 80, false);
+	start_networked_binary("telnetd", 26, false);
 
 	int consolefd = openat(termstore, "console", O_RDWR | O_APPEND);
 	if(consolefd < 0) {
