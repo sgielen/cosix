@@ -411,7 +411,7 @@ cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping
 	do {
 		Blk blk = allocate(4096);
 		assert(blk.ptr != nullptr); // TODO: deallocate
-		size_t read = fd->read(blk.ptr, blk.size);
+		size_t read = fd->pread(blk.ptr, blk.size, total_size);
 		if(read == 0) {
 			deallocate(blk);
 			break;
@@ -426,7 +426,7 @@ cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping
 
 	if(fd->error != 0) {
 		// TODO: deallocate
-		return EINVAL;
+		return fd->error;
 	}
 
 	Blk elf_buffer_blk = allocate(total_size);
