@@ -103,6 +103,7 @@ void vga_buffer::putc(char c) {
 		} else {
 			--cursor_column;
 		}
+		putc_at(' ', color, cursor_column, cursor_row);
 		break;
 	case '\t':
 		while(cursor_column % 8) {
