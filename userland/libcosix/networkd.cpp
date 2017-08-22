@@ -1,5 +1,6 @@
 #include <cosix/networkd.hpp>
 
+#include <mstd/range.hpp>
 #include <argdata.hpp>
 #include <memory>
 #include <vector>
@@ -11,6 +12,7 @@
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <errno.h>
 
 static std::string strerrno() {
 	return strerror(errno);
@@ -76,7 +78,7 @@ int cosix::networkd::get_socket(int networkd, int type, std::string connect, std
 	for(auto i : response->as_map()) {
 		auto key = i.first->as_str();
 		if(key == "error") {
-			throw std::runtime_error("Failed to retrieve TCP socket from networkd: " + i.second->as_str().to_string());
+			throw std::runtime_error("Failed to retrieve TCP socket from networkd: " + std::string(i.second->as_str()));
 		} else if(key == "fd") {
 			fdnum = *i.second->get_fd();
 		}
