@@ -7,15 +7,11 @@ addons:
     - llvm-toolchain-trusty-4.0
     - sourceline: 'deb https://nuxi.nl/distfiles/cloudabi-ports/debian/ cloudabi cloudabi'
       key_url: 'https://pgp.mit.edu/pks/lookup?op=get&search=0x0DA51B8531344B15'
-    - sourceline: 'deb http://ppa.launchpad.net/adrozdoff/cmake/ubuntu trusty main'
-      key_url: 'http://keyserver.ubuntu.com:11371/pks/lookup?op=get&search=0x4B7E4B9010BBFE68'
     packages:
     - clang-4.0
     - lld-4.0
     - qemu-system-x86
     - apt-transport-https
-    - cmake-data
-    - cmake
     - i686-unknown-cloudabi-libircclient
     - i686-unknown-cloudabi-cxx-runtime
     - i686-unknown-cloudabi-python
@@ -47,6 +43,12 @@ before_install:
   - sudo ln -s ../lib/llvm-4.0/bin/clang /usr/bin/i686-unknown-cloudabi-cc
   - sudo ln -s ../lib/llvm-4.0/bin/clang /usr/bin/i686-unknown-cloudabi-c++
   - sudo ln -s ../../i686-unknown-cloudabi /usr/lib/llvm-4.0/i686-unknown-cloudabi
+
+  # install a recent enough version of cmake (need 3.8+)
+  - wget -Ocmake.sh https://cmake.org/files/v3.9/cmake-3.9.1-Linux-x86_64.sh
+  - chmod +x cmake.sh
+  - sudo ./cmake.sh --prefix=/usr --skip-license
+  - cmake --version
 before_script:
   - mkdir build && cd build
 script:
