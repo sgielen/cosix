@@ -12,8 +12,9 @@ addons:
     - lld-4.0
     - qemu-system-x86
     - apt-transport-https
-    - i686-unknown-cloudabi-libircclient
     - i686-unknown-cloudabi-cxx-runtime
+    - i686-unknown-cloudabi-libircclient
+    - i686-unknown-cloudabi-mstd
     - i686-unknown-cloudabi-python
 notifications:
   irc:

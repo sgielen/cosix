@@ -37,8 +37,9 @@ dependencies:
   installation, you'll have Clang in your path as i686-unknown-cloudabi-cc.
 - At least the following CloudABI ports packages:
   - `i686-unknown-cloudabi-cxx-runtime`
-  - `i686-unknown-cloudabi-python`
   - `i686-unknown-cloudabi-libircclient`
+  - `i686-unknown-cloudabi-mstd`
+  - `i686-unknown-cloudabi-python`
 
 Other compile flags to use:
 
