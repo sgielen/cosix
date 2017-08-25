@@ -122,7 +122,7 @@ def run_unittests():
 
   binfd = os.open("unittests", os.O_RDONLY, dir_fd=sys.argdata['bootfs'])
   procfd = os.program_spawn(binfd,
-    {'logfile': this_conn(),
+    {'logfile': sys.argdata['terminal'],
      'tmpdir': FDWrapper(dirfd),
      'nthreads': 1,
     })
