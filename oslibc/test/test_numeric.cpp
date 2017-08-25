@@ -2,7 +2,7 @@
 #include <string>
 #include <catch.hpp>
 
-TEST_CASE() {
+TEST_CASE("itoa") {
 	char buf[65];
 
 	/* positive values */
@@ -83,4 +83,143 @@ TEST_CASE() {
 	REQUIRE(i64toa_s(1, nullptr, 2, 2) == nullptr);
 	REQUIRE(i64toa_s(1, buf, 2, 0) == nullptr);
 	REQUIRE(i64toa_s(1, buf, 2, 37) == nullptr);
+}
+
+TEST_CASE("atoi") {
+	int32_t res32 = -1;
+	int64_t res64 = -1;
+
+	/* empty or incomplete string */
+	REQUIRE(!atoi_s("", &res32, 10));
+	REQUIRE(!atoi64_s("", &res64, 10));
+	REQUIRE(!atoi_s("-", &res32, 16));
+	REQUIRE(!atoi64_s("-", &res64, 16));
+
+	/* positive values */
+	REQUIRE(atoi_s("0", &res32, 2));
+	REQUIRE(res32 == 0);
+	REQUIRE(atoi64_s("0", &res64, 8));
+	REQUIRE(res64 == 0);
+	REQUIRE(atoi_s("0", &res32, 10));
+	REQUIRE(res32 == 0);
+	REQUIRE(atoi64_s("0", &res64, 16));
+	REQUIRE(res64 == 0);
+	REQUIRE(atoi_s("0", &res32, 32));
+	REQUIRE(res32 == 0);
+
+	REQUIRE(atoi_s("1", &res32, 2));
+	REQUIRE(res32 == 1);
+	REQUIRE(atoi64_s("1", &res64, 8));
+	REQUIRE(res64 == 1);
+	REQUIRE(atoi_s("1", &res32, 10));
+	REQUIRE(res32 == 1);
+	REQUIRE(atoi64_s("1", &res64, 16));
+	REQUIRE(res64 == 1);
+	REQUIRE(atoi_s("1", &res32, 32));
+	REQUIRE(res32 == 1);
+
+	REQUIRE(atoi_s("10", &res32, 2));
+	REQUIRE(res32 == 2);
+	REQUIRE(atoi64_s("2", &res64, 8));
+	REQUIRE(res64 == 2);
+	REQUIRE(atoi_s("2", &res32, 10));
+	REQUIRE(res32 == 2);
+	REQUIRE(atoi64_s("2", &res64, 16));
+	REQUIRE(res64 == 2);
+	REQUIRE(atoi_s("2", &res32, 32));
+	REQUIRE(res32 == 2);
+
+	REQUIRE(atoi_s("1010", &res32, 2));
+	REQUIRE(res32 == 10);
+	REQUIRE(atoi64_s("12", &res64, 8));
+	REQUIRE(res64 == 10);
+	REQUIRE(atoi_s("10", &res32, 10));
+	REQUIRE(res32 == 10);
+	REQUIRE(atoi64_s("a", &res64, 16));
+	REQUIRE(res64 == 10);
+	REQUIRE(atoi_s("A", &res32, 32));
+	REQUIRE(res32 == 10);
+
+	REQUIRE(atoi_s("100011", &res32, 2));
+	REQUIRE(res32 == 35);
+	REQUIRE(atoi64_s("43", &res64, 8));
+	REQUIRE(res64 == 35);
+	REQUIRE(atoi_s("35", &res32, 10));
+	REQUIRE(res32 == 35);
+	REQUIRE(atoi64_s("23", &res64, 16));
+	REQUIRE(res64 == 35);
+	REQUIRE(atoi_s("z", &res32, 36));
+	REQUIRE(res32 == 35);
+
+	REQUIRE(atoi_s("111000100", &res32, 2));
+	REQUIRE(res32 == 452);
+	REQUIRE(atoi64_s("704", &res64, 8));
+	REQUIRE(res64 == 452);
+	REQUIRE(atoi_s("452", &res32, 10));
+	REQUIRE(res32 == 452);
+	REQUIRE(atoi64_s("1c4", &res64, 16));
+	REQUIRE(res64 == 452);
+	REQUIRE(atoi_s("E4", &res32, 32));
+	REQUIRE(res32 == 452);
+
+	/* negative values */
+	REQUIRE(atoi_s("-1", &res32, 2));
+	REQUIRE(res32 == -1);
+	REQUIRE(atoi64_s("-1", &res64, 8));
+	REQUIRE(res64 == -1);
+	REQUIRE(atoi_s("-1", &res32, 10));
+	REQUIRE(res32 == -1);
+	REQUIRE(atoi64_s("-1", &res64, 16));
+	REQUIRE(res64 == -1);
+	REQUIRE(atoi_s("-1", &res32, 32));
+	REQUIRE(res32 == -1);
+
+	REQUIRE(atoi_s("-10", &res32, 2));
+	REQUIRE(res32 == -2);
+	REQUIRE(atoi64_s("-2", &res64, 8));
+	REQUIRE(res64 == -2);
+	REQUIRE(atoi_s("-2", &res32, 10));
+	REQUIRE(res32 == -2);
+	REQUIRE(atoi64_s("-2", &res64, 16));
+	REQUIRE(res64 == -2);
+	REQUIRE(atoi_s("-2", &res32, 32));
+	REQUIRE(res32 == -2);
+
+	REQUIRE(atoi_s("-111000100", &res32, 2));
+	REQUIRE(res32 == -452);
+	REQUIRE(atoi64_s("-704", &res64, 8));
+	REQUIRE(res64 == -452);
+	REQUIRE(atoi_s("-452", &res32, 10));
+	REQUIRE(res32 == -452);
+	REQUIRE(atoi64_s("-1C4", &res64, 16));
+	REQUIRE(res64 == -452);
+	REQUIRE(atoi_s("-e4", &res32, 32));
+	REQUIRE(res32 == -452);
+
+	/* values that don't fit */
+	REQUIRE(atoi_s("7fffffff", &res32, 16));
+	REQUIRE(res32 == 0x7fffffff);
+	REQUIRE(!atoi_s("80000000", &res32, 16));
+	REQUIRE(atoi64_s("7fffffffffffffff", &res64, 16));
+	REQUIRE(res64 == 0x7fffffffffffffff);
+	REQUIRE(!atoi64_s("8000000000000000", &res64, 16));
+	REQUIRE(atoi_s("-7fffffff", &res32, 16));
+	REQUIRE(res32 == -0x7fffffff);
+	REQUIRE(!atoi_s("-80000000", &res32, 16));
+	REQUIRE(atoi64_s("-7fffffffffffffff", &res64, 16));
+	REQUIRE(res64 == -0x7fffffffffffffff);
+	REQUIRE(!atoi64_s("-8000000000000000", &res64, 16));
+
+	/* values that don't exist in base */
+	REQUIRE(!atoi_s("a", &res32, 10));
+	REQUIRE(!atoi64_s("5a", &res64, 10));
+	REQUIRE(!atoi_s("!", &res32, 16));
+	REQUIRE(!atoi64_s("5!", &res64, 16));
+	REQUIRE(!atoi_s("g", &res32, 16));
+	REQUIRE(!atoi64_s("5g", &res64, 16));
+
+	/* incorrect format */
+	REQUIRE(!atoi_s("--1", &res32, 10));
+	REQUIRE(!atoi64_s("1 2", &res64, 10));
+	REQUIRE(!atoi64_s("1.2", &res64, 10));
 }
