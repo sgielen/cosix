@@ -227,8 +227,8 @@ void rm_rf_contents(DIR *d) {
 	}
 }
 
-void open_pseudo() {
-	auto pseudopair = cosix::open_pseudo(ifstore, CLOUDABI_FILETYPE_SOCKET_STREAM);
+static void open_tmpfs_pseudo() {
+	auto pseudopair = cosix::open_pseudo(ifstore, CLOUDABI_FILETYPE_DIRECTORY);
 	reversefd = pseudopair.first;
 	pseudofd = pseudopair.second;
 	cloudabi_fdstat_t fsb = {
@@ -371,7 +371,7 @@ void program_main(const argdata_t *) {
 	setvbuf(out, nullptr, _IONBF, BUFSIZ);
 	fswap(stderr, out);
 
-	open_pseudo();
+	open_tmpfs_pseudo();
 	start_tmpfs();
 	start_networkd();
 

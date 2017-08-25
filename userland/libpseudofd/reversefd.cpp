@@ -271,8 +271,7 @@ void cosix::pseudo_fd_becomes_readable(int reversefd, pseudofd_t pseudo) {
 }
 
 std::pair<int, int> cosix::open_pseudo(int ifstore, cloudabi_filetype_t type) {
-	std::string message = "PSEUDOPAIR ";
-	message += (type == CLOUDABI_FILETYPE_SOCKET_DGRAM ? "SOCKET_DGRAM" : "SOCKET_STREAM");
+	std::string message = "PSEUDOPAIR " + std::to_string(int(type));
 	write(ifstore, message.c_str(), message.size());
 	char buf[20];
 	buf[0] = 0;
