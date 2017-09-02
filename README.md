@@ -40,6 +40,7 @@ dependencies:
   - `i686-unknown-cloudabi-libircclient`
   - `i686-unknown-cloudabi-mstd`
   - `i686-unknown-cloudabi-python`
+  - `i686-unknown-cloudabi-flower`
 
 Other compile flags to use:
 
@@ -47,6 +48,8 @@ Other compile flags to use:
   cannot be built without CloudABI Python, so the `make boot` target cannot
   be run without this. Use the two flags, with absolute directories to the
   Python3 binary and its libraries, to be able to boot.
+- `-DCLOUDABI_FLOWER_SWITCHBOARD_BINARY`. As above, this is a necessary
+  dependency to run Cosix.
 - `-DCLOUDABI_UNITTEST_BINARY` can be pointed at the unittest binary of
   cloudlibc, so you can run it by entering `run_unittests()` at the Python
   shell. Note that because not all system calls are (fully) implemented, the

@@ -12,7 +12,11 @@ add_sane_warning_flags()
 add_subdirectory(../libpseudofd libpseudofd)
 add_subdirectory(../libcosix libcosix)
 
-add_executable(init init.cpp)
-target_link_libraries(init cosix pseudofd)
+include(../../cmake/aprotoc.cmake)
+add_aprotoc(../flower_test/configuration)
+
+add_executable(init init.cpp ../flower_test/configuration.ad.h)
+target_include_directories(init SYSTEM PRIVATE ${CMAKE_BINARY_DIR}/..)
+target_link_libraries(init cosix pseudofd arpc)
 
 install(TARGETS init RUNTIME DESTINATION bin)

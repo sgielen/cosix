@@ -16,6 +16,7 @@ addons:
     - i686-unknown-cloudabi-libircclient
     - i686-unknown-cloudabi-mstd
     - i686-unknown-cloudabi-python
+    - i686-unknown-cloudabi-flower
 notifications:
   irc:
     channels:

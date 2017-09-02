@@ -55,5 +55,6 @@ void program_main(const argdata_t *) {
 		}
 	}
 
+	pthread_join(thread, nullptr);
 	pthread_exit(NULL);
 }

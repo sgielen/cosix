@@ -23,6 +23,9 @@
 #include <cosix/networkd.hpp>
 #include <cosix/reverse.hpp>
 
+#include <flower/switchboard/configuration.ad.h>
+#include <flower_test/configuration.ad.h>
+
 int stdout;
 int procfs;
 int bootfs;
@@ -31,6 +34,8 @@ int reversefd;
 int pseudofd;
 int ifstore;
 int termstore;
+
+using namespace arpc;
 
 long uptime() {
 	int uptimefd = openat(procfs, "kernel/uptime", O_RDONLY);
@@ -53,7 +58,7 @@ argdata_t *argdata_create_string(const char *value) {
 	return argdata_create_str(value, strlen(value));
 }
 
-int program_run(const char *name, int bfd, argdata_t *ad) {
+int program_run(const char *name, int bfd, argdata_t const *ad) {
 	int pfd = program_spawn(bfd, ad);
 	if(pfd < 0) {
 		dprintf(stdout, "INIT: %s failed to start: %s\n", name, strerror(errno));
@@ -373,6 +378,73 @@ void program_main(const argdata_t *) {
 
 	open_tmpfs_pseudo();
 	start_tmpfs();
+
+	int listenfd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if(listenfd < 0) {
+		perror("socket");
+		exit(1);
+	}
+	if(bindat(listenfd, pseudofd, "switchboard") < 0) {
+		perror("bindat");
+		exit(1);
+	}
+	if(listen(listenfd, SOMAXCONN) < 0) {
+		perror("listen");
+		exit(1);
+	}
+
+	{
+		auto listening_socket = std::make_shared<FileDescriptor>(listenfd);
+		auto logger_output = std::make_shared<FileDescriptor>(dup(stdout));
+
+		flower::switchboard::Configuration flowerconf;
+		flowerconf.set_listening_socket(listening_socket);
+		flowerconf.set_logger_output(logger_output);
+		flowerconf.set_worker_pool_size(1);
+
+		int bfd = openat(initrd, "bin/flower_switchboard", O_RDONLY);
+		if(bfd < 0) {
+			dprintf(stdout, "Can't run Flower switchboard, because it failed to open: %s\n", strerror(errno));
+			exit(1);
+		}
+		dprintf(stdout, "Running Flower switchboard...\n");
+		arpc::ArgdataBuilder builder;
+		int pfd = program_spawn(bfd, flowerconf.Build(&builder));
+		if(pfd < 0) {
+			dprintf(stdout, "Switchboard failed to spawn: %s\n", strerror(errno));
+			exit(1);
+		} else {
+			dprintf(stdout, "Switchboard spawned, fd: %d\n", pfd);
+		}
+	}
+
+	{
+		int sb = socket(AF_UNIX, SOCK_STREAM, 0);
+		if(sb < 0) {
+			perror("socket");
+			exit(1);
+		}
+		if(connectat(sb, pseudofd, "switchboard") < 0) {
+			perror("connectat");
+			exit(1);
+		}
+
+		auto switchboard_socket = std::make_shared<FileDescriptor>(sb);
+		auto logger_output = std::make_shared<FileDescriptor>(dup(stdout));
+
+		cosix::flower_test::Configuration testconf;
+		testconf.set_switchboard_socket(switchboard_socket);
+		testconf.set_logger_output(logger_output);
+
+		int bfd = openat(bootfs, "flower_test", O_RDONLY);
+		if(bfd < 0) {
+			dprintf(stdout, "Failed to run flower_test, because it failed to open: %s\n", strerror(errno));
+			exit(1);
+		}
+		arpc::ArgdataBuilder builder;
+		program_run("flower_test", bfd, testconf.Build(&builder));
+	}
+
 	start_networkd();
 
 	// sleep for a bit for networkd to come up
