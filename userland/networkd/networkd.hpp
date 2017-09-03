@@ -25,6 +25,7 @@ int get_raw_socket(std::string iface);
 std::vector<std::string> get_addr_v4(std::string iface);
 // ip is packed
 void add_addr_v4(std::string iface, std::string ip, int cidr_prefix);
+void start_dhclient(std::string iface);
 
 /* reverse, pseudo */
 std::pair<int, int> open_pseudo(cloudabi_filetype_t);

@@ -157,6 +157,13 @@ cloudabi_errno_t interface::send_frame(std::vector<iovec> iov) {
 void interface::run() {
 	std::shared_ptr<interface> that = shared_from_this();
 	assert(that != nullptr);
+
+	if(hwtype == "ETHERNET") {
+		start_dhclient(name);
+	} else if(hwtype == "LOOPBACK") {
+		add_addr_v4(name, ipv4_pton("127.0.0.1"), 8);
+	}
+
 	while(rawsock >= 0) {
 		// TODO: get MTU for interface instead of hardcoding
 		const int mtu = 1500;

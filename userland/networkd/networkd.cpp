@@ -21,13 +21,45 @@
 #include "ip.hpp"
 #include "udp_socket.hpp"
 
+#include <arpc++/arpc++.h>
+#include <cosix/networkd.hpp>
+#include <flower/protocol/server.ad.h>
+#include <flower/protocol/switchboard.ad.h>
+
+using namespace arpc;
+using namespace flower::protocol::server;
+using namespace flower::protocol::switchboard;
+
 int stdout;
 int bootfs;
 int rootfs;
 int ifstore;
+int switchboard;
 std::mutex ifstore_mtx;
 
+Switchboard::Stub *switchboard_stub = nullptr;
+
 using namespace networkd;
+
+class ConnectionExtractor : public flower::protocol::server::Server::Service {
+public:
+	virtual ~ConnectionExtractor() {}
+
+	Status Connect(ServerContext*, const ConnectRequest *request, ConnectResponse*) override {
+		incoming_connection_ = *request;
+		return Status::OK;
+	}
+
+	std::optional<ConnectRequest> GetIncomingConnection() {
+		std::optional<ConnectRequest> result;
+		result.swap(incoming_connection_);
+		return result;
+	}
+
+private:
+	std::optional<ConnectRequest> incoming_connection_;
+};
+
 
 std::string send_ifstore_command(std::string command) {
 	std::lock_guard<std::mutex> lock(ifstore_mtx);
@@ -196,15 +228,7 @@ void start_dhclient(std::string iface) {
 		return;
 	}
 
-	int networkfd = socket(AF_UNIX, SOCK_STREAM, 0);
-	if(networkfd < 0) {
-		perror("networkfd");
-		exit(1);
-	}
-	if(connectat(networkfd, rootfs, "networkd") < 0) {
-		perror("connect");
-		exit(1);
-	}
+	int networkfd = cosix::networkd::open(switchboard_stub);
 
 	argdata_t *keys[] = {argdata_create_str_c("stdout"), argdata_create_str_c("networkd"), argdata_create_str_c("interface")};
 	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(networkfd), argdata_create_str_c(iface.c_str())};
@@ -280,6 +304,8 @@ void program_main(const argdata_t *ad) {
 			argdata_get_fd(value, &rootfs);
 		} else if(strcmp(keystr, "ifstore") == 0) {
 			argdata_get_fd(value, &ifstore);
+		} else if(strcmp(keystr, "switchboard_socket") == 0) {
+			argdata_get_fd(value, &switchboard);
 		}
 		argdata_map_next(&it);
 	}
@@ -289,19 +315,31 @@ void program_main(const argdata_t *ad) {
 	setvbuf(out, nullptr, _IONBF, BUFSIZ);
 	fswap(stderr, out);
 
-	int listenfd = socket(AF_UNIX, SOCK_STREAM, 0);
-	if(listenfd < 0) {
-		perror("socket");
+	auto channel = CreateChannel(std::make_shared<FileDescriptor>(dup(switchboard)));
+	auto stub = Switchboard::NewStub(channel);
+	switchboard_stub = stub.get();
+
+	ClientContext context;
+	ServerStartRequest request;
+	auto in_labels = request.mutable_in_labels();
+	(*in_labels)["scope"] = "root";
+	(*in_labels)["service"] = "networkd";
+	ServerStartResponse response;
+
+	if(Status status = stub->ServerStart(&context, request, &response); !status.ok()) {
+		dprintf(stdout, "Failed to start server in switchboard: %s\n", status.error_message().c_str());
 		exit(1);
 	}
-	if(bindat(listenfd, rootfs, "networkd") < 0) {
-		perror("bindat");
+
+	if(!response.server()) {
+		dprintf(stdout, "Switchboard did not return a server\n");
 		exit(1);
 	}
-	if(listen(listenfd, SOMAXCONN) < 0) {
-		perror("listen");
-		exit(1);
-	}
+
+	ServerBuilder builder(response.server());
+	ConnectionExtractor connection_extractor;
+	builder.RegisterService(&connection_extractor);
+	auto server = builder.Build();
 
 	dump_interfaces();
 	for(auto &iface : get_ifstore_interfaces()) {
@@ -317,22 +355,27 @@ void program_main(const argdata_t *ad) {
 		auto interface = std::make_shared<networkd::interface>(iface, mac_pton(mac), hwtype, rawsock);
 		interfaces[iface] = interface;
 		interface->start();
-
-		if(hwtype == "ETHERNET") {
-			start_dhclient(iface);
-		} else if(hwtype == "LOOPBACK") {
-			add_addr_v4(iface, ipv4_pton("127.0.0.1"), 8);
-		}
 	}
 
 	while(1) {
-		int client = accept(listenfd, NULL, NULL);
-		if(client < 0) {
-			perror("accept");
+		if(server->HandleRequest() != 0) {
+			dprintf(stdout, "Networkd: HandleRequest failed\n");
 			exit(1);
 		}
-		std::thread clientthread([client](){
-			networkd::client c(stdout, client);
+		auto connect_request = connection_extractor.GetIncomingConnection();
+		if(!connect_request) {
+			dprintf(stdout, "Networkd: No incoming connection\n");
+			exit(1);
+		}
+
+		auto connection = connect_request->client();
+		if(!connection) {
+			dprintf(stdout, "Networkd: switchboard did not return a connection\n");
+			exit(1);
+		}
+
+		std::thread clientthread([connection](){
+			networkd::client c(stdout, connection);
 			c.run();
 		});
 		clientthread.detach();

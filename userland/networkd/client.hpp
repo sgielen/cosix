@@ -2,11 +2,14 @@
 #include <string>
 #include <argdata.h>
 
+namespace arpc {
+struct FileDescriptor;
+}
+
 namespace networkd {
 
 struct client {
-	client(int logfd, int fd);
-	~client();
+	client(int logfd, std::shared_ptr<arpc::FileDescriptor> clientfd);
 
 	void run();
 
@@ -15,7 +18,7 @@ private:
 	bool send_error(std::string error);
 
 	int logfd;
-	int fd;
+	std::shared_ptr<arpc::FileDescriptor> fd;
 };
 
 }

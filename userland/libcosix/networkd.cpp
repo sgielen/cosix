@@ -14,19 +14,42 @@
 #include <unistd.h>
 #include <errno.h>
 
+#include <flower/protocol/switchboard.ad.h>
+
+using namespace arpc;
+using namespace flower::protocol::switchboard;
+
 static std::string strerrno() {
 	return strerror(errno);
 }
 
-int cosix::networkd::open(int rootfd) {
-	int networkd = socket(AF_UNIX, SOCK_STREAM, 0);
-	if(networkd < 0) {
-		throw std::runtime_error("networkfd failed: " + strerrno());
+int cosix::networkd::open(int switchboard) {
+	return open(std::make_shared<FileDescriptor>(dup(switchboard)));
+}
+
+int cosix::networkd::open(std::shared_ptr<FileDescriptor> switchboard) {
+	auto channel = CreateChannel(switchboard);
+	auto stub = Switchboard::NewStub(channel);
+	return open(stub.get());
+}
+
+int cosix::networkd::open(Switchboard::Stub *switchboard) {
+	ClientContext context;
+	ClientConnectRequest request;
+	auto out_labels = request.mutable_out_labels();
+	(*out_labels)["scope"] = "root";
+	(*out_labels)["service"] = "networkd";
+	ClientConnectResponse response;
+	if (Status status = switchboard->ClientConnect(&context, request, &response); !status.ok()) {
+		throw std::runtime_error("Failed to connect to networkd");
 	}
-	if(connectat(networkd, rootfd, "networkd") < 0) {
-		throw std::runtime_error("networkfd failed: " + strerrno());
+
+	auto connection = response.server();
+	if(!connection) {
+		throw std::runtime_error("Switchboard did not return a connection");
 	}
-	return networkd;
+
+	return dup(connection->get());
 }
 
 int cosix::networkd::get_socket(int networkd, int type, std::string connect, std::string bind) {

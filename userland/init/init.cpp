@@ -26,6 +26,8 @@
 #include <flower/switchboard/configuration.ad.h>
 #include <flower_test/configuration.ad.h>
 
+using namespace arpc;
+
 int stdout;
 int procfs;
 int bootfs;
@@ -34,8 +36,7 @@ int reversefd;
 int pseudofd;
 int ifstore;
 int termstore;
-
-using namespace arpc;
+std::shared_ptr<FileDescriptor> flower_switchboard;
 
 long uptime() {
 	int uptimefd = openat(procfs, "kernel/uptime", O_RDONLY);
@@ -120,8 +121,37 @@ int copy_ifstorefd() {
 	return fdbuf[0];
 }
 
+std::shared_ptr<FileDescriptor> copy_switchboard() {
+	using namespace flower::protocol::switchboard;
+
+	auto channel = CreateChannel(flower_switchboard);
+	auto stub = Switchboard::NewStub(channel);
+	ClientContext context;
+	ConstrainRequest request;
+	// TODO: add a safer way to add all rights
+	for(size_t i = Right_MIN; i <= Right_MAX; ++i) {
+		Right r;
+		if(Right_IsValid(i) && Right_Parse(Right_Name(i), &r)) {
+			request.add_rights(r);
+		}
+	}
+	ConstrainResponse response;
+	if (Status status = stub->Constrain(&context, request, &response); !status.ok()) {
+		dprintf(stdout, "init: Failed to constrain switchboard socket: %s\n", status.error_message().c_str());
+		exit(1);
+	}
+
+	auto connection = response.switchboard();
+	if(!connection) {
+		dprintf(stdout, "init: switchboard did not return a connection\n");
+		exit(1);
+	}
+	return connection;
+}
+
 void start_networkd() {
 	int new_ifstorefd = copy_ifstorefd();
+	auto switchboard = copy_switchboard();
 
 	int bfd = openat(bootfs, "networkd", O_RDONLY);
 	if(bfd < 0) {
@@ -130,8 +160,8 @@ void start_networkd() {
 	}
 
 	dprintf(stdout, "Running networkd...\n");
-	argdata_t *keys[] = {argdata_create_string("stdout"), argdata_create_string("rootfs"), argdata_create_string("bootfs"), argdata_create_string("ifstore")};
-	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(pseudofd), argdata_create_fd(bootfs), argdata_create_fd(new_ifstorefd)};
+	argdata_t *keys[] = {argdata_create_string("stdout"), argdata_create_string("rootfs"), argdata_create_string("bootfs"), argdata_create_string("ifstore"), argdata_create_string("switchboard_socket")};
+	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(pseudofd), argdata_create_fd(bootfs), argdata_create_fd(new_ifstorefd), argdata_create_fd(switchboard->get())};
 	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 
 	int pfd = program_spawn(bfd, ad);
@@ -159,15 +189,7 @@ int start_networked_binary(const char *name, int port, bool wait = true) {
 
 	dprintf(stdout, "Init going to program_spawn() %s...\n", name);
 
-	int networkfd = socket(AF_UNIX, SOCK_STREAM, 0);
-	if(networkfd < 0) {
-		perror("networkfd");
-		exit(1);
-	}
-	if(connectat(networkfd, pseudofd, "networkd") < 0) {
-		perror("connect");
-		exit(1);
-	}
+	int networkfd = cosix::networkd::open(flower_switchboard);
 
 	argdata_t *keys[] = {argdata_create_string("stdout"),
 		argdata_create_string("tmpdir"),
@@ -317,7 +339,7 @@ void run_pseudotest() {
 }
 
 void run_ircclient(int consolefd) {
-	int networkd = cosix::networkd::open(pseudofd);
+	int networkd = cosix::networkd::open(flower_switchboard);
 	//int ircd = cosix::networkd::get_socket(networkd, SOCK_STREAM, "138.201.39.100:6667", ""); // kassala
 	//int ircd = cosix::networkd::get_socket(networkd, SOCK_STREAM, "193.163.220.3:6667", ""); // efnet
 	int ircd = cosix::networkd::get_socket(networkd, SOCK_STREAM, "71.11.84.232:6667", ""); // freenode
@@ -343,7 +365,7 @@ void run_pythonshell(int consolefd) {
 		exit(1);
 	}
 
-	int networkd = cosix::networkd::open(pseudofd);
+	int networkd = cosix::networkd::open(flower_switchboard);
 	argdata_t *keys[] = {argdata_create_string("terminal"),
 		argdata_create_string("networkd"),
 		argdata_create_string("procfs"),
@@ -400,7 +422,7 @@ void program_main(const argdata_t *) {
 		flower::switchboard::Configuration flowerconf;
 		flowerconf.set_listening_socket(listening_socket);
 		flowerconf.set_logger_output(logger_output);
-		flowerconf.set_worker_pool_size(1);
+		flowerconf.set_worker_pool_size(16);
 
 		int bfd = openat(initrd, "bin/flower_switchboard", O_RDONLY);
 		if(bfd < 0) {
@@ -428,12 +450,14 @@ void program_main(const argdata_t *) {
 			perror("connectat");
 			exit(1);
 		}
+		flower_switchboard = std::make_shared<FileDescriptor>(sb);
+	}
 
-		auto switchboard_socket = std::make_shared<FileDescriptor>(sb);
+	{
 		auto logger_output = std::make_shared<FileDescriptor>(dup(stdout));
 
 		cosix::flower_test::Configuration testconf;
-		testconf.set_switchboard_socket(switchboard_socket);
+		testconf.set_switchboard_socket(copy_switchboard());
 		testconf.set_logger_output(logger_output);
 
 		int bfd = openat(bootfs, "flower_test", O_RDONLY);

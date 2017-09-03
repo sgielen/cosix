@@ -21,6 +21,7 @@ using namespace flower::protocol::server;
 using namespace flower::protocol::switchboard;
 
 int stdout;
+uint32_t instance;
 std::shared_ptr<FileDescriptor> switchboard;
 std::mutex mtx;
 std::condition_variable cv;
@@ -44,19 +45,22 @@ private:
 	std::optional<ConnectRequest> incoming_connection_;
 };
 
-void *thread_handler(void *) {
+void *thread_handler(void *sbstub) {
 	dprintf(stdout, "Serving thread started\n");
 	std::unique_lock<std::mutex> lock(mtx);
 
-	auto channel = CreateChannel(switchboard);
-	auto stub = Switchboard::NewStub(channel);
+	auto *stub = reinterpret_cast<Switchboard::Stub*>(sbstub);
 
 	ClientContext context;
 	ServerStartRequest request;
+	auto in_labels = request.mutable_in_labels();
+	(*in_labels)["scope"] = "test";
+	(*in_labels)["service"] = "flower_test";
+	(*in_labels)["instance"] = std::to_string(instance);
 	ServerStartResponse response;
 
 	if(Status status = stub->ServerStart(&context, request, &response); !status.ok()) {
-		dprintf(stdout, "Failed to start server in switchboard\n");
+		dprintf(stdout, "Failed to start server in switchboard: %s\n", status.error_message().c_str());
 		exit(1);
 	}
 
@@ -124,17 +128,24 @@ void program_main(const argdata_t *ad) {
 	dprintf(stdout, "This is flower_test\n");
 
 	std::unique_lock<std::mutex> lock(mtx);
+
+	instance = arc4random();
+	auto channel = CreateChannel(switchboard);
+	auto stub = Switchboard::NewStub(channel);
+
 	pthread_t thread;
-	pthread_create(&thread, nullptr, thread_handler, nullptr);
+	pthread_create(&thread, nullptr, thread_handler, stub.get());
 
 	// Wait until server is created
 	cv.wait(lock);
 
 	// Connect to the thread via the switchboard
-	auto channel = CreateChannel(switchboard);
-	auto stub = Switchboard::NewStub(channel);
 	ClientContext context;
 	ClientConnectRequest request;
+	auto out_labels = request.mutable_out_labels();
+	(*out_labels)["scope"] = "test";
+	(*out_labels)["service"] = "flower_test";
+	(*out_labels)["instance"] = std::to_string(instance);
 	ClientConnectResponse response;
 	if (Status status = stub->ClientConnect(&context, request, &response); !status.ok()) {
 		dprintf(stdout, "flower_test failed to connect\n");

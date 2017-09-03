@@ -10,17 +10,14 @@
 #include "ip.hpp"
 #include "routing_table.hpp"
 
+#include <arpc++/arpc++.h>
+
 using namespace networkd;
 
-client::client(int l, int f)
+client::client(int l, std::shared_ptr<arpc::FileDescriptor> f)
 : logfd(l)
 , fd(f)
 {
-}
-
-client::~client()
-{
-	close(fd);
 }
 
 bool client::send_response(argdata_t *response) {
@@ -51,7 +48,7 @@ bool client::send_response(argdata_t *response) {
 	for(size_t i = 0; i < fdlen; ++i) {
 		fdbuf[i] = fds[i];
 	}
-	if(sendmsg(fd, &message, 0) != static_cast<ssize_t>(reslen)) {
+	if(sendmsg(fd->get(), &message, 0) != static_cast<ssize_t>(reslen)) {
 		perror("sendmsg");
 		free(iov.iov_base);
 		free(fds);
@@ -79,7 +76,7 @@ void client::run() {
 		char buf[200];
 		// TODO: set non-blocking flag once kernel supports it
 		// this way, we can read until EOF instead of only 200 bytes
-		ssize_t size = read(fd, buf, sizeof(buf));
+		ssize_t size = read(fd->get(), buf, sizeof(buf));
 		if(size < 0) {
 			perror("read");
 			return;
@@ -476,7 +473,7 @@ void client::run() {
 			}
 		}
 	} catch(std::exception &e) {
-		dprintf(logfd, "*** Uncaught exception in client interface with fd %d\n", fd);
+		dprintf(logfd, "*** Uncaught exception in client interface with fd %d\n", fd->get());
 		dprintf(logfd, "*** Error: \"%s\"\n", e.what());
 	}
 }

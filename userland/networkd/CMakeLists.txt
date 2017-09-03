@@ -10,6 +10,7 @@ include(../../wubwubcmake/warning_settings.cmake)
 add_sane_warning_flags()
 
 add_subdirectory(../libpseudofd libpseudofd)
+add_subdirectory(../libcosix libcosix)
 
 add_executable(networkd
 	networkd.cpp networkd.hpp
@@ -23,6 +24,6 @@ add_executable(networkd
 	tcp_socket.hpp tcp_socket.cpp
 	udp_socket.hpp udp_socket.cpp
 )
-target_link_libraries(networkd pseudofd)
+target_link_libraries(networkd pseudofd cosix arpc)
 
 install(TARGETS networkd RUNTIME DESTINATION bin)
