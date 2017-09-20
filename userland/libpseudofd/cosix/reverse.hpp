@@ -20,6 +20,8 @@ char *handle_request(reverse_request_t *request, char *buf, reverse_response_t *
 cloudabi_errno_t wait_for_request(int reversefd, cloudabi_timestamp_t poll_timeout);
 char *read_request(int reversefd, reverse_request_t *request);
 void write_response(int reversefd, reverse_response_t *response, char *buf);
+// these functions return EAGAIN when the timeout passed without handling any request,
+// 0 if a request was successfully handled, or an error otherwise.
 cloudabi_errno_t handle_request(int reversefd, reverse_handler *h, cloudabi_timestamp_t poll_timeout = 0);
 cloudabi_errno_t handle_request(int reversefd, reverse_handler *h, std::mutex&, cloudabi_timestamp_t poll_timeout = 0);
 void handle_requests(int reversefd, reverse_handler *h);

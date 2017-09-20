@@ -9,8 +9,8 @@ using namespace networkd;
 
 #define MAX_UDP_PACKETS 64
 
-udp_socket::udp_socket(std::string l_ip, uint16_t l_p, std::string p_ip, uint16_t p_p, pseudofd_t ps, int r)
-: ip_socket(transport_proto::udp, l_ip, l_p, p_ip, p_p, ps, r)
+udp_socket::udp_socket(std::string l_ip, uint16_t l_p, std::string p_ip, uint16_t p_p, int r)
+: ip_socket(transport_proto::udp, l_ip, l_p, p_ip, p_p, r)
 {
 }
 
@@ -53,24 +53,9 @@ bool udp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 	return true;
 }
 
-std::shared_ptr<udp_socket> udp_socket::get_child(cosix::pseudofd_t ps)
+void udp_socket::pwrite(pseudofd_t p, off_t, const char *msg, size_t len)
 {
-	std::lock_guard<std::mutex> lock(child_sockets_mtx);
-	auto childit = child_sockets.find(ps);
-	if(childit == child_sockets.end()) {
-		throw cloudabi_system_error(EBADF);
-	}
-	assert(childit->second->get_pseudo_fd() == ps);
-	return childit->second;
-}
-
-void udp_socket::pwrite(pseudofd_t p, off_t o, const char *msg, size_t len)
-{
-	// I may receive calls for pseudo-sockets I accept()ed, forward them
-	if(p != get_pseudo_fd()) {
-		get_child(p)->pwrite(p, o, msg, len);
-		return;
-	}
+	assert(p == 0);
 
 	if(get_peer_ip().empty()) {
 		// not connected, cannot send
@@ -123,11 +108,9 @@ void udp_socket::pwrite(pseudofd_t p, off_t o, const char *msg, size_t len)
 	}
 }
 
-size_t udp_socket::pread(pseudofd_t p, off_t o, char *dest, size_t requested)
+size_t udp_socket::pread(pseudofd_t p, off_t, char *dest, size_t requested)
 {
-	if(p != get_pseudo_fd()) {
-		return get_child(p)->pread(p, o, dest, requested);
-	}
+	assert(p == 0);
 
 	udp_message message;
 	{
@@ -146,67 +129,15 @@ size_t udp_socket::pread(pseudofd_t p, off_t o, char *dest, size_t requested)
 
 bool udp_socket::is_readable(cosix::pseudofd_t p)
 {
-	if(p != get_pseudo_fd()) {
-		return get_child(p)->is_readable(p);
-	}
+	assert(p == 0);
 
 	std::unique_lock<std::mutex> lock(wm_mtx);
 	return !waiting_messages.empty();
 }
 
-pseudofd_t udp_socket::sock_accept(pseudofd_t pseudo, cloudabi_sockstat_t *ss)
-{
-	// only the root UDP socket may accept()
-	if(pseudo != 0) {
-		throw cloudabi_system_error(EINVAL);
-	}
-	assert(get_pseudo_fd() == 0);
-
-	// TODO: send all existing traffic towards newly accepted sockets?
-	// for now, just create a new socket for every message
-	udp_message message;
-	pseudofd_t subsocket;
-	{
-		std::unique_lock<std::mutex> lock(wm_mtx);
-		while(waiting_messages.empty()) {
-			wm_cv.wait(lock);
-		}
-		message = waiting_messages.front();
-		waiting_messages.pop();
-		subsocket = ++last_subsocket;
-	}
-
-	auto *ip_hdr = reinterpret_cast<ip_header const*>(message.frame.c_str() + message.ip_offset);
-	auto *udp_hdr = reinterpret_cast<udp_header const*>(message.frame.c_str() + message.udp_offset);
-	std::string local_ip = std::string(reinterpret_cast<char const*>(&ip_hdr->dest_ip), sizeof(ip_hdr->dest_ip));
-	std::string peer_ip = std::string(reinterpret_cast<char const*>(&ip_hdr->source_ip), sizeof(ip_hdr->source_ip));
-	uint16_t peer_port = htons(udp_hdr->source_port);
-
-	assert(get_local_ip() == std::string(4, 0) || local_ip == get_local_ip());
-	assert(get_local_ip() != std::string(4, 0) || local_ip != get_local_ip());
-	assert(get_local_port() == htons(udp_hdr->dest_port));
-
-	std::shared_ptr<udp_socket> socket = std::make_shared<udp_socket>(
-		local_ip, get_local_port(), peer_ip, peer_port, subsocket, get_reverse_fd());
-	socket->waiting_messages.emplace(std::move(message));
-
-	{
-		std::lock_guard<std::mutex> lock(child_sockets_mtx);
-		child_sockets[subsocket] = socket;
-	}
-	socket->sock_stat_get(subsocket, ss);
-	get_ip().register_socket(socket);
-
-	// do not start(), the root UDP socket will listen on the reversefd
-	return subsocket;
-}
-
 void udp_socket::sock_stat_get(cosix::pseudofd_t p, cloudabi_sockstat_t *ss)
 {
-	if(p != get_pseudo_fd()) {
-		get_child(p)->sock_stat_get(p, ss);
-		return;
-	}
+	assert(p == 0);
 
 	ss->ss_error = 0; /* TODO */
 	ss->ss_state = get_peer_ip().empty() ? CLOUDABI_SOCKSTATE_ACCEPTCONN : 0;

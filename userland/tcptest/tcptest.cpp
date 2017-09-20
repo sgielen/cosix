@@ -23,10 +23,36 @@
 #include <arpa/inet.h>
 
 #include <cosix/networkd.hpp>
+#include <flower/protocol/server.ad.h>
+#include <flower/protocol/switchboard.ad.h>
 
-int stdout;
-int tmpdir;
-int networkd;
+using namespace arpc;
+using namespace flower::protocol::server;
+using namespace flower::protocol::switchboard;
+
+int stdout = -1;
+int tmpdir = -1;
+int networkd = -1;
+int switchboard = -1;
+
+class ConnectionExtractor : public flower::protocol::server::Server::Service {
+public:
+	virtual ~ConnectionExtractor() {}
+
+	Status Connect(ServerContext*, const ConnectRequest *request, ConnectResponse*) override {
+		incoming_connection_ = *request;
+		return Status::OK;
+	}
+
+	std::optional<ConnectRequest> GetIncomingConnection() {
+		std::optional<ConnectRequest> result;
+		result.swap(incoming_connection_);
+		return result;
+	}
+
+private:
+	std::optional<ConnectRequest> incoming_connection_;
+};
 
 void program_main(const argdata_t *ad) {
 	argdata_map_iterator_t it;
@@ -46,6 +72,8 @@ void program_main(const argdata_t *ad) {
 			argdata_get_fd(value, &networkd);
 		} else if(strcmp(keystr, "tmpdir") == 0) {
 			argdata_get_fd(value, &tmpdir);
+		} else if(strcmp(keystr, "switchboard_socket") == 0) {
+			argdata_get_fd(value, &switchboard);
 		}
 		argdata_map_next(&it);
 	}
@@ -53,6 +81,9 @@ void program_main(const argdata_t *ad) {
 	FILE *out = fdopen(stdout, "w");
 	setvbuf(out, nullptr, _IONBF, BUFSIZ);
 	fswap(stderr, out);
+
+	auto channel = CreateChannel(std::make_shared<FileDescriptor>(dup(switchboard)));
+	auto switchboard_stub = Switchboard::NewStub(channel);
 
 	// First test, to see IP stack sending behaviour in PCAP dumps:
 	try {
@@ -63,19 +94,50 @@ void program_main(const argdata_t *ad) {
 	}
 
 	bool running = true;
-	std::thread server([&]() {
-		// Listen socket: bound to 0.0.0.0:1234, listening
-		int listensock = cosix::networkd::get_socket(networkd, SOCK_STREAM, "", "0.0.0.0:1234");
+	std::thread serverthread([&]() {
+		ClientContext context;
+		ServerStartRequest request;
+		auto in_labels = request.mutable_in_labels();
+		(*in_labels)["scope"] = "network";
+		(*in_labels)["protocol"] = "tcp";
+		(*in_labels)["local_ip"] = "127.0.0.1";
+		(*in_labels)["local_port"] = "1234";
 
-		// Accept a socket, read data, rot13 it, send it back
-		int accepted = accept(listensock, nullptr, nullptr);
-		if(accepted < 0) {
-			dprintf(stdout, "Failed to accept() TCP socket (%s)\n", strerror(errno));
+		ServerStartResponse response;
+		if(Status status = switchboard_stub->ServerStart(&context, request, &response); !status.ok()) {
+			dprintf(stdout, "Failed to register tcptest in switchboard: %s\n", status.error_message().c_str());
 			exit(1);
 		}
+
+		if(!response.server()) {
+			dprintf(stdout, "Switchboard did not return a server\n");
+			exit(1);
+		}
+
+		ServerBuilder builder(response.server());
+		ConnectionExtractor connection_extractor;
+		builder.RegisterService(&connection_extractor);
+		auto server = builder.Build();
+
+		if(server->HandleRequest() != 0) {
+			dprintf(stdout, "tcptest: HandleRequest failed\n");
+			exit(1);
+		}
+		auto connect_request = connection_extractor.GetIncomingConnection();
+		if(!connect_request) {
+			dprintf(stdout, "tcptest: No incoming connection\n");
+			exit(1);
+		}
+
+		auto connection = connect_request->client();
+		if(!connection) {
+			dprintf(stdout, "tcptest: switchboard did not return a connection\n");
+			exit(1);
+		}
+
 		char buf[16];
 		while(running) {
-			ssize_t res = read(accepted, buf, sizeof(buf));
+			ssize_t res = read(connection->get(), buf, sizeof(buf));
 			if(res < 0) {
 				dprintf(stdout, "Failed to receive data over TCP (%s)\n", strerror(errno));
 				exit(1);
@@ -87,7 +149,7 @@ void program_main(const argdata_t *ad) {
 					buf[i] = 'a' + (((buf[i] - 'a') + 13) % 26);
 				}
 			}
-			if(write(accepted, buf, res) != res) {
+			if(write(connection->get(), buf, res) != res) {
 				dprintf(stdout, "Failed to write data over TCP (%s)\n", strerror(errno));
 				exit(1);
 			}
@@ -142,7 +204,7 @@ void program_main(const argdata_t *ad) {
 	running = false;
 	// bump the server thread if it's blocked on read()
 	write(connected, "bump", 4);
-	server.join();
+	serverthread.join();
 
 	dprintf(stdout, "All TCP traffic seems correct!\n");
 	exit(0);

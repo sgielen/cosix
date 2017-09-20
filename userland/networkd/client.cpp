@@ -372,8 +372,8 @@ void client::run() {
 				return;
 			}
 		} else if(command == "udpsock" || command == "tcpsock") {
-			if(bind.empty() && connect.empty()) {
-				if(!send_error("Need bind and/or connect parameters to create udp/tcp socket")) {
+			if(connect.empty()) {
+				if(!send_error("Need connect parameter to create udp/tcp socket (use flowerd to listen for incoming datagrams/connections)")) {
 					return;
 				}
 				continue;
@@ -430,14 +430,18 @@ void client::run() {
 			}
 
 			std::shared_ptr<ip_socket> socket;
+			cloudabi_errno_t res = 0;
 			if(command == "udpsock") {
-				socket = std::make_shared<udp_socket>(local_ip, local_port, peer_ip, peer_port, 0, rev_pseu.first);
+				auto udp_sock = std::make_shared<udp_socket>(local_ip, local_port, peer_ip, peer_port, rev_pseu.first);
+				res = get_ip().get_udp_impl().register_socket(udp_sock);
+				socket = udp_sock;
 			} else {
-				socket = std::make_shared<tcp_socket>(local_ip, local_port, peer_ip, peer_port, 0, rev_pseu.first);
+				auto tcp_sock = std::make_shared<tcp_socket>(local_ip, local_port, peer_ip, peer_port, rev_pseu.first);
+				// TODO: return EADDRINUSE if this socket is bound uniquely and something is already
+				// bound to this IP:port combination (or 0.0.0.0:port)
+				res = get_ip().get_tcp_impl().register_socket(tcp_sock);
+				socket = tcp_sock;
 			}
-			// TODO: return EADDRINUSE if this socket is bound uniquely and something is already
-			// bound to this IP:port combination (or 0.0.0.0:port)
-			auto res = get_ip().register_socket(socket);
 
 			if(res != 0) {
 				if(!send_error("Failed to register socket")) {

@@ -48,17 +48,6 @@ void ip::handle_packet(std::shared_ptr<interface> iface, const char *frame, size
 		// TODO: send an ICMP Time Exceeded packet and don't handle
 	}
 
-	auto protocol = static_cast<transport_proto>(hdr->proto);
-
-	if(protocol == transport_proto::icmp) {
-		// TODO: handle ICMP myself
-		return;
-	} else if(protocol != transport_proto::udp && protocol != transport_proto::tcp) {
-		// don't know about this protocol, drop it
-		return;
-	}
-
-	std::string ip_src(reinterpret_cast<const char*>(&hdr->source_ip), 4);
 	std::string ip_dst(reinterpret_cast<const char*>(&hdr->dest_ip), 4);
 
 	if(ip_dst != std::string(4, 0xff)) {
@@ -77,54 +66,16 @@ void ip::handle_packet(std::shared_ptr<interface> iface, const char *frame, size
 		}
 	}
 
-	std::vector<std::shared_ptr<ip_socket>> recv_sockets;
+	auto protocol = static_cast<transport_proto>(hdr->proto);
 
-	do {
-		std::lock_guard<std::mutex> lock(sockets_mtx);
-		auto proto_it = sockets.find(protocol);
-		if(proto_it == sockets.end()) {
-			// not listening on this proto, drop it
-			break;
-		}
-
-		auto &ip_to_sock = proto_it->second;
-		auto ip_it = ip_to_sock.find(ip_dst);
-		if(ip_it == ip_to_sock.end()) {
-			// not listening on this IP directly, maybe on the wildcard?
-		} else {
-			for(auto &sock : ip_it->second) {
-				auto shared_sock = sock.lock();
-				if(shared_sock) {
-					recv_sockets.push_back(shared_sock);
-				}
-			}
-		}
-
-		std::string wildcard(4, 0);
-		ip_it = ip_to_sock.find(wildcard);
-		if(ip_it == ip_to_sock.end()) {
-			// not listening on wildcard either
-		} else {
-			for(auto &sock : ip_it->second) {
-				auto shared_sock = sock.lock();
-				if(shared_sock) {
-					recv_sockets.push_back(shared_sock);
-				}
-			}
-		}
-	} while(0); // drop the lock around sockets
-
-	bool packet_sent = false;
-	for(auto &sock : recv_sockets) {
-		if(sock->matches_received_packet(ip_src, ip_dst)) {
-			if(sock->handle_packet(iface, frame, framelen, ip_offset, payload_offset, payload_length)) {
-				packet_sent = true;
-				// but allow other sockets to handle it as well
-			}
-		}
-	}
-	if(!packet_sent) {
-		// TODO: actively refuse packet, nothing is handling it
+	if(protocol == transport_proto::tcp) {
+		tcp_impl.handle_packet(iface, frame, framelen, ip_offset, payload_offset, payload_length);
+	} else if(protocol == transport_proto::udp) {
+		udp_impl.handle_packet(iface, frame, framelen, ip_offset, payload_offset, payload_length);
+	} else if(protocol == transport_proto::icmp) {
+		// TODO: handle ICMP myself
+	} else {
+		// don't know about this protocol, drop it
 	}
 }
 
@@ -146,18 +97,13 @@ cloudabi_errno_t ip::send_packet(std::vector<iovec> const &iov, std::string ip)
 	return interface->send_ip_packet(iov, ip);
 }
 
-cloudabi_errno_t ip::register_socket(std::shared_ptr<ip_socket> socket)
-{
-	std::lock_guard<std::mutex> lock(sockets_mtx);
-
-	auto proto = socket->get_transport_proto();
-	assert(proto == transport_proto::udp || proto == transport_proto::tcp);
-	auto local_ip = socket->get_local_ip();
-
-	// TODO: check if any iface even _has_ this local IP?
-	// TODO: check if this socket doesn't conflict with any other already-listening
-	// sockets, e.g. two exclusive UDP sockets?
-
-	sockets[proto][local_ip].push_back(socket);
-	return 0;
+void networkd::compute_ip_checksum(ip_header &ip_hdr) {
+	uint16_t *ip_hdr_16 = reinterpret_cast<uint16_t*>(&ip_hdr);
+	uint32_t short_sum = 0;
+	for(size_t i = 0; i < sizeof(ip_hdr) / 2; ++i) {
+		short_sum += ip_hdr_16[i];
+	}
+	short_sum = (short_sum & 0xffff) + (short_sum >> 16);
+	short_sum = (short_sum & 0xffff) + (short_sum >> 16);
+	ip_hdr.checksum = ~short_sum;
 }

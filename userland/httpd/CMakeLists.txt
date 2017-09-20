@@ -12,6 +12,6 @@ add_sane_warning_flags()
 add_subdirectory(../libcosix libcosix)
 
 add_executable(httpd httpd.cpp)
-target_link_libraries(httpd cosix)
+target_link_libraries(httpd cosix arpc)
 
 install(TARGETS httpd RUNTIME DESTINATION bin)

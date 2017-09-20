@@ -28,8 +28,7 @@ int cosix::networkd::open(int switchboard) {
 }
 
 int cosix::networkd::open(std::shared_ptr<FileDescriptor> switchboard) {
-	auto channel = CreateChannel(switchboard);
-	auto stub = Switchboard::NewStub(channel);
+	auto stub = Switchboard::NewStub(CreateChannel(switchboard));
 	return open(stub.get());
 }
 

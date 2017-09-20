@@ -4,6 +4,8 @@
 #include <memory>
 #include <cloudabi_types.h>
 
+#include <flower/protocol/switchboard.ad.h>
+
 namespace networkd {
 struct interface;
 struct arp;
@@ -17,6 +19,8 @@ enum transport_proto {
 };
 
 }
+
+std::shared_ptr<flower::protocol::switchboard::Switchboard::Stub> get_switchboard_stub();
 
 std::string send_ifstore_command(std::string command);
 std::vector<std::string> split_words(std::string str);

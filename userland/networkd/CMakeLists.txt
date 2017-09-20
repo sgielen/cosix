@@ -20,6 +20,8 @@ add_executable(networkd
 	arp.hpp arp.cpp
 	routing_table.hpp routing_table.cpp
 	ip.hpp ip.cpp
+	tcp.hpp tcp.cpp
+	udp.hpp udp.cpp
 	ip_socket.hpp ip_socket.cpp
 	tcp_socket.hpp tcp_socket.cpp
 	udp_socket.hpp udp_socket.cpp

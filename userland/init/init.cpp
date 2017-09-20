@@ -191,6 +191,8 @@ int start_networked_binary(const char *name, int port, bool wait = true) {
 
 	int networkfd = cosix::networkd::open(flower_switchboard);
 
+	auto switchboard = copy_switchboard();
+
 	argdata_t *keys[] = {argdata_create_string("stdout"),
 		argdata_create_string("tmpdir"),
 		argdata_create_string("initrd"),
@@ -200,6 +202,7 @@ int start_networked_binary(const char *name, int port, bool wait = true) {
 		argdata_create_string("port"),
 		argdata_create_string("shell"),
 		argdata_create_string("ifstore"),
+		argdata_create_string("switchboard_socket"),
 	};
 	argdata_t *values[] = {argdata_create_fd(stdout),
 		argdata_create_fd(pseudofd),
@@ -210,6 +213,7 @@ int start_networked_binary(const char *name, int port, bool wait = true) {
 		argdata_create_int(port),
 		argdata_create_fd(shellfd),
 		argdata_create_fd(new_ifstorefd),
+		argdata_create_fd(switchboard->get()),
 	};
 	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 
@@ -401,26 +405,20 @@ void program_main(const argdata_t *) {
 	open_tmpfs_pseudo();
 	start_tmpfs();
 
-	int listenfd = socket(AF_UNIX, SOCK_STREAM, 0);
-	if(listenfd < 0) {
-		perror("socket");
-		exit(1);
-	}
-	if(bindat(listenfd, pseudofd, "switchboard") < 0) {
-		perror("bindat");
-		exit(1);
-	}
-	if(listen(listenfd, SOMAXCONN) < 0) {
-		perror("listen");
+	int fds[2];
+	if(socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0) {
+		perror("socketpair");
 		exit(1);
 	}
 
+	auto initial_channel = std::make_shared<FileDescriptor>(fds[0]);
+	flower_switchboard = std::make_shared<FileDescriptor>(fds[1]);
+
 	{
-		auto listening_socket = std::make_shared<FileDescriptor>(listenfd);
 		auto logger_output = std::make_shared<FileDescriptor>(dup(stdout));
 
 		flower::switchboard::Configuration flowerconf;
-		flowerconf.set_listening_socket(listening_socket);
+		flowerconf.set_initial_channel(initial_channel);
 		flowerconf.set_logger_output(logger_output);
 		flowerconf.set_worker_pool_size(16);
 
@@ -438,19 +436,6 @@ void program_main(const argdata_t *) {
 		} else {
 			dprintf(stdout, "Switchboard spawned, fd: %d\n", pfd);
 		}
-	}
-
-	{
-		int sb = socket(AF_UNIX, SOCK_STREAM, 0);
-		if(sb < 0) {
-			perror("socket");
-			exit(1);
-		}
-		if(connectat(sb, pseudofd, "switchboard") < 0) {
-			perror("connectat");
-			exit(1);
-		}
-		flower_switchboard = std::make_shared<FileDescriptor>(sb);
 	}
 
 	{

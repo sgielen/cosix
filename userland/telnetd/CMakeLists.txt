@@ -13,6 +13,6 @@ add_subdirectory(../libcosix libcosix)
 add_subdirectory(../libpseudofd libpseudofd)
 
 add_executable(telnetd telnetd.cpp tterm.hpp tterm.cpp)
-target_link_libraries(telnetd cosix pseudofd)
+target_link_libraries(telnetd cosix pseudofd arpc)
 
 install(TARGETS telnetd RUNTIME DESTINATION bin)

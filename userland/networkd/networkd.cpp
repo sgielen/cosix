@@ -37,7 +37,30 @@ int ifstore;
 int switchboard;
 std::mutex ifstore_mtx;
 
-Switchboard::Stub *switchboard_stub = nullptr;
+std::shared_ptr<Switchboard::Stub> switchboard_stub;
+std::shared_ptr<Switchboard::Stub> get_switchboard_stub() {
+	ClientContext context;
+	ConstrainRequest request;
+	// TODO: add a safer way to add all rights
+	for(size_t i = Right_MIN; i <= Right_MAX; ++i) {
+		Right r;
+		if(Right_IsValid(i) && Right_Parse(Right_Name(i), &r)) {
+			request.add_rights(r);
+		}
+	}
+	ConstrainResponse response;
+	if (Status status = switchboard_stub->Constrain(&context, request, &response); !status.ok()) {
+		dprintf(stdout, "init: Failed to constrain switchboard socket: %s\n", status.error_message().c_str());
+		exit(1);
+	}
+
+	auto connection = response.switchboard();
+	if(!connection) {
+		dprintf(stdout, "init: switchboard did not return a connection\n");
+		exit(1);
+	}
+	return Switchboard::NewStub(CreateChannel(connection));
+}
 
 using namespace networkd;
 
@@ -228,7 +251,7 @@ void start_dhclient(std::string iface) {
 		return;
 	}
 
-	int networkfd = cosix::networkd::open(switchboard_stub);
+	int networkfd = cosix::networkd::open(get_switchboard_stub().get());
 
 	argdata_t *keys[] = {argdata_create_str_c("stdout"), argdata_create_str_c("networkd"), argdata_create_str_c("interface")};
 	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(networkfd), argdata_create_str_c(iface.c_str())};
@@ -316,8 +339,7 @@ void program_main(const argdata_t *ad) {
 	fswap(stderr, out);
 
 	auto channel = CreateChannel(std::make_shared<FileDescriptor>(dup(switchboard)));
-	auto stub = Switchboard::NewStub(channel);
-	switchboard_stub = stub.get();
+	switchboard_stub = Switchboard::NewStub(channel);
 
 	ClientContext context;
 	ServerStartRequest request;
@@ -326,7 +348,7 @@ void program_main(const argdata_t *ad) {
 	(*in_labels)["service"] = "networkd";
 	ServerStartResponse response;
 
-	if(Status status = stub->ServerStart(&context, request, &response); !status.ok()) {
+	if(Status status = get_switchboard_stub()->ServerStart(&context, request, &response); !status.ok()) {
 		dprintf(stdout, "Failed to start server in switchboard: %s\n", status.error_message().c_str());
 		exit(1);
 	}

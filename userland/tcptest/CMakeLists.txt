@@ -12,6 +12,6 @@ add_sane_warning_flags()
 add_subdirectory(../libcosix libcosix)
 
 add_executable(tcptest tcptest.cpp)
-target_link_libraries(tcptest cosix)
+target_link_libraries(tcptest cosix arpc)
 
 install(TARGETS tcptest RUNTIME DESTINATION bin)

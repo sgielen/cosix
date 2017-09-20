@@ -27,6 +27,8 @@
 
 #include <cosix/networkd.hpp>
 #include <cosix/reverse.hpp>
+#include <flower/protocol/server.ad.h>
+#include <flower/protocol/switchboard.ad.h>
 
 #include "tterm.hpp"
 
@@ -37,11 +39,78 @@ int networkd;
 int procfs;
 int bootfs;
 int ifstore;
+int switchboard;
 
 int port;
 int shell;
 
 using namespace telnetd;
+using namespace arpc;
+using namespace flower::protocol::server;
+using namespace flower::protocol::switchboard;
+
+class Telnetd : public flower::protocol::server::Server::Service {
+public:
+	virtual ~Telnetd() {}
+
+	Status Connect(ServerContext*, const ConnectRequest *request, ConnectResponse*) override {
+		int client = dup(request->client()->get());
+
+		auto revpseu = cosix::open_pseudo(ifstore, CLOUDABI_FILETYPE_CHARACTER_DEVICE);
+
+		// start terminal emulator
+		std::thread tthr([client, revpseu](){
+			telnet_terminal::run(client, revpseu.first);
+			close(client);
+			close(revpseu.first);
+			close(revpseu.second);
+		});
+		tthr.detach();
+
+		std::thread thr([client, revpseu, tmpdir = tmpdir, initrd = initrd, networkd = networkd,
+			procfs = procfs, bootfs = bootfs, shell = shell]() {
+			const char banner[] = "Welcome to Cosix -- starting shell...\n";
+			if(write(client, banner, sizeof(banner)) < 0) {
+				fprintf(stderr, "Failed to write() banner: %s\n", strerror(errno));
+				close(client);
+				return;
+			}
+
+			std::unique_ptr<argdata_t> keys[] =
+				{argdata_t::create_str("terminal"), argdata_t::create_str("tmpdir"),
+				argdata_t::create_str("initrd"), argdata_t::create_str("networkd"),
+				argdata_t::create_str("procfs"), argdata_t::create_str("bootfs")};
+			std::unique_ptr<argdata_t> values[] =
+				{argdata_t::create_fd(revpseu.second), argdata_t::create_fd(tmpdir),
+				argdata_t::create_fd(initrd), argdata_t::create_fd(networkd),
+				argdata_t::create_fd(procfs), argdata_t::create_fd(bootfs)};
+
+			std::vector<argdata_t*> key_ptrs;
+			std::vector<argdata_t*> value_ptrs;
+
+			for(auto &kkey : mstd::range<std::unique_ptr<argdata_t>>(keys)) {
+				key_ptrs.push_back(kkey.get());
+			}
+			for(auto &value : mstd::range<std::unique_ptr<argdata_t>>(values)) {
+				value_ptrs.push_back(value.get());
+			}
+			auto client_ad = argdata_t::create_map(key_ptrs, value_ptrs);
+
+			int client_pfd = program_spawn(shell, client_ad.get());
+			if(client_pfd < 0) {
+				fprintf(stderr, "Failed to spawn shell: %s\n", strerror(errno));
+				exit(1);
+			}
+
+			siginfo_t si;
+			pdwait(client_pfd, &si, 0);
+			close(client_pfd);
+		});
+		thr.detach();
+
+		return Status::OK;
+	}
+};
 
 void program_main(const argdata_t *ad) {
 	stdout = -1;
@@ -53,6 +122,7 @@ void program_main(const argdata_t *ad) {
 	port = 22;
 	shell = -1;
 	ifstore = -1;
+	switchboard = -1;
 
 	{
 		argdata_map_iterator_t it;
@@ -84,6 +154,8 @@ void program_main(const argdata_t *ad) {
 				argdata_get_fd(value, &shell);
 			} else if(strcmp(keystr, "ifstore") == 0) {
 				argdata_get_fd(value, &ifstore);
+			} else if(strcmp(keystr, "switchboard_socket") == 0) {
+				argdata_get_fd(value, &switchboard);
 			}
 			argdata_map_next(&it);
 		}
@@ -93,69 +165,36 @@ void program_main(const argdata_t *ad) {
 	setvbuf(out, nullptr, _IONBF, BUFSIZ);
 	fswap(stderr, out);
 
-	// Listen socket: bound to 0.0.0.0:${port}, listening
-	int listensock = cosix::networkd::get_socket(networkd, SOCK_STREAM, "", "0.0.0.0:" + std::to_string(port));
+	auto channel = CreateChannel(std::make_shared<FileDescriptor>(dup(switchboard)));
+	auto switchboard_stub = Switchboard::NewStub(channel);
+
+	ClientContext context;
+	ServerStartRequest request;
+	auto in_labels = request.mutable_in_labels();
+	(*in_labels)["scope"] = "network";
+	(*in_labels)["protocol"] = "tcp";
+	(*in_labels)["local_port"] = std::to_string(port);
+
+	ServerStartResponse response;
+	if(Status status = switchboard_stub->ServerStart(&context, request, &response); !status.ok()) {
+		dprintf(stdout, "Failed to register tcptest in switchboard: %s\n", status.error_message().c_str());
+		exit(1);
+	}
+
+	if(!response.server()) {
+		dprintf(stdout, "Switchboard did not return a server\n");
+		exit(1);
+	}
+
+	ServerBuilder builder(response.server());
+	Telnetd telnetd;
+	builder.RegisterService(&telnetd);
+	auto server = builder.Build();
 
 	while(1) {
-		// Perform a select() so we don't have an accept() call outstanding on the reverse FD
-		// blocking other requests. TODO: remove this once it's not necessary anymore.
-		fd_set rdset;
-		FD_ZERO(&rdset);
-		FD_SET(listensock, &rdset);
-		select(listensock + 1, &rdset, nullptr, nullptr, nullptr);
-
-		int client = accept(listensock, nullptr, nullptr);
-		if(client < 0) {
-			fprintf(stderr, "Failed to accept() TCP socket: %s\n", strerror(errno));
+		if(server->HandleRequest() != 0) {
+			dprintf(stdout, "telnetd: HandleRequest failed\n");
 			exit(1);
 		}
-		const char banner[] = "Welcome to Cosix -- starting shell...\n";
-		if(write(client, banner, sizeof(banner)) < 0) {
-			fprintf(stderr, "Failed to write() banner: %s\n", strerror(errno));
-			close(client);
-			continue;
-		}
-
-		auto revpseu = cosix::open_pseudo(ifstore, CLOUDABI_FILETYPE_CHARACTER_DEVICE);
-
-		// start terminal emulator
-		std::thread tthr([client, revpseu](){
-			telnet_terminal::run(client, revpseu.first);
-			close(client);
-			close(revpseu.first);
-			close(revpseu.second);
-		});
-		tthr.detach();
-
-		std::unique_ptr<argdata_t> keys[] =
-			{argdata_t::create_str("terminal"), argdata_t::create_str("tmpdir"),
-			argdata_t::create_str("initrd"), argdata_t::create_str("networkd"),
-			argdata_t::create_str("procfs"), argdata_t::create_str("bootfs")};
-		std::unique_ptr<argdata_t> values[] =
-			{argdata_t::create_fd(revpseu.second), argdata_t::create_fd(tmpdir),
-			argdata_t::create_fd(initrd), argdata_t::create_fd(networkd),
-			argdata_t::create_fd(procfs), argdata_t::create_fd(bootfs)};
-		std::vector<argdata_t*> key_ptrs;
-		std::vector<argdata_t*> value_ptrs;
-
-		for(auto &kkey : mstd::range<std::unique_ptr<argdata_t>>(keys)) {
-			key_ptrs.push_back(kkey.get());
-		}
-		for(auto &value : mstd::range<std::unique_ptr<argdata_t>>(values)) {
-			value_ptrs.push_back(value.get());
-		}
-		auto client_ad = argdata_t::create_map(key_ptrs, value_ptrs);
-
-		int client_pfd = program_spawn(shell, client_ad.get());
-		if(client_pfd < 0) {
-			fprintf(stderr, "Failed to spawn shell: %s\n", strerror(errno));
-			exit(1);
-		}
-		std::thread thr([client_pfd]() {
-			siginfo_t si;
-			pdwait(client_pfd, &si, 0);
-			close(client_pfd);
-		});
-		thr.detach();
 	}
 }

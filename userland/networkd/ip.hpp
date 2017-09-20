@@ -7,6 +7,8 @@
 #include <list>
 #include "util.hpp"
 #include "networkd.hpp"
+#include "tcp.hpp"
+#include "udp.hpp"
 
 namespace networkd {
 
@@ -30,6 +32,8 @@ struct ip_header {
 	uint32_t dest_ip;
 };
 
+void compute_ip_checksum(ip_header &ip_hdr);
+
 struct ip {
 	ip();
 
@@ -39,25 +43,12 @@ struct ip {
 	// Send an IP packet
 	cloudabi_errno_t send_packet(std::vector<iovec> const&, std::string ip);
 
-	// Register a socket for incoming packets
-	cloudabi_errno_t register_socket(std::shared_ptr<ip_socket> socket);
-
-	// Create a new socket. IP is in packed format. transport_proto must be
-	// tcp or udp. The socket state will be 'INITIALIZING', so you will
-	// need to call connect() or listen() on the socket
-	std::shared_ptr<ip_socket> create_socket(transport_proto p, uint16_t port, std::string ip);
-
-	// TODO: build a job that regularly cleans out the sockets list, removing
-	// weak pointers as they become expired, maps as they become empty and IPs
-	// as our interfaces lose them
+	struct tcp &get_tcp_impl() { return tcp_impl; }
+	struct udp &get_udp_impl() { return udp_impl; }
 
 private:
-	std::mutex sockets_mtx;
-	std::map<transport_proto,
-		std::map<std::string /* listening on IP */,
-			std::list<std::weak_ptr<ip_socket>> /* sockets */
-		>
-	> sockets;
+	struct tcp tcp_impl;
+	struct udp udp_impl;
 };
 
 }
