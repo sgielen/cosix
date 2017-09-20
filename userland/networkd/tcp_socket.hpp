@@ -39,7 +39,6 @@ private:
 	void pwrite(cosix::pseudofd_t, off_t, const char*, size_t) override;
 	size_t pread(cosix::pseudofd_t, off_t, char*, size_t) override;
 	bool is_readable(cosix::pseudofd_t) override;
-	void sock_stat_get(cosix::pseudofd_t pseudo, cloudabi_sockstat_t *ss) override;
 	void becomes_readable();
 
 	// only call these functions if you already have the wc_mtx:

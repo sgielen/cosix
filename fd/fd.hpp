@@ -19,7 +19,6 @@ inline vga_stream &operator<<(vga_stream &s, cloudabi_filetype_t type) {
 	FT(BLOCK_DEVICE);
 	FT(CHARACTER_DEVICE);
 	FT(DIRECTORY);
-	FT(FIFO);
 	FT(POLL);
 	FT(PROCESS);
 	FT(REGULAR_FILE);
@@ -156,33 +155,7 @@ struct fd_t {
 	}
 
 	/* For sockets */
-	virtual void sock_bind(shared_ptr<fd_t> /*fd*/, void * /*address*/, size_t /*address_len*/)
-	{
-		error = ENOTSOCK;
-	}
-
-	virtual void sock_connect(shared_ptr<fd_t> /*fd*/, void * /*address*/, size_t /*address_len*/)
-	{
-		error = ENOTSOCK;
-	}
-
-	virtual void sock_listen(cloudabi_backlog_t /*backlog*/)
-	{
-		error = ENOTSOCK;
-	}
-
-	virtual shared_ptr<fd_t> sock_accept(void * /*address*/, size_t* /*address_len*/)
-	{
-		error = ENOTSOCK;
-		return nullptr;
-	}
-
 	virtual void sock_shutdown(cloudabi_sdflags_t /*how*/)
-	{
-		error = ENOTSOCK;
-	}
-
-	virtual void sock_stat_get(cloudabi_sockstat_t* /*buf*/, cloudabi_ssflags_t /*flags*/)
 	{
 		error = ENOTSOCK;
 	}

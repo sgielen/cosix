@@ -1,4 +1,3 @@
-#include <fd/pipe_fd.hpp>
 #include <fd/process_fd.hpp>
 #include <fd/scheduler.hpp>
 #include <fd/thread.hpp>
@@ -233,17 +232,12 @@ void thread::handle_syscall() {
 	case 41: error = syscall_proc_fork(c); break;
 	case 42: error = syscall_proc_raise(c); break;
 	case 43: error = syscall_random_get(c); break;
-	case 44: error = syscall_sock_accept(c); break;
-	case 45: error = syscall_sock_bind(c); break;
-	case 46: error = syscall_sock_connect(c); break;
-	case 47: error = syscall_sock_listen(c); break;
-	case 48: error = syscall_sock_recv(c); break;
-	case 49: error = syscall_sock_send(c); break;
-	case 50: error = syscall_sock_shutdown(c); break;
-	case 51: error = syscall_sock_stat_get(c); break;
-	case 52: error = syscall_thread_create(c); break;
-	case 53: error = syscall_thread_exit(c); break;
-	case 54: error = syscall_thread_yield(c); break;
+	case 44: error = syscall_sock_recv(c); break;
+	case 45: error = syscall_sock_send(c); break;
+	case 46: error = syscall_sock_shutdown(c); break;
+	case 47: error = syscall_thread_create(c); break;
+	case 48: error = syscall_thread_exit(c); break;
+	case 49: error = syscall_thread_yield(c); break;
 	default:
 		get_vga_stream() << "Syscall " << state.eax << " unknown, signalling process\n";
 		process->signal(CLOUDABI_SIGSYS);

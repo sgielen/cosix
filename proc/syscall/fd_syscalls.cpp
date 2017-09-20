@@ -1,6 +1,5 @@
 #include <proc/syscalls.hpp>
 #include <fd/process_fd.hpp>
-#include <fd/pipe_fd.hpp>
 #include <fd/unixsock.hpp>
 #include <global.hpp>
 
@@ -28,12 +27,7 @@ cloudabi_errno_t cloudos::syscall_fd_create1(syscall_context &c)
 				| CLOUDABI_RIGHT_FD_WRITE
 				| CLOUDABI_RIGHT_FILE_STAT_FGET
 				| CLOUDABI_RIGHT_POLL_FD_READWRITE
-				| CLOUDABI_RIGHT_SOCK_SHUTDOWN
-				| CLOUDABI_RIGHT_SOCK_STAT_GET
-				| CLOUDABI_RIGHT_SOCK_ACCEPT
-				| CLOUDABI_RIGHT_SOCK_BIND_SOCKET
-				| CLOUDABI_RIGHT_SOCK_CONNECT_SOCKET
-				| CLOUDABI_RIGHT_SOCK_LISTEN;
+				| CLOUDABI_RIGHT_SOCK_SHUTDOWN;
 		cloudabi_rights_t sock_inheriting = 0x1ffffffffff /* all rights */;
 		auto fdnum = c.process()->add_fd(fd, sock_rights, sock_inheriting);
 		c.result = fdnum;
@@ -47,19 +41,8 @@ cloudabi_errno_t cloudos::syscall_fd_create2(syscall_context &c)
 	auto args = arguments_t<cloudabi_filetype_t, cloudabi_fd_t*, cloudabi_fd_t*>(c);
 	auto type = args.first();
 
-	if(type == CLOUDABI_FILETYPE_FIFO) {
-		auto pfd = make_shared<pipe_fd>(1024, "pipe_fd");
-
-		auto pipe_rights = CLOUDABI_RIGHT_POLL_FD_READWRITE
-				 | CLOUDABI_RIGHT_FD_STAT_PUT_FLAGS
-				 | CLOUDABI_RIGHT_FILE_STAT_FGET;
-
-		auto a = c.process()->add_fd(pfd, pipe_rights | CLOUDABI_RIGHT_FD_WRITE, 0);
-		auto b = c.process()->add_fd(pfd, pipe_rights | CLOUDABI_RIGHT_FD_READ, 0);
-		c.set_results(a, b);
-		return 0;
-	} else if(type == CLOUDABI_FILETYPE_SOCKET_DGRAM
-	       || type == CLOUDABI_FILETYPE_SOCKET_STREAM)
+	if(type == CLOUDABI_FILETYPE_SOCKET_DGRAM
+	|| type == CLOUDABI_FILETYPE_SOCKET_STREAM)
 	{
 		auto a = make_shared<unixsock>(type, "socketpair A");
 		auto b = make_shared<unixsock>(type, "socketpair B");
@@ -72,12 +55,7 @@ cloudabi_errno_t cloudos::syscall_fd_create2(syscall_context &c)
 				| CLOUDABI_RIGHT_FD_WRITE
 				| CLOUDABI_RIGHT_FILE_STAT_FGET
 				| CLOUDABI_RIGHT_POLL_FD_READWRITE
-				| CLOUDABI_RIGHT_SOCK_ACCEPT
-				| CLOUDABI_RIGHT_SOCK_BIND_SOCKET
-				| CLOUDABI_RIGHT_SOCK_CONNECT_SOCKET
-				| CLOUDABI_RIGHT_SOCK_LISTEN
-				| CLOUDABI_RIGHT_SOCK_SHUTDOWN
-				| CLOUDABI_RIGHT_SOCK_STAT_GET;
+				| CLOUDABI_RIGHT_SOCK_SHUTDOWN;
 		cloudabi_rights_t sock_inheriting = 0x1ffffffffff /* all rights */;
 
 		auto afd = c.process()->add_fd(a, sock_rights, sock_inheriting);

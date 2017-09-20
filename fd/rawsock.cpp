@@ -39,17 +39,6 @@ void rawsock::sock_shutdown(cloudabi_sdflags_t how)
 	error = 0;
 }
 
-void rawsock::sock_stat_get(cloudabi_sockstat_t* buf, cloudabi_ssflags_t flags)
-{
-	assert(buf);
-	buf->ss_error = error;
-	buf->ss_state = 0;
-
-	if(flags & CLOUDABI_SOCKSTAT_CLEAR_ERROR) {
-		error = 0;
-	}
-}
-
 void rawsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 {
 	while(messages == nullptr) {

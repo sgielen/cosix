@@ -22,7 +22,6 @@ struct scheduler;
 struct process_fd;
 struct rng;
 struct clock_store;
-struct unixsock_listen_store;
 struct initrdfs;
 struct terminal_store;
 
@@ -44,7 +43,6 @@ struct global_state {
 	cloudos::process_fd *init;
 	cloudos::rng *random;
 	cloudos::clock_store *clock_store;
-	cloudos::unixsock_listen_store *unixsock_listen_store;
 	cloudos::initrdfs *initrdfs;
 	cloudos::terminal_store *terminal_store;
 };
@@ -79,7 +77,6 @@ GET_GLOBAL(root_device, device, root_device)
 GET_GLOBAL(scheduler, scheduler, scheduler)
 GET_GLOBAL(random, rng, random)
 GET_GLOBAL(clock_store, clock_store, clock_store);
-GET_GLOBAL(unixsock_listen_store, unixsock_listen_store, unixsock_listen_store);
 GET_GLOBAL(initrdfs, initrdfs, initrdfs);
 GET_GLOBAL(terminal_store, terminal_store, terminal_store);
 

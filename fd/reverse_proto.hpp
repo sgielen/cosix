@@ -22,10 +22,7 @@ struct reverse_request_t {
 		pwrite,
 		close,
 		// the calls below are for UNIX sockets; inode is 0
-		sock_listen, // length = backlog size
-		sock_accept, // length = address length
 		sock_shutdown,
-		sock_stat_get,
 		sock_recv,
 		sock_send
 	} op;

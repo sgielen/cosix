@@ -85,21 +85,6 @@ char *cosix::handle_request(reverse_request_t *request, char *buf, reverse_respo
 			response->result = 0;
 			break;
 		}
-		case op::sock_accept: {
-			response->send_length = sizeof(cloudabi_sockstat_t);
-			res = reinterpret_cast<char*>(malloc(response->send_length));
-			auto ss = reinterpret_cast<cloudabi_sockstat_t*>(res);
-			response->result = h->sock_accept(request->pseudofd, ss);
-			break;
-		}
-		case op::sock_stat_get: {
-			response->send_length = sizeof(cloudabi_sockstat_t);
-			res = reinterpret_cast<char*>(malloc(response->send_length));
-			auto ss = reinterpret_cast<cloudabi_sockstat_t*>(res);
-			h->sock_stat_get(request->pseudofd, ss);
-			response->result = 0;
-			break;
-		}
 		case op::sock_recv: {
 			// Implement in terms of read. This makes it impossible to do
 			// FD passing, but otherwise it's the same.
@@ -117,7 +102,6 @@ char *cosix::handle_request(reverse_request_t *request, char *buf, reverse_respo
 			break;
 		}
 		case op::rename:
-		case op::sock_listen:
 		case op::sock_shutdown:
 		case op::stat_put:
 		default:

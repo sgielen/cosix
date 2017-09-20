@@ -73,8 +73,6 @@ struct reverse_handler {
 	virtual size_t readdir(pseudofd_t pseudo, char *buffer, size_t buflen, cloudabi_dircookie_t &cookie);
 	virtual void stat_get(pseudofd_t pseudo, cloudabi_lookupflags_t flags, char *path, size_t len, cloudabi_filestat_t *statbuf);
 	virtual void stat_fget(pseudofd_t pseudo, cloudabi_filestat_t *statbuf);
-	virtual pseudofd_t sock_accept(pseudofd_t pseudo, cloudabi_sockstat_t*);
-	virtual void sock_stat_get(pseudofd_t pseudo, cloudabi_sockstat_t*);
 
 	cloudabi_device_t device;
 };

@@ -399,79 +399,6 @@ cloudabi_errno_t pseudo_fd::lookup_device_id() {
 	}
 }
 
-void pseudo_fd::sock_bind(shared_ptr<fd_t>, void*, size_t)
-{
-	// Can only bind to UNIX addresses, this is not supported at the moment
-	error = EINVAL;
-}
-
-void pseudo_fd::sock_connect(shared_ptr<fd_t>, void*, size_t)
-{
-	// Can only bind to UNIX addresses, this is not supported at the moment
-	error = EINVAL;
-}
-
-void pseudo_fd::sock_listen(cloudabi_backlog_t backlog)
-{
-	reverse_request_t request;
-	request.pseudofd = pseudo_id;
-	request.op = reverse_request_t::operation::sock_listen;
-	request.inode = 0;
-	request.flags = 0;
-	request.recv_length = backlog;
-
-	reverse_response_t response;
-	maybe_deallocate(send_request(&request, nullptr, &response));
-	if(response.result < 0) {
-		error = -response.result;
-	}
-	error = 0;
-}
-
-shared_ptr<fd_t> pseudo_fd::sock_accept(void *address, size_t *address_len)
-{
-	reverse_request_t request;
-	request.pseudofd = pseudo_id;
-	request.op = reverse_request_t::operation::sock_accept;
-	request.inode = 0;
-	request.flags = 0;
-	request.recv_length = address_len == nullptr ? 0 : *address_len;
-
-	reverse_response_t response;
-	Blk b = send_request(&request, nullptr, &response);
-	if(response.result < 0) {
-		error = -response.result;
-		maybe_deallocate(b);
-		return nullptr;
-	}
-	if(address != nullptr && address_len != nullptr) {
-		if(*address_len < sizeof(cloudabi_sockstat_t)) {
-			*address_len = 0;
-		} else {
-			if(b.size != sizeof(cloudabi_sockstat_t)) {
-				error = EIO;
-				// TODO: close pseudo FD again
-				maybe_deallocate(b);
-				return nullptr;
-			}
-			memcpy(address, b.ptr, b.size);
-			*address_len = b.size;
-		}
-	}
-
-	maybe_deallocate(b);
-	pseudofd_t new_pseudo_id = response.result;
-
-	char new_name[sizeof(name)];
-	strncpy(new_name, name, sizeof(new_name));
-	strncat(new_name, "->accepted", sizeof(new_name) - strlen(new_name) - 1);
-
-	// TODO: is filetype of the new socket always the same as that of the accepting socket?
-	auto new_fd = make_shared<pseudo_fd>(new_pseudo_id, reverse_fd, type, new_name);
-	error = 0;
-	return new_fd;
-}
-
 void pseudo_fd::sock_shutdown(cloudabi_sdflags_t how)
 {
 	reverse_request_t request;
@@ -486,31 +413,6 @@ void pseudo_fd::sock_shutdown(cloudabi_sdflags_t how)
 		error = -response.result;
 	}
 	error = 0;
-}
-
-void pseudo_fd::sock_stat_get(cloudabi_sockstat_t *buf, cloudabi_ssflags_t flags)
-{
-	reverse_request_t request;
-	request.pseudofd = pseudo_id;
-	request.op = reverse_request_t::operation::sock_stat_get;
-	request.inode = 0;
-	request.flags = flags;
-	request.recv_length = sizeof(cloudabi_sockstat_t);
-
-	reverse_response_t response;
-	Blk b = send_request(&request, nullptr, &response);
-	if(response.result < 0) {
-		error = -response.result;
-		maybe_deallocate(b);
-		return;
-	}
-	if(b.size != sizeof(cloudabi_sockstat_t)) {
-		error = EIO;
-		return;
-	}
-	memcpy(buf, b.ptr, b.size);
-	error = 0;
-	maybe_deallocate(b);
 }
 
 void pseudo_fd::sock_recv(const cloudabi_recv_in_t *in, cloudabi_recv_out_t *out)

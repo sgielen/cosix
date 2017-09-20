@@ -330,14 +330,6 @@ bool tcp_socket::is_readable(cosix::pseudofd_t p)
 	return !recv_buffer.empty();
 }
 
-void tcp_socket::sock_stat_get(cosix::pseudofd_t p, cloudabi_sockstat_t *ss)
-{
-	assert(p == 0);
-
-	ss->ss_error = 0; /* TODO */
-	ss->ss_state = get_peer_ip().empty() ? CLOUDABI_SOCKSTATE_ACCEPTCONN : 0;
-}
-
 void tcp_socket::timed_out()
 {
 	std::unique_lock<std::mutex> lock(wc_mtx);

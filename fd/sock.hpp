@@ -12,40 +12,11 @@ struct sock_t : public fd_t {
 		// If this socket is in SHUTDOWN, it cannot send() anymore, but
 		// can still recv(). If othersock->status is SHUTDOWN, we can
 		// send(), but the other side can't.
-		IDLE, BOUND, LISTENING, CONNECTING, CONNECTED, SHUTDOWN
+		IDLE, CONNECTING, CONNECTED, SHUTDOWN
 	};
 
 	size_t read(void *dest, size_t count) override;
 	size_t write(const char *str, size_t count) override;
-
-	void sock_bind(shared_ptr<fd_t> /*fd*/, void * /*address*/, size_t /*address_len*/) override
-	{
-		error = EINVAL;
-	}
-
-	void sock_connect(shared_ptr<fd_t> /*fd*/, void * /*address*/, size_t /*address_len*/) override
-	{
-		if(status == sockstatus_t::CONNECTING || status == sockstatus_t::CONNECTED || status == sockstatus_t::SHUTDOWN) {
-			error = EISCONN;
-		} else {
-			error = EINVAL;
-		}
-	}
-
-	void sock_listen(cloudabi_backlog_t /*backlog*/) override
-	{
-		if(status == sockstatus_t::IDLE) {
-			error = EDESTADDRREQ;
-		} else {
-			error = EINVAL;
-		}
-	}
-
-	shared_ptr<fd_t> sock_accept(void * /*address*/, size_t* /*address_len*/) override
-	{
-		error = EINVAL;
-		return nullptr;
-	}
 
 	void sock_shutdown(cloudabi_sdflags_t /*how*/) override
 	{
@@ -53,17 +24,6 @@ struct sock_t : public fd_t {
 			error = EINVAL;
 		} else {
 			error = ENOTCONN;
-		}
-	}
-
-	void sock_stat_get(cloudabi_sockstat_t *buf, cloudabi_ssflags_t flags) override
-	{
-		assert(buf);
-		buf->ss_error = error;
-		buf->ss_state = status == sockstatus_t::LISTENING ? CLOUDABI_SOCKSTATE_ACCEPTCONN : 0;
-
-		if(flags & CLOUDABI_SOCKSTAT_CLEAR_ERROR) {
-			error = 0;
 		}
 	}
 
