@@ -5,6 +5,9 @@
 
 using namespace cloudos;
 
+// All rights, except all rights that were removed over time.
+static const cloudabi_rights_t all_rights = 0x081fffff7ff;
+
 cloudabi_errno_t cloudos::syscall_fd_close(syscall_context &c)
 {
 	auto args = arguments_t<cloudabi_fd_t>(c);
@@ -28,7 +31,7 @@ cloudabi_errno_t cloudos::syscall_fd_create1(syscall_context &c)
 				| CLOUDABI_RIGHT_FILE_STAT_FGET
 				| CLOUDABI_RIGHT_POLL_FD_READWRITE
 				| CLOUDABI_RIGHT_SOCK_SHUTDOWN;
-		cloudabi_rights_t sock_inheriting = 0x1ffffffffff /* all rights */;
+		cloudabi_rights_t sock_inheriting = all_rights;
 		auto fdnum = c.process()->add_fd(fd, sock_rights, sock_inheriting);
 		c.result = fdnum;
 		return 0;
@@ -56,7 +59,7 @@ cloudabi_errno_t cloudos::syscall_fd_create2(syscall_context &c)
 				| CLOUDABI_RIGHT_FILE_STAT_FGET
 				| CLOUDABI_RIGHT_POLL_FD_READWRITE
 				| CLOUDABI_RIGHT_SOCK_SHUTDOWN;
-		cloudabi_rights_t sock_inheriting = 0x1ffffffffff /* all rights */;
+		cloudabi_rights_t sock_inheriting = all_rights;
 
 		auto afd = c.process()->add_fd(a, sock_rights, sock_inheriting);
 		auto bfd = c.process()->add_fd(b, sock_rights, sock_inheriting);
