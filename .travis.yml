@@ -17,6 +17,7 @@ addons:
     - i686-unknown-cloudabi-mstd
     - i686-unknown-cloudabi-python
     - i686-unknown-cloudabi-flower
+    - python3-pip
 notifications:
   irc:
     channels:
@@ -51,6 +52,13 @@ before_install:
   - chmod +x cmake.sh
   - sudo ./cmake.sh --prefix=/usr --skip-license
   - cmake --version
+
+  # install aprotoc
+  - wget -Oaprotoc https://raw.githubusercontent.com/NuxiNL/arpc/master/scripts/aprotoc.py
+  - chmod +x aprotoc
+  - sudo mv aprotoc /usr/bin
+  - sudo pip3 install pypeg2
+  - sudo pip3 install toposort
 before_script:
   - mkdir build && cd build
 script:
