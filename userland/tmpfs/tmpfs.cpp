@@ -39,7 +39,7 @@ file_entry tmpfs::lookup(pseudofd_t pseudo, const char *path, size_t len, clouda
 	}
 }
 
-pseudofd_t tmpfs::open(cloudabi_inode_t inode, int flags)
+pseudofd_t tmpfs::open(cloudabi_inode_t inode, int)
 {
 	file_entry_ptr entry = get_file_entry_from_inode(inode);
 	pseudo_fd_ptr pseudo(new pseudo_fd_entry);

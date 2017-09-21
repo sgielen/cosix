@@ -111,7 +111,7 @@ void session::start()
 
 			irc_add_select_descriptors (irc, &in_set, &out_set, &maxfd);
 
-			if(select(maxfd + 1, &in_set, &out_set, 0, &tv) < 0) {
+			if(select(maxfd + 1, &in_set, &out_set, nullptr, &tv) < 0) {
 				fprintf(stderr, "select() failed: %d - %s\n", errno, strerror(errno));
 				running = false;
 				break;
