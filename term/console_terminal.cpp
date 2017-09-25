@@ -19,7 +19,7 @@ cloudabi_errno_t console_terminal::write_output_token(const char *token, size_t 
 
 	// prepare a scancode to send
 	char scancode[32];
-	memset(scancode, 0, strlen(scancode));
+	memset(scancode, 0, sizeof(scancode));
 	scancode[0] = 0x1b;
 	scancode[1] = '[';
 	size_t scancode_len = 2;
