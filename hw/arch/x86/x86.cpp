@@ -3,6 +3,7 @@
 #include "x86_kbd.hpp"
 #include "x86_serial.hpp"
 #include "x86_fpu.hpp"
+#include "x86_rtc.hpp"
 #include <memory/allocation.hpp>
 
 using namespace cloudos;
@@ -30,6 +31,8 @@ cloudabi_errno_t x86_pc::init() {
 	serial->init();
 	auto *fpu = allocate<x86_fpu>(this);
 	fpu->init();
+	auto *rtc = allocate<x86_rtc>(this);
+	rtc->init();
 	return 0;
 }
 
