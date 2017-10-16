@@ -1,4 +1,5 @@
 #include "x86.hpp"
+#include "x86_ata.hpp"
 #include "x86_pit.hpp"
 #include "x86_kbd.hpp"
 #include "x86_serial.hpp"
@@ -33,6 +34,8 @@ cloudabi_errno_t x86_pc::init() {
 	fpu->init();
 	auto *rtc = allocate<x86_rtc>(this);
 	rtc->init();
+	auto *ata = allocate<x86_ata>(this);
+	ata->init();
 	return 0;
 }
 
