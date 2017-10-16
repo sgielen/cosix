@@ -149,14 +149,14 @@ struct Bucketizer {
 			bin.fill();
 		}
 		auto allocation = bin.allocate_aligned(alignment);
-		if(allocation.ptr == 0) {
+		if(allocation.ptr == nullptr) {
 			// didn't find one. Try to fill the bin once more and try again
 			// TODO: if we don't use any elements of the new page, the page
 			// may not be correctly returned as this only happens when such
 			// an element is returned
 			bin.fill();
 			allocation = bin.allocate_aligned(alignment);
-			if(allocation.ptr == 0) {
+			if(allocation.ptr == nullptr) {
 				// TODO: write code for this case, e.g. try using another bin
 				// size or returning {}
 				kernel_panic("Bucketizer failed to return an aligned allocation");

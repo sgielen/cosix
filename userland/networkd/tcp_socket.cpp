@@ -136,6 +136,7 @@ bool tcp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 
 void tcp_socket::pwrite(pseudofd_t p, off_t, const char *msg, size_t len)
 {
+	(void)p;
 	assert(p == 0);
 
 	if(status != sockstatus_t::CONNECTED && status != sockstatus_t::SHUTDOWN) {
@@ -264,6 +265,7 @@ void tcp_socket::pump_segment_queue()
 	for(auto &segment : outgoing_segments) {
 		// TODO: handle overflow
 		assert(segment.seqnum > last_seqnum);
+		last_seqnum = segment.seqnum;
 
 		if(segment.ack_deadline > now) {
 			continue;
@@ -300,6 +302,7 @@ void tcp_socket::pump_segment_queue()
 
 size_t tcp_socket::pread(pseudofd_t p, off_t, char *dest, size_t requested)
 {
+	(void)p;
 	assert(p == 0);
 
 	if(requested == 0) {
@@ -324,6 +327,7 @@ size_t tcp_socket::pread(pseudofd_t p, off_t, char *dest, size_t requested)
 
 bool tcp_socket::is_readable(cosix::pseudofd_t p)
 {
+	(void)p;
 	assert(p == 0);
 
 	std::unique_lock<std::mutex> lock(wc_mtx);

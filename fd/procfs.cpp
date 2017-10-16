@@ -150,6 +150,7 @@ size_t procfs_uptime_fd::read(void *dest, size_t count) {
 }
 
 size_t procfs_alloctrack_fd::write(const char *buf, size_t count) {
+	(void)buf;
 	error = 0;
 	// TODO: static_assert 'if get_allocator()->get_allocator()->start_tracking() exists'
 #ifndef NDEBUG

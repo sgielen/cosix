@@ -55,6 +55,7 @@ bool udp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 
 void udp_socket::pwrite(pseudofd_t p, off_t, const char *msg, size_t len)
 {
+	(void)p;
 	assert(p == 0);
 
 	if(get_peer_ip().empty()) {
@@ -110,6 +111,7 @@ void udp_socket::pwrite(pseudofd_t p, off_t, const char *msg, size_t len)
 
 size_t udp_socket::pread(pseudofd_t p, off_t, char *dest, size_t requested)
 {
+	(void)p;
 	assert(p == 0);
 
 	udp_message message;
@@ -129,6 +131,7 @@ size_t udp_socket::pread(pseudofd_t p, off_t, char *dest, size_t requested)
 
 bool udp_socket::is_readable(cosix::pseudofd_t p)
 {
+	(void)p;
 	assert(p == 0);
 
 	std::unique_lock<std::mutex> lock(wm_mtx);

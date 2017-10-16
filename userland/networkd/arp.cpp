@@ -50,10 +50,12 @@ static void fill_arp(char *arp_frm, size_t frame_len, char oper, std::string sen
 	offset += arp_hdr->plen;
 
 	assert(sizeof(arp_frame_header) + offset == frame_len);
+	(void)frame_len;
 }
 
 static void fill_eth(char *eth_frm, size_t frame_len, std::string src_mac, std::string dest_mac = std::string(6, 0xff))
 {
+	(void)frame_len;
 	assert(frame_len == 14);
 	const size_t hwlen = 6;
 	assert(src_mac.length() == hwlen);

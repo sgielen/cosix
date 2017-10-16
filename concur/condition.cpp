@@ -92,6 +92,7 @@ void thread_condition_signaler::condition_notify() {
 		conditions->data->satisfy();
 		// satisfy will call remove_condition(), which will call
 		// remove_one(), assert that the first condition changed
+		(void)c;
 		assert(conditions != c);
 	}
 }
@@ -102,6 +103,7 @@ void thread_condition_signaler::condition_broadcast() {
 		conditions->data->satisfy();
 		// satisfy will call remove_condition(), which will call
 		// remove_one(), assert that the first condition changed
+		(void)c;
 		assert(conditions != c);
 	}
 }
