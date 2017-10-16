@@ -149,7 +149,7 @@ void x86_rtc_clock::set_current_utc_time(cloudabi_timestamp_t utctime) {
 	offset_monotonic_to_utc = utctime - get_monotonic()->get_time(0);
 }
 
-clock *x86_rtc_clock::get_monotonic() {
+cloudos::clock *x86_rtc_clock::get_monotonic() {
 	// TODO: check if the monotonic clock didn't change?
 	return get_clock_store()->get_clock(CLOUDABI_CLOCK_MONOTONIC);
 }
