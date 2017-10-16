@@ -34,8 +34,11 @@ while (( "$#" )); do
 		INTO="$2"
 		mkdir -p $TMPDIR/$INTO
 		shift
-	else
+	elif [ -r "$1" ]; then
 		cp -R $(greadlink -f $1) "$TMPDIR/$INTO"
+	else
+		echo "Failed to read file to copy into initrd: $1"
+		exit 1
 	fi
 	shift
 done
