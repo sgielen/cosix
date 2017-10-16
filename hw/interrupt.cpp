@@ -171,8 +171,8 @@ void interrupt_handler::handle_irq(uint8_t irq) {
 	if(handler != nullptr) {
 		handler->handle_irq(irq);
 	} else {
-		get_vga_stream() << "Unknown kernel interrupt " << irq << "\n";
-		kernel_panic("Got unknown hardware interrupt.");
+		get_vga_stream() << "Unknown kernel IRQ " << irq << "\n";
+		kernel_panic("Got unknown hardware IRQ.");
 	}
 }
 
@@ -242,8 +242,11 @@ void interrupt_handler::disable_interrupts() {
 }
 
 void interrupt_handler::reprogram_pic() {
-	uint8_t master_pic_mask = inb(master_pic_data);
-	uint8_t slave_pic_mask  = inb(slave_pic_data);
+	// TODO(sjors): allow selective masking of interrupts
+	//uint8_t master_pic_mask = inb(master_pic_data);
+	//uint8_t slave_pic_mask  = inb(slave_pic_data);
+	uint8_t master_pic_mask = 0;
+	uint8_t slave_pic_mask = 0;
 
 	// TODO(sjors): we do not io_wait() after every outb() call, even
 	// though this is necessary on older machines. I'll need to add this
@@ -265,7 +268,7 @@ void interrupt_handler::reprogram_pic() {
 	outb(master_pic_data, 0x01);
 	outb(slave_pic_data, 0x01);
 
-	// restore masks
+	// set masks
 	outb(master_pic_data, master_pic_mask);
 	outb(slave_pic_data, slave_pic_mask);
 }

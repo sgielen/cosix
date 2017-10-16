@@ -71,7 +71,4 @@ void x86_serial::init_serial(uint8_t device) {
 void x86_serial::handle_irq(uint8_t irq) {
 	assert(irq == 3 || irq == 4);
 	(void)irq;
-
-	// TODO read from serial port
-	get_vga_stream() << "IRQ " << irq << "\n";
 }

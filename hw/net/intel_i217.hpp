@@ -22,7 +22,6 @@ struct intel_i217_device : public ethernet_device, public pci_device, public irq
 	cloudabi_errno_t send_ethernet_frame(uint8_t *frame, size_t length) override;
 
 	void handle_irq(uint8_t) override;
-	void timer_event() override;
 
 private:
 	uint16_t eeprom_read(uint8_t offset);

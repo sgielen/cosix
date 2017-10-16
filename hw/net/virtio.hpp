@@ -1,8 +1,9 @@
 #pragma once
 
-#include "hw/pci_bus.hpp"
-#include "hw/net/ethernet_device.hpp"
-#include "global.hpp"
+#include <global.hpp>
+#include <hw/interrupt.hpp>
+#include <hw/net/ethernet_device.hpp>
+#include <hw/pci_bus.hpp>
 
 namespace cloudos {
 
@@ -16,7 +17,7 @@ typedef linked_list<address_mapping*> address_mapping_list;
 
 struct virtq;
 
-struct virtio_net_device : public ethernet_device, public pci_device {
+struct virtio_net_device : public ethernet_device, public pci_device, public irq_handler {
 	virtio_net_device(pci_bus *parent, int bus_device);
 
 	const char *description() override;
@@ -26,7 +27,7 @@ struct virtio_net_device : public ethernet_device, public pci_device {
 	cloudabi_errno_t get_mac_address(uint8_t mac[6]) override;
 	cloudabi_errno_t send_ethernet_frame(uint8_t *frame, size_t length) override;
 
-	void timer_event() override;
+	void handle_irq(uint8_t) override;
 
 private:
 	cloudabi_errno_t add_buffer_to_avail(virtq *virtq, int buffer);

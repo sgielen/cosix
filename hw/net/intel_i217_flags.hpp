@@ -11,6 +11,9 @@
 #define REG_STATUS      0x0008
 #define REG_EEPROM      0x0014
 #define REG_CTRL_EXT    0x0018
+#define REG_ICR         0x00C0
+#define REG_ITR         0x00C4
+#define REG_ICS         0x00C8
 #define REG_IMS         0x00D0
 #define REG_IMC         0x00D8
 #define REG_RCTRL       0x0100
@@ -95,3 +98,17 @@
 
 #define E1000_BUFFER_SIZE 2048
 
+#define E1000_INTERRUPT_TXDW            (1U << 0)
+#define E1000_INTERRUPT_TXQE            (1U << 1)
+#define E1000_INTERRUPT_LSC             (1U << 2)
+#define E1000_INTERRUPT_RXSEQ           (1U << 3)
+#define E1000_INTERRUPT_RXDMT0          (1U << 4)
+#define E1000_INTERRUPT_RXO             (1U << 6)
+#define E1000_INTERRUPT_RXT0            (1U << 7)
+#define E1000_INTERRUPT_MDAC            (1U << 9)
+#define E1000_INTERRUPT_RXCFG           (1U <<10)
+#define E1000_INTERRUPT_PHYINT          (1U <<12)
+#define E1000_INTERRUPT_GPI2            (1U <<13)
+#define E1000_INTERRUPT_GPI3            (1U <<14)
+#define E1000_INTERRUPT_TXD_LOW         (1U <<15)
+#define E1000_INTERRUPT_SRPD            (1U <<16)

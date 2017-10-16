@@ -29,6 +29,8 @@ struct e1000_tx_desc {
 } __attribute__((packed));
 }
 
+static auto const understood_interrupts = E1000_INTERRUPT_RXT0;
+
 device *intel_i217_driver::probe_pci_device(pci_bus *bus, int device)
 {
 	if(bus->get_vendor_id(device) != INTEL_VEND) {
@@ -83,7 +85,7 @@ cloudabi_errno_t intel_i217_device::eth_init()
 	set_pci_config(0, 0x04, get_pci_config(0, 0x04) & ~(1 << 2));
 
 	// Disable interrupt line
-	set_pci_config(0, 0x04, get_pci_config(0, 0x04) & ~(1 << 10));
+	set_pci_config(0, 0x04, get_pci_config(0, 0x04) | (1 << 10));
 
 	// Reset device
 	write32(REG_IMC, UINT32_MAX); // TODO: specificaion says upper bits should remain zero
@@ -216,11 +218,14 @@ cloudabi_errno_t intel_i217_device::eth_init()
 	register_irq(interrupt_line);
 
 	// Enable interrupt line
-	set_pci_config(0, 0x04, get_pci_config(0, 0x04) | (1 << 10));
+	set_pci_config(0, 0x04, get_pci_config(0, 0x04) & ~(1 << 10));
+
+	// Set interrupt status to 1
+	set_pci_config(0, 0x04, get_pci_config(0, 0x04) | (1 << 19));
 
 	write32(REG_IMS, UINT32_MAX);
 	write32(REG_IMC, UINT32_MAX);
-	write32(REG_IMS, 1 << 7 /* RX Timer */);
+	write32(REG_IMS, understood_interrupts);
 
 	initialized = true;
 	return 0;
@@ -254,13 +259,16 @@ cloudabi_errno_t intel_i217_device::send_ethernet_frame(uint8_t *frame, size_t l
 	return 0;
 }
 
-void intel_i217_device::timer_event()
-{
-	handle_receive();
-}
-
 void intel_i217_device::handle_irq(uint8_t)
 {
+	// read ICR; without this, the IRQ gets sent over and over again
+	volatile uint32_t icr = read32(REG_ICR);
+	// currently unused, though
+	(void)icr;
+
+	// TODO: look at the ICR: will contain the interrupt types that occurred. Not
+	// all interrupts are because of received packets, they might also come
+	// in because of link up/down, timer expired, packet overrun, etc.
 	handle_receive();
 }
 

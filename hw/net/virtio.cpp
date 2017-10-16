@@ -280,8 +280,25 @@ cloudabi_errno_t virtio_net_device::eth_init()
 		}
 	}
 
+	uint16_t interrupt_line = get_pci_config(0, 0x3c) & 0xff;
+	register_irq(interrupt_line);
+
 	write8(device_status, 15); /* driver ready */
 	return 0;
+}
+
+void virtio_net_device::handle_irq(uint8_t) {
+	// Ack the IRQ by reading ISR status
+	volatile uint32_t v = read8(0x13 /* ISR Status */);
+	if(v == 0) {
+		// Nothing changed in this VirtIO device, ignore interrupt
+		return;
+	}
+
+	auto res = check_new_packets();
+	if(res != 0) {
+		get_vga_stream() << "check_new_packets failed: " << res << "\n";
+	}
 }
 
 cloudabi_errno_t virtio_net_device::check_new_packets() {
@@ -397,13 +414,4 @@ cloudabi_errno_t virtio_net_device::send_ethernet_frame(uint8_t *frame, size_t l
 	avail->flags = 0;
 	auto res = add_buffer_to_avail(writeq, desc_idx);
 	return res;
-}
-
-void virtio_net_device::timer_event() {
-	// TODO: do this when the correct interrupt arrives, instead of
-	// when the timer fires
-	auto res = check_new_packets();
-	if(res != 0) {
-		get_vga_stream() << "check_new_packets failed: " << res << "\n";
-	}
 }
