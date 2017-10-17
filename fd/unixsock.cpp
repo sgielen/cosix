@@ -8,10 +8,16 @@ static bool unixsock_is_readable(void *r, thread_condition*) {
 	return unixsock->has_messages();
 }
 
+static bool unixsock_is_writeable(void *r, thread_condition*) {
+	auto *unixsock = reinterpret_cast<struct unixsock*>(r);
+	return unixsock->is_writeable();
+}
+
 unixsock::unixsock(cloudabi_filetype_t sockettype, const char *n)
 : sock_t(sockettype, n)
 {
 	recv_signaler.set_already_satisfied_function(unixsock_is_readable, this);
+	send_signaler.set_already_satisfied_function(unixsock_is_writeable, this);
 }
 
 unixsock::~unixsock()
@@ -47,9 +53,26 @@ bool unixsock::has_messages() const
 	return recv_messages != nullptr;
 }
 
+bool unixsock::is_writeable()
+{
+	if(status != sockstatus_t::CONNECTED) {
+		return false;
+	}
+	auto other = othersock.lock();
+	assert(other);
+	assert(other->num_recv_bytes <= MAX_SIZE_BUFFERS);
+	return other->num_recv_bytes != MAX_SIZE_BUFFERS;
+}
+
 cloudabi_errno_t unixsock::get_read_signaler(thread_condition_signaler **s)
 {
 	*s = &recv_signaler;
+	return 0;
+}
+
+cloudabi_errno_t unixsock::get_write_signaler(thread_condition_signaler **s)
+{
+	*s = &send_signaler;
 	return 0;
 }
 
@@ -212,6 +235,7 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 
 		deallocate(message->buf);
 		deallocate(message);
+		send_signaler.condition_broadcast();
 	} else if(type == CLOUDABI_FILETYPE_SOCKET_STREAM) {
 		// Stream receiving: while the current buffers aren't full,
 		// fill them with parts of the next message, taking them off
@@ -292,6 +316,9 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 		out->ro_datalen = total_written;
 		out->ro_fdslen = fds_set;
 		error = 0;
+		if(total_written > 0) {
+			send_signaler.condition_broadcast();
+		}
 	}
 }
 
@@ -319,22 +346,31 @@ void unixsock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *out)
 		total_message_size += data.buf_len;
 	}
 
-	if(total_message_size + other->num_recv_bytes > MAX_SIZE_BUFFERS) {
-		// TODO: block for the messages to be read off the socket?
-		error = ENOBUFS;
+	if(!is_writeable()) {
+		// TODO: if not O_NONBLOCK, block for the messages to be read
+		// off the socket?
+		error = EAGAIN;
 		return;
 	}
 
+	if(total_message_size + other->num_recv_bytes > MAX_SIZE_BUFFERS) {
+		// limit the number of bytes written
+		total_message_size = MAX_SIZE_BUFFERS - other->num_recv_bytes;
+	}
 	auto *message = allocate<unixsock_message>();
 	message->buf = allocate(total_message_size);
+	size_t bytes_remaining = total_message_size;
 
 	char *buffer = reinterpret_cast<char*>(message->buf.ptr);
-	for(size_t i = 0; i < in->si_data_len; ++i) {
+	for(size_t i = 0; i < in->si_data_len && bytes_remaining > 0; ++i) {
 		const cloudabi_ciovec_t &data = in->si_data[i];
-		memcpy(buffer, data.buf, data.buf_len);
-		buffer += data.buf_len;
+		size_t copy = data.buf_len < bytes_remaining ? data.buf_len : bytes_remaining;
+		memcpy(buffer, data.buf, copy);
+		buffer += copy;
+		bytes_remaining -= copy;
 	}
 	assert(buffer == reinterpret_cast<char*>(message->buf.ptr) + message->buf.size);
+	assert(bytes_remaining == 0);
 
 	auto process = get_scheduler()->get_running_thread()->get_process();
 	for(size_t i = 0; i < in->si_fds_len; ++i) {
@@ -354,6 +390,7 @@ void unixsock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *out)
 	auto *message_item = allocate<unixsock_message_list>(message);
 	append(&other->recv_messages, message_item);
 	other->num_recv_bytes += total_message_size;
+	assert(other->num_recv_bytes <= MAX_SIZE_BUFFERS);
 	other->recv_signaler.condition_broadcast();
 	other->recv_messages_cv.notify();
 	other->have_bytes_received();

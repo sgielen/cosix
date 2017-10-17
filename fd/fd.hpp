@@ -83,6 +83,11 @@ struct fd_t {
 		return EINVAL;
 	}
 
+	virtual cloudabi_errno_t get_write_signaler(thread_condition_signaler **s) {
+		*s = nullptr;
+		return EINVAL;
+	}
+
 	/* For directories */
 	/** Open a path. In the cloudabi_fdstat_t, rights_base and rights_inheriting specify the
 	 * initial rights of the newly created file descriptor. The rights that do not apply to

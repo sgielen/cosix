@@ -24,7 +24,9 @@ struct unixsock : public sock_t, public enable_shared_from_this<unixsock> {
 
 	size_t bytes_readable() const;
 	bool has_messages() const;
+	bool is_writeable();
 	cloudabi_errno_t get_read_signaler(thread_condition_signaler **s) override;
+	cloudabi_errno_t get_write_signaler(thread_condition_signaler **s) override;
 
 	void socketpair(shared_ptr<unixsock> other);
 
@@ -52,6 +54,7 @@ private:
 	unixsock_message_list *recv_messages = nullptr;
 	cv_t recv_messages_cv;
 	thread_condition_signaler recv_signaler;
+	thread_condition_signaler send_signaler;
 };
 
 }

@@ -167,12 +167,20 @@ cloudabi_errno_t cloudos::syscall_poll(syscall_context &c)
 			break;
 		}
 		case CLOUDABI_EVENTTYPE_FD_WRITE: {
-			// TODO: this eventtype is unimplemented; for now, assume
-			// fd is always writable
 			auto fdnum = i.fd_readwrite.fd;
 			fd_mapping_t *proc_mapping = nullptr;
-			userdata->error = c.process()->get_fd(&proc_mapping, fdnum, CLOUDABI_RIGHT_POLL_FD_READWRITE | CLOUDABI_RIGHT_FD_WRITE);
-			signaler = &null_signaler;
+			auto res = c.process()->get_fd(&proc_mapping, fdnum, CLOUDABI_RIGHT_POLL_FD_READWRITE | CLOUDABI_RIGHT_FD_WRITE);
+			if(res != 0) {
+				userdata->error = res;
+				signaler = &null_signaler;
+			} else {
+				res = proc_mapping->fd->get_write_signaler(&signaler);
+				if(res != 0) {
+					// TODO: this eventtype is unimplemented for this FD type; for now,
+					// assume fd is writeable
+					signaler = &null_signaler;
+				}
+			}
 			break;
 		}
 		case CLOUDABI_EVENTTYPE_PROC_TERMINATE: {
