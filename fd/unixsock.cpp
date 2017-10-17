@@ -186,9 +186,7 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 			}
 		}
 
-		if(buffer_size_remaining > 0) {
-			// TODO: message is truncated
-		}
+		out->ro_flags = buffer_size_remaining > 0 ? CLOUDABI_SOCK_RECV_DATA_TRUNCATED : 0;
 
 		auto *fd_item = message->fd_list;
 		size_t fds_set = 0;
@@ -198,13 +196,15 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 				fd_mapping_t &fd_map = fd_item->data;
 				in->ri_fds[fds_set] = process->add_fd(fd_map.fd, fd_map.rights_base, fd_map.rights_inheriting);
 				fds_set++;
+			} else if(in->ri_fds_len > 0) {
+				// if userland did not ask for FDs at all, we shouldn't set FDS_TRUNCATED
+				out->ro_flags |= CLOUDABI_SOCK_RECV_FDS_TRUNCATED;
 			}
 			auto d = fd_item;
 			fd_item = fd_item->next;
 			deallocate(d);
 		}
 
-		// TODO: what if fds are truncated? move to next message?
 		num_recv_bytes -= datalen;
 		out->ro_datalen = datalen;
 		out->ro_fdslen = fds_set;
@@ -219,6 +219,8 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 
 		auto *recv_message = recv_messages;
 		size_t total_written = 0;
+		size_t messages_consumed = 0;
+		bool next_message_read = false;
 		for(size_t i = 0; i < in->ri_data_len && recv_message; ++i) {
 			auto &iovec = in->ri_data[i];
 			size_t written = 0;
@@ -234,43 +236,57 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 					body->stream_data_recv += copy;
 					written += copy;
 					message_remaining -= copy;
+					assert(copy > 0);
+					next_message_read = true;
 				}
 				if(message_remaining == 0) {
 					// no data left in this buffer
 					recv_message = recv_message->next;
+					++messages_consumed;
+					next_message_read = false;
 				}
 			}
 			total_written += written;
 		}
 
 		recv_message = recv_messages;
+		out->ro_flags = 0;
+
+		size_t fd_messages = messages_consumed + (next_message_read ? 1 : 0);
 		size_t fds_set = 0;
 		auto process = get_scheduler()->get_running_thread()->get_process();
-		while(fds_set < in->ri_fds_len && recv_message) {
-			auto *body = recv_message->data;
-			auto *fd_item = body->fd_list;
-			while(fds_set < in->ri_fds_len && fd_item) {
-				fd_mapping_t &fd_map = fd_item->data;
-				in->ri_fds[fds_set] = process->add_fd(fd_map.fd, fd_map.rights_base, fd_map.rights_inheriting);
-				fds_set++;
+		for(; fd_messages > 0; --fd_messages) {
+			assert(recv_message);
+
+			// FDs from this message were consumed in the stream; take or destroy them
+			auto *fd_item = recv_messages->data->fd_list;
+			while(fd_item) {
+				if(fds_set < in->ri_fds_len) {
+					fd_mapping_t &fd_map = fd_item->data;
+					in->ri_fds[fds_set] = process->add_fd(fd_map.fd, fd_map.rights_base, fd_map.rights_inheriting);
+					fds_set++;
+				} else if(in->ri_fds_len > 0) {
+					// if userland did not ask for FDs at all, we shouldn't set FDS_TRUNCATED
+					out->ro_flags |= CLOUDABI_SOCK_RECV_FDS_TRUNCATED;
+				}
 				auto d = fd_item;
 				fd_item = fd_item->next;
 				deallocate(d);
 			}
-			body->fd_list = fd_item;
+			recv_messages->data->fd_list = nullptr;
+
 			recv_message = recv_message->next;
 		}
 
-		// deallocate all messages without fd's or body
-		remove_all(&recv_messages, [&](unixsock_message_list *item) {
-			auto *body = item->data;
-			assert(body->buf.size >= body->stream_data_recv);
-			return body->buf.size == body->stream_data_recv && body->fd_list == nullptr;
-		}, [&](unixsock_message_list *item) {
-			deallocate(item->data->buf);
-			deallocate(item->data);
-			deallocate(item);
-		});
+		for(; messages_consumed > 0; --messages_consumed) {
+			assert(recv_messages);
+
+			auto *d = recv_messages;
+			recv_messages = recv_messages->next;
+			deallocate(d->data->buf);
+			deallocate(d->data);
+			deallocate(d);
+		}
 
 		num_recv_bytes -= total_written;
 		out->ro_datalen = total_written;
