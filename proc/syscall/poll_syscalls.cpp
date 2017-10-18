@@ -262,9 +262,3 @@ cloudabi_errno_t cloudos::syscall_poll(syscall_context &c)
 	c.result = nevents;
 	return 0;
 }
-
-cloudabi_errno_t cloudos::syscall_poll_fd(syscall_context &)
-{
-	return ENOSYS;
-}
-

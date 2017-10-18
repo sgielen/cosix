@@ -480,7 +480,7 @@ void program_main(const argdata_t *) {
 	// 1. Open the init-binaries directory fd from argdata
 	// 2. Read some configuration from the kernel cmdline
 	// 3. Start the necessary applications (like dhcpcd)
-	// 4. Keep track of their status using poll() / poll_fd()
+	// 4. Keep track of their status using poll()
 	//    (so that the application actually always blocks)
 	// 5. If needed, open an init RPC socket so that applications or the
 	//    kernel can always ask for extra services

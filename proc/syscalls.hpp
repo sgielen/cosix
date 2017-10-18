@@ -44,7 +44,6 @@ cloudabi_errno_t syscall_mem_sync(syscall_context &c);
 cloudabi_errno_t syscall_mem_unlock(syscall_context &c);
 cloudabi_errno_t syscall_mem_unmap(syscall_context &c);
 cloudabi_errno_t syscall_poll(syscall_context &c);
-cloudabi_errno_t syscall_poll_fd(syscall_context &c);
 cloudabi_errno_t syscall_proc_exec(syscall_context &c);
 cloudabi_errno_t syscall_proc_exit(syscall_context &c);
 cloudabi_errno_t syscall_proc_fork(syscall_context &c);

@@ -19,7 +19,6 @@ inline vga_stream &operator<<(vga_stream &s, cloudabi_filetype_t type) {
 	FT(BLOCK_DEVICE);
 	FT(CHARACTER_DEVICE);
 	FT(DIRECTORY);
-	FT(POLL);
 	FT(PROCESS);
 	FT(REGULAR_FILE);
 	FT(SHARED_MEMORY);
