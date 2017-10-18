@@ -78,12 +78,14 @@ void tcp::handle_packet(std::shared_ptr<interface> iface, const char *frame, siz
 		// TODO: allow connecting to a wildcard or broadcast IP address?
 
 		ListResponse list_response;
-		auto reader = get_switchboard_stub()->List(&list_context, list_request);
+		auto stub = get_switchboard_stub();
+		auto reader = stub->List(&list_context, list_request);
 		if(!reader->Read(&list_response)) {
 			// nobody is listening on this IP/port, drop it
 			send_rst(thiscon, seqnum + 1);
 			return;
 		}
+		reader->Finish();
 
 		auto rev_pseu = open_pseudo(CLOUDABI_FILETYPE_SOCKET_STREAM);
 		if(rev_pseu.first <= 0 || rev_pseu.second <= 0) {
@@ -111,7 +113,9 @@ void tcp::handle_packet(std::shared_ptr<interface> iface, const char *frame, siz
 		*request.mutable_out_labels() = *out_labels;
 
 		IngressConnectResponse response;
-		if (arpc::Status status = get_switchboard_stub()->IngressConnect(&context, request, &response); !status.ok()) {
+		// TODO: this shouldn't be necessary, but otherwise I get EBADF
+		stub = get_switchboard_stub();
+		if (arpc::Status status = stub->IngressConnect(&context, request, &response); !status.ok()) {
 			// apparently, the server went away, so close the connection again
 			send_rst(thiscon, seqnum + 1);
 			close(rev_pseu.first);

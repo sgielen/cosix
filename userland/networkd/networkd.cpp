@@ -348,7 +348,8 @@ void program_main(const argdata_t *ad) {
 	(*in_labels)["service"] = "networkd";
 	ServerStartResponse response;
 
-	if(Status status = get_switchboard_stub()->ServerStart(&context, request, &response); !status.ok()) {
+	auto stub = get_switchboard_stub();
+	if(Status status = stub->ServerStart(&context, request, &response); !status.ok()) {
 		dprintf(stdout, "Failed to start server in switchboard: %s\n", status.error_message().c_str());
 		exit(1);
 	}
