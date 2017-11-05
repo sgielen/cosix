@@ -38,7 +38,7 @@ bool pseudo_fd::is_valid_path(const char *path, size_t length)
 	return true;
 }
 
-bool pseudo_fd::lookup_inode(const char *path, size_t length, cloudabi_oflags_t oflags, reverse_response_t *response)
+bool pseudo_fd::lookup_inode(const char *path, size_t length, cloudabi_lookupflags_t lookupflags, reverse_response_t *response)
 {
 	if(!is_valid_path(path, length)) {
 		return false;
@@ -47,7 +47,7 @@ bool pseudo_fd::lookup_inode(const char *path, size_t length, cloudabi_oflags_t 
 	request.pseudofd = pseudo_id;
 	request.op = reverse_request_t::operation::lookup;
 	request.inode = 0;
-	request.flags = oflags;
+	request.flags = lookupflags;
 	request.send_length = length;
 	request.recv_length = 0;
 	maybe_deallocate(send_request(&request, path, response));
@@ -138,12 +138,12 @@ size_t pseudo_fd::write(const char *str, size_t size)
 	return size;
 }
 
-shared_ptr<fd_t> pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_oflags_t oflags, const cloudabi_fdstat_t * fdstat)
+shared_ptr<fd_t> pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_lookupflags_t lookupflags, cloudabi_oflags_t oflags, const cloudabi_fdstat_t * fdstat)
 {
 	int64_t inode;
 	int filetype;
 	reverse_response_t response;
-	if(!lookup_inode(path, pathlen, oflags, &response)) {
+	if(!lookup_inode(path, pathlen, lookupflags, &response)) {
 		error = -response.result;
 		return nullptr;
 	} else if(response.result == -ENOENT && (oflags & CLOUDABI_O_CREAT)) {
@@ -227,6 +227,35 @@ cloudabi_inode_t pseudo_fd::file_create(const char *path, size_t pathlen, clouda
 	}
 }
 
+size_t pseudo_fd::file_readlink(const char *path, size_t pathlen, char *dest, size_t destlen)
+{
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::readlink;
+	request.inode = 0;
+	request.flags = 0;
+	request.offset = 0;
+	request.recv_length = destlen;
+	request.send_length = pathlen;
+	reverse_response_t response;
+	Blk buf = send_request(&request, path, &response);
+	if(response.result < 0) {
+		error = -response.result;
+		maybe_deallocate(buf);
+		return 0;
+	}
+
+	error = 0;
+	if(response.send_length > destlen) {
+		get_vga_stream() << "pseudo-fd filesystem returned more data than requested, dropping";
+		response.send_length = destlen;
+	}
+
+	memcpy(dest, buf.ptr, response.send_length);
+	maybe_deallocate(buf);
+	return response.send_length;
+}
+
 void pseudo_fd::file_rename(const char *path1, size_t path1len, shared_ptr<fd_t> fd2, const char *path2, size_t path2len)
 {
 	pseudo_fd *fd2ps = dynamic_cast<pseudo_fd*>(fd2.get());
@@ -260,6 +289,39 @@ void pseudo_fd::file_rename(const char *path1, size_t path1len, shared_ptr<fd_t>
 	request.op = reverse_request_t::operation::rename;
 	request.inode = 0;
 	request.flags = fd2ps->pseudo_id;
+	request.send_length = path.size;
+
+	reverse_response_t response;
+	maybe_deallocate(send_request(&request, pathstr, &response));
+	deallocate(path);
+	if(response.result < 0) {
+		error = -response.result;
+	} else {
+		error = 0;
+	}
+}
+
+void pseudo_fd::file_symlink(const char *path1, size_t path1len, const char *path2, size_t path2len)
+{
+	// path1 cannot contain null characters, as they are used as delimiters
+	for(size_t i = 0; i < path1len; ++i) {
+		if(path1[i] == 0) {
+			error = CLOUDABI_EINVAL;
+			return;
+		}
+	}
+
+	Blk path = allocate(path1len + path2len + 1);
+	char *pathstr = reinterpret_cast<char*>(path.ptr);
+	memcpy(pathstr, path1, path1len);
+	pathstr[path1len] = 0;
+	memcpy(pathstr + path1len + 1, path2, path2len);
+
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::symlink;
+	request.inode = 0;
+	request.flags = 0;
 	request.send_length = path.size;
 
 	reverse_response_t response;

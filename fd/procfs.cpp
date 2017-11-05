@@ -17,7 +17,7 @@ struct procfs_directory_fd : fd_t {
 
 	bool to_string(char *buf, size_t length);
 
-	shared_ptr<fd_t> openat(const char * /*path */, size_t /*pathlen*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) override;
+	shared_ptr<fd_t> openat(const char * /*path */, size_t /*pathlen*/, cloudabi_lookupflags_t /*lookupflags*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) override;
 
 private:
 	char path[PROCFS_DEPTH_MAX][PROCFS_FILE_MAX];
@@ -87,7 +87,7 @@ bool procfs_directory_fd::to_string(char *buf, size_t length) {
 	return true;
 }
 
-shared_ptr<fd_t> procfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi_oflags_t oflags, const cloudabi_fdstat_t *) {
+shared_ptr<fd_t> procfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi_lookupflags_t, cloudabi_oflags_t oflags, const cloudabi_fdstat_t *) {
 	if(pathname == nullptr || pathlen == 0 || pathname[0] == 0 || pathname[0] == '/') {
 		error = EINVAL;
 		return nullptr;

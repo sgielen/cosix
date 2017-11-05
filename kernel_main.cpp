@@ -172,7 +172,7 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 		if(!bootfs_fd) {
 			kernel_panic("Failed to get bootfs fd");
 		}
-		auto init_exec_fd = bootfs_fd->openat("init", 4, 0, nullptr);
+		auto init_exec_fd = bootfs_fd->openat("init", 4, 0, 0, nullptr);
 		if(!init_exec_fd) {
 			kernel_panic("Failed to open init");
 		}

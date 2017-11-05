@@ -99,7 +99,7 @@ struct fd_t {
 	 * filesystem) must generate ENOTCAPABLE. fs_flags specifies the initial flags of the fd; the
 	 * filetype is ignored.
 	 */
-	virtual shared_ptr<fd_t> openat(const char * /*path */, size_t /*pathlen*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) {
+	virtual shared_ptr<fd_t> openat(const char * /*path */, size_t /*pathlen*/, cloudabi_lookupflags_t /*lookupflags*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) {
 		error = EINVAL;
 		return nullptr;
 	}
@@ -123,9 +123,24 @@ struct fd_t {
 		return 0;
 	}
 
+	/** Read a symlink. Returns the number of bytes used in the output buffer.
+	 */
+	virtual size_t file_readlink(const char * /*path*/, size_t /*pathlen*/, char * /*buf*/, size_t /*buflen*/)
+	{
+		error = EINVAL;
+		return 0;
+	}
+
 	/** Rename a file. Is only possible if the given fd is on the same device as this fd.
 	 */
 	virtual void file_rename(const char * /*path1*/, size_t /*path1len*/, shared_ptr<fd_t> /*fd2*/, const char * /*path2*/, size_t /*path2len*/)
+	{
+		error = EINVAL;
+	}
+
+	/** Create a symlink. Is only possible if the device supports symlinks.
+	 */
+	virtual void file_symlink(const char * /*path1*/, size_t /*path1len*/, const char * /*path2*/, size_t /*path2len*/)
 	{
 		error = EINVAL;
 	}
@@ -139,11 +154,11 @@ struct fd_t {
 
 	/** Get attributes of a file by path.
 	 */
-	virtual void file_stat_get(cloudabi_lookupflags_t /*flags*/, const char* path, size_t pathlen, cloudabi_filestat_t* buf)
+	virtual void file_stat_get(cloudabi_lookupflags_t lookupflags, const char* path, size_t pathlen, cloudabi_filestat_t* buf)
 	{
 		// If file_stat_get is unimplemented, use openat() + file_stat_fget
 		cloudabi_fdstat_t stat;
-		auto fd = openat(path, pathlen, 0, &stat);
+		auto fd = openat(path, pathlen, lookupflags, 0, &stat);
 		if(error) {
 			return;
 		}

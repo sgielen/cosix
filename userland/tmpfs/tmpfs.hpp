@@ -32,7 +32,9 @@ struct tmpfs : public cosix::reverse_handler {
 
 	file_entry lookup(pseudofd_t pseudo, const char *path, size_t len, cloudabi_lookupflags_t lookupflags) override;
 	pseudofd_t open(cloudabi_inode_t inode, int flags) override;
+	size_t readlink(pseudofd_t pseudo, const char *path, size_t pathlen, char *buf, size_t buflen) override;
 	void rename(pseudofd_t pseudo1, const char *path1, size_t path1len, pseudofd_t pseudo2, const char *path2, size_t path2len) override;
+	void symlink(pseudofd_t pseudo ,const char *path1, size_t path1len, const char *path2, size_t path2len) override;
 	void unlink(pseudofd_t pseudo, const char *path, size_t len, cloudabi_ulflags_t unlinkflags) override;
 	cloudabi_inode_t create(pseudofd_t pseudo, const char *path, size_t len, cloudabi_filetype_t type) override;
 	void close(pseudofd_t pseudo) override;

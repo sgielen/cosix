@@ -72,8 +72,6 @@ cloudabi_errno_t cloudos::syscall_file_open(syscall_context &c)
 		return res;
 	}
 
-	// TODO: take lookup flags into account, args->dirfd.flags
-
 	// check if fd can be created with such rights
 	auto fds = args.fifth();
 	if((mapping->rights_inheriting & fds->fs_rights_base) != fds->fs_rights_base
@@ -82,10 +80,11 @@ cloudabi_errno_t cloudos::syscall_file_open(syscall_context &c)
 		return ENOTCAPABLE;
 	}
 
+	auto lookupflags = dirfd.flags;
 	auto path = args.second();
 	auto pathlen = args.third();
 	auto oflags = args.fourth();
-	auto new_fd = mapping->fd->openat(path, pathlen, oflags, fds);
+	auto new_fd = mapping->fd->openat(path, pathlen, lookupflags, oflags, fds);
 	if(!new_fd || mapping->fd->error != 0) {
 		if(mapping->fd->error == 0) {
 			mapping->fd->error = EIO;
@@ -124,9 +123,23 @@ cloudabi_errno_t cloudos::syscall_file_readdir(syscall_context &c)
 	return mapping->fd->error;
 }
 
-cloudabi_errno_t cloudos::syscall_file_readlink(syscall_context &)
+cloudabi_errno_t cloudos::syscall_file_readlink(syscall_context &c)
 {
-	return ENOSYS;
+	auto args = arguments_t<cloudabi_fd_t, const char*, size_t, char*, size_t, size_t*>(c);
+	auto fdnum = args.first();
+	fd_mapping_t *mapping;
+	auto res = c.process()->get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FILE_READLINK);
+	if(res != 0) {
+		return res;
+	}
+
+	auto *path = args.second();
+	auto path_len = args.third();
+	auto *buf = args.fourth();
+	auto buf_len = args.fifth();
+
+	c.result = mapping->fd->file_readlink(path, path_len, buf, buf_len);
+	return mapping->fd->error;
 }
 
 cloudabi_errno_t cloudos::syscall_file_rename(syscall_context &c)
@@ -209,9 +222,23 @@ cloudabi_errno_t cloudos::syscall_file_stat_put(syscall_context &)
 	return ENOSYS;
 }
 
-cloudabi_errno_t cloudos::syscall_file_symlink(syscall_context &)
+cloudabi_errno_t cloudos::syscall_file_symlink(syscall_context &c)
 {
-	return ENOSYS;
+	auto args = arguments_t<const char*, size_t, cloudabi_fd_t, const char*, size_t>(c);
+	auto fdnum = args.third();
+
+	fd_mapping_t *mapping;
+	auto res = c.process()->get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FILE_SYMLINK);
+	if(res != 0) {
+		return res;
+	}
+
+	auto *path1 = args.first();
+	auto path1_len = args.second();
+	auto *path2 = args.fourth();
+	auto path2_len = args.fifth();
+	mapping->fd->file_symlink(path1, path1_len, path2, path2_len);
+	return mapping->fd->error;
 }
 
 cloudabi_errno_t cloudos::syscall_file_unlink(syscall_context &c)

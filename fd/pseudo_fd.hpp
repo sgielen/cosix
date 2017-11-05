@@ -34,10 +34,12 @@ struct pseudo_fd : public seekable_fd_t, public enable_shared_from_this<pseudo_f
 	void became_readable();
 
 	/* For directories */
-	shared_ptr<fd_t> openat(const char *path, size_t pathlen, cloudabi_oflags_t oflags, const cloudabi_fdstat_t * fdstat) override;
+	shared_ptr<fd_t> openat(const char *path, size_t pathlen, cloudabi_lookupflags_t lookupflags, cloudabi_oflags_t oflags, const cloudabi_fdstat_t * fdstat) override;
 	size_t readdir(char *buf, size_t nbyte, cloudabi_dircookie_t cookie) override;
 	cloudabi_inode_t file_create(const char *path, size_t pathlen, cloudabi_filetype_t type) override;
+	size_t file_readlink(const char *path, size_t pathlen, char *buf, size_t buflen) override;
 	void file_rename(const char *path1, size_t path1len, shared_ptr<fd_t> fd2, const char *path2, size_t path2len) override;
+	void file_symlink(const char *path1, size_t path1len, const char *path2, size_t path2len) override;
 	void file_unlink(const char *path, size_t pathlen, cloudabi_ulflags_t flags) override;
 	void file_stat_get(cloudabi_lookupflags_t flags, const char *path, size_t pathlen, cloudabi_filestat_t *buf) override;
 	void file_stat_fget(cloudabi_filestat_t *buf) override;
@@ -51,7 +53,7 @@ private:
 	cloudabi_errno_t lookup_device_id();
 	Blk send_request(reverse_request_t *request, const char *buf, reverse_response_t *response);
 	bool is_valid_path(const char *path, size_t length);
-	bool lookup_inode(const char *path, size_t length, cloudabi_oflags_t oflags, reverse_response_t *response);
+	bool lookup_inode(const char *path, size_t length, cloudabi_lookupflags_t lookupflags, reverse_response_t *response);
 
 	pseudofd_t pseudo_id;
 	shared_ptr<reversefd_t> reverse_fd;

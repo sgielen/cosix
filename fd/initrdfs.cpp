@@ -21,7 +21,7 @@ struct initrdfs_directory_fd : fd_t {
 		strncpy(subpath, s, sizeof(subpath));
 	}
 
-	shared_ptr<fd_t> openat(const char * /*path */, size_t /*pathlen*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) override;
+	shared_ptr<fd_t> openat(const char * /*path */, size_t /*pathlen*/, cloudabi_lookupflags_t /*lookupflags*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) override;
 	size_t readdir(char * /*buf*/, size_t /*nbyte*/, cloudabi_dircookie_t /*cookie*/) override;
 	void file_stat_fget(cloudabi_filestat_t *buf) override;
 	cloudabi_inode_t file_create(const char * /*path*/, size_t /*pathlen*/, cloudabi_filetype_t /*type*/) override;
@@ -144,7 +144,7 @@ shared_ptr<fd_t> initrdfs::get_root_fd() {
 	return make_shared<initrdfs_directory_fd>(initrd_start, initrd_size, "", 0, "initrdfs_root");
 }
 
-shared_ptr<fd_t> initrdfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi_oflags_t, const cloudabi_fdstat_t *) {
+shared_ptr<fd_t> initrdfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi_lookupflags_t, cloudabi_oflags_t, const cloudabi_fdstat_t *) {
 	if(pathname == nullptr || pathname[0] == 0 || pathname[0] == '/') {
 		error = EINVAL;
 		return nullptr;

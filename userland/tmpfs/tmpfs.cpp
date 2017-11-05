@@ -42,11 +42,36 @@ file_entry tmpfs::lookup(pseudofd_t pseudo, const char *path, size_t len, clouda
 pseudofd_t tmpfs::open(cloudabi_inode_t inode, int)
 {
 	file_entry_ptr entry = get_file_entry_from_inode(inode);
+
+	if(entry->type == CLOUDABI_FILETYPE_SYMBOLIC_LINK) {
+		throw cloudabi_system_error(ELOOP);
+	} else if(entry->type != CLOUDABI_FILETYPE_REGULAR_FILE && entry->type != CLOUDABI_FILETYPE_DIRECTORY) {
+		// can't open via the tmpfs
+		throw cloudabi_system_error(EINVAL);
+	}
+
 	pseudo_fd_ptr pseudo(new pseudo_fd_entry);
 	pseudo->file = entry;
 	pseudofd_t fd = reinterpret_cast<pseudofd_t>(pseudo.get());
 	pseudo_fds[fd] = pseudo;
 	return fd;
+}
+
+size_t tmpfs::readlink(pseudofd_t pseudo, const char *path, size_t pathlen, char *buf, size_t buflen) {
+	file_entry_ptr dir = get_file_entry_from_pseudo(pseudo);
+	std::string filename = normalize_path(dir, path, pathlen, 0);
+	auto it = dir->files.find(filename);
+	if(it == dir->files.end()) {
+		throw cloudabi_system_error(ENOENT);
+	}
+
+	if(it->second->type != CLOUDABI_FILETYPE_SYMBOLIC_LINK) {
+		throw cloudabi_system_error(EINVAL);
+	}
+
+	size_t copy = std::min(it->second->contents.size(), buflen);
+	memcpy(buf, it->second->contents.c_str(), copy);
+	return copy;
 }
 
 void tmpfs::rename(pseudofd_t pseudo1, const char *path1, size_t path1len, pseudofd_t pseudo2, const char *path2, size_t path2len)
@@ -112,6 +137,26 @@ void tmpfs::rename(pseudofd_t pseudo1, const char *path1, size_t path1len, pseud
 	dir1->files.erase(it1);
 }
 
+void tmpfs::symlink(pseudofd_t pseudo ,const char *path1, size_t path1len, const char *path2, size_t path2len) {
+	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
+
+	std::string filename = normalize_path(directory, path2, path2len, 0);
+	auto it = directory->files.find(filename);
+	if(it != directory->files.end()) {
+		throw cloudabi_system_error(EEXIST);
+	}
+
+	file_entry_ptr entry(new tmpfs_file_entry);
+	cloudabi_inode_t inode = reinterpret_cast<cloudabi_inode_t>(entry.get());
+	entry->device = device;
+	entry->inode = inode;
+	entry->type = CLOUDABI_FILETYPE_SYMBOLIC_LINK;
+	entry->contents = std::string(path1, path1len);
+
+	inodes[inode] = entry;
+	directory->files[filename] = entry;
+}
+
 void tmpfs::unlink(pseudofd_t pseudo, const char *path, size_t len, cloudabi_ulflags_t unlinkflags)
 {
 	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
@@ -127,7 +172,7 @@ void tmpfs::unlink(pseudofd_t pseudo, const char *path, size_t len, cloudabi_ulf
 	auto entry = it->second;
 	if(entry->type == CLOUDABI_FILETYPE_DIRECTORY) {
 		if(!removedir) {
-			throw cloudabi_system_error(EISDIR);
+			throw cloudabi_system_error(EPERM);
 		}
 		for(auto &file : entry->files) {
 			if(file.first != "." && file.first != "..") {
@@ -294,7 +339,7 @@ void tmpfs::stat_fget(pseudofd_t pseudo, cloudabi_filestat_t *buf) {
  * points at the innermost directory pointed to by path. It returns the
  * filename that is to be opened, created or unlinked.
  *
- * It returns an error if the given file_entry ptr is not a directory,
+ * It throws an error if the given file_entry ptr is not a directory,
  * if any of the path components don't reference a directory, or if the
  * path (eventually) points outside of the given file_entry.
  */
@@ -314,15 +359,13 @@ std::string tmpfs::normalize_path(file_entry_ptr &directory, const char *p, size
 	}
 
 	std::string path(p, len);
-	// remove any slashes at the end of the path, so "foo////" is interpreted as "foo"
-	while(path.back() == '/') {
-		path.pop_back();
-	}
 
 	// depth may not go under 0, because that means a file outside of the
 	// given file_entry is referenced. A depth of 0 means that the file is
 	// opened immediately in the given directory.
 	int depth = 0;
+	const int max_symlinks_followed = 30;
+	int symlinks_followed = 0;
 	do {
 		size_t splitter = path.find('/');
 		if(splitter == std::string::npos) {
@@ -335,9 +378,13 @@ std::string tmpfs::normalize_path(file_entry_ptr &directory, const char *p, size
 				auto it = directory->files.find(path);
 				if(it != directory->files.end()) {
 					if(it->second->type == CLOUDABI_FILETYPE_SYMBOLIC_LINK) {
-						// TODO: follow symlinks
-						// if we followed too many symlinks (e.g. 30) return ELOOP
-						// for now, symlinks aren't supported, so just return the result
+						// follow symlink
+						if(++symlinks_followed >= max_symlinks_followed) {
+							throw cloudabi_system_error(ELOOP);
+						}
+						path = it->second->contents;
+						// continue with lookup; take current depth into account
+						continue;
 					}
 				}
 			}
@@ -358,15 +405,16 @@ std::string tmpfs::normalize_path(file_entry_ptr &directory, const char *p, size
 		}
 		auto entry = it->second;
 		if(entry->type == CLOUDABI_FILETYPE_SYMBOLIC_LINK) {
-			// TODO: follow symlinks
-			// if we followed too many symlinks (e.g. 30) return ELOOP
-			// for now, symlinks aren't supported, so just throw ENOTDIR
-			throw cloudabi_system_error(ENOTDIR);
+			if(++symlinks_followed >= max_symlinks_followed) {
+				throw cloudabi_system_error(ELOOP);
+			}
+			path = it->second->contents + "/" + path;
+			// continue with lookup; take current depth into account
+			continue;
 		}
 		if(entry->type != CLOUDABI_FILETYPE_DIRECTORY) {
 			throw cloudabi_system_error(ENOTDIR);
 		}
-		directory = entry;
 		if(component == "..") {
 			if(depth == 0) {
 				// don't allow going outside of the file descriptor
@@ -376,6 +424,11 @@ std::string tmpfs::normalize_path(file_entry_ptr &directory, const char *p, size
 		} else {
 			depth++;
 		}
+		if(path.empty()) {
+			// this is actually the last component, don't enter it
+			return component;
+		}
+		directory = entry;
 	} while(!path.empty());
 
 	/* unreachable code */

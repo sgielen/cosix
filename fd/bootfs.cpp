@@ -12,7 +12,7 @@ struct bootfs_directory_fd : fd_t {
 	bootfs_directory_fd(const char *n)
 	: fd_t(CLOUDABI_FILETYPE_DIRECTORY, n) {}
 
-	shared_ptr<fd_t> openat(const char * /*path */, size_t /*pathlen*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) override;
+	shared_ptr<fd_t> openat(const char * /*path */, size_t /*pathlen*/, cloudabi_lookupflags_t /*lookupflags*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) override;
 };
 
 struct bootfs_file_fd : public memory_fd {
@@ -23,7 +23,7 @@ struct bootfs_file_fd : public memory_fd {
 
 }
 
-shared_ptr<fd_t> bootfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi_oflags_t, const cloudabi_fdstat_t *) {
+shared_ptr<fd_t> bootfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi_lookupflags_t, cloudabi_oflags_t, const cloudabi_fdstat_t *) {
 	if(pathname == nullptr || pathname[0] == 0 || pathname[0] == '/') {
 		error = EINVAL;
 		return nullptr;
