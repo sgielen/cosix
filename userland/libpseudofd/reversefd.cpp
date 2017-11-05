@@ -86,30 +86,13 @@ char *cosix::handle_request(reverse_request_t *request, char *buf, reverse_respo
 			break;
 		}
 		case op::sock_recv: {
-			// Implement in terms of read. This makes it impossible to do
-			// FD passing, but otherwise it's the same.
 			res = reinterpret_cast<char*>(malloc(request->recv_length));
-			try {
-				response->send_length = h->pread(request->pseudofd, 0, res, request->recv_length);
-			} catch(cloudabi_system_error &e) {
-				if(e.error == EBADF) {
-					throw cloudabi_system_error(ENOTSOCK);
-				}
-				throw;
-			}
+			response->send_length = h->sock_recv(request->pseudofd, res, request->recv_length);
 			response->result = 0;
 			break;
 		}
 		case op::sock_send: {
-			// Implement in terms of write.
-			try {
-				h->pwrite(request->pseudofd, 0, buf, request->send_length);
-			} catch(cloudabi_system_error &e) {
-				if(e.error == EBADF) {
-					throw cloudabi_system_error(ENOTSOCK);
-				}
-				throw;
-			}
+			h->sock_send(request->pseudofd, buf, request->send_length);
 			// TODO: what if we wrote less?
 			response->recv_length = request->send_length;
 			response->result = 0;

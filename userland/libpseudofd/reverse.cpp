@@ -57,6 +57,14 @@ void reverse_handler::pwrite(pseudofd_t, off_t, const char*, size_t) {
 	throw cloudabi_system_error(EINVAL);
 }
 
+size_t reverse_handler::sock_recv(pseudofd_t, char*, size_t) {
+	throw cloudabi_system_error(ENOTSOCK);
+}
+
+void reverse_handler::sock_send(pseudofd_t, const char*, size_t) {
+	throw cloudabi_system_error(ENOTSOCK);
+}
+
 size_t reverse_handler::readdir(pseudofd_t, char*, size_t, cloudabi_dircookie_t&) {
 	throw cloudabi_system_error(EINVAL);
 }

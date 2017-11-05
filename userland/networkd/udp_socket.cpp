@@ -55,6 +55,11 @@ bool udp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 
 void udp_socket::pwrite(pseudofd_t p, off_t, const char *msg, size_t len)
 {
+	return sock_send(p, msg, len);
+}
+
+void udp_socket::sock_send(pseudofd_t p, const char *msg, size_t len)
+{
 	(void)p;
 	assert(p == 0);
 
@@ -110,6 +115,11 @@ void udp_socket::pwrite(pseudofd_t p, off_t, const char *msg, size_t len)
 }
 
 size_t udp_socket::pread(pseudofd_t p, off_t, char *dest, size_t requested)
+{
+	return sock_recv(p, dest, requested);
+}
+
+size_t udp_socket::sock_recv(pseudofd_t p, char *dest, size_t requested)
 {
 	(void)p;
 	assert(p == 0);

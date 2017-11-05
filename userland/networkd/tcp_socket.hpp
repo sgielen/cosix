@@ -38,6 +38,8 @@ struct tcp_socket : public ip_socket {
 private:
 	void pwrite(cosix::pseudofd_t, off_t, const char*, size_t) override;
 	size_t pread(cosix::pseudofd_t, off_t, char*, size_t) override;
+	void sock_send(cosix::pseudofd_t, const char*, size_t) override;
+	size_t sock_recv(cosix::pseudofd_t, char*, size_t) override;
 	bool is_readable(cosix::pseudofd_t) override;
 	void becomes_readable();
 
