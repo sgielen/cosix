@@ -217,6 +217,17 @@ cloudabi_errno_t process_fd::close_fd(cloudabi_fd_t num) {
 	return res;
 }
 
+cloudabi_errno_t process_fd::replace_fd(cloudabi_fd_t num, shared_ptr<fd_t> fd, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting) {
+	fd_mapping_t *mapping;
+	auto res = get_fd(&mapping, num, 0);
+	if(res == 0) {
+		mapping->fd = fd;
+		mapping->rights_base = rights_base;
+		mapping->rights_inheriting = rights_inheriting;
+	}
+	return res;
+}
+
 uint32_t *process_fd::get_page_table(int i) {
 	if(i >= 0x300) {
 		kernel_panic("process_fd::get_page_table() cannot answer for kernel pages");

@@ -82,6 +82,7 @@ struct process_fd : public fd_t {
 	void fork(shared_ptr<thread> t);
 
 	cloudabi_fd_t add_fd(shared_ptr<fd_t>, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting = 0);
+	cloudabi_errno_t replace_fd(cloudabi_fd_t fdnum, shared_ptr<fd_t>, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting = 0);
 	cloudabi_errno_t get_fd(fd_mapping_t **mapping, cloudabi_fd_t num, cloudabi_rights_t has_rights);
 	cloudabi_errno_t close_fd(cloudabi_fd_t num);
 

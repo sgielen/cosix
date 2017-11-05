@@ -193,9 +193,23 @@ cloudabi_errno_t cloudos::syscall_fd_read(syscall_context &c)
 	return 0;
 }
 
-cloudabi_errno_t cloudos::syscall_fd_replace(syscall_context &)
+cloudabi_errno_t cloudos::syscall_fd_replace(syscall_context &c)
 {
-	return ENOSYS;
+	auto args = arguments_t<cloudabi_fd_t, cloudabi_fd_t>(c);
+	auto fromnum = args.first();
+	auto tonum = args.second();
+
+	fd_mapping_t *mapping;
+	auto res = c.process()->get_fd(&mapping, fromnum, 0);
+	if(res != 0) {
+		return res;
+	}
+
+	if(fromnum == tonum) {
+		return 0;
+	}
+
+	return c.process()->replace_fd(tonum, mapping->fd, mapping->rights_base, mapping->rights_inheriting);
 }
 
 cloudabi_errno_t cloudos::syscall_fd_seek(syscall_context &c)
