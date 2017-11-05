@@ -450,9 +450,10 @@ cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping
 	assert(elf_pieces == nullptr);
 	assert(total_size == 0);
 
+	// a null argdata has an argdatalen of 0; however, do allocate a page in this case, just keep
+	// it empty
 	assert(argdata != nullptr);
-	assert(argdatalen > 0);
-	Blk argdata_alloc = allocate(argdatalen);
+	Blk argdata_alloc = allocate(argdatalen == 0 ? 1 : argdatalen);
 	uint8_t *argdata_buffer = reinterpret_cast<uint8_t*>(argdata_alloc.ptr);
 	memcpy(argdata_buffer, argdata, argdatalen);
 
@@ -486,7 +487,7 @@ cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping
 	install_page_directory();
 
 	uint8_t *argdata_address = reinterpret_cast<uint8_t*>(0x80100000);
-	mem_mapping_t *argdata_mapping = allocate<mem_mapping_t>(this, argdata_address, len_to_pages(argdatalen), nullptr, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE);
+	mem_mapping_t *argdata_mapping = allocate<mem_mapping_t>(this, argdata_address, len_to_pages(argdatalen == 0 ? 1 : argdatalen), nullptr, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE);
 	add_mem_mapping(argdata_mapping);
 	argdata_mapping->ensure_completely_backed();
 	memcpy(argdata_address, argdata_buffer, argdatalen);
