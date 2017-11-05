@@ -4,9 +4,26 @@
 
 using namespace cloudos;
 
-cloudabi_errno_t cloudos::syscall_mem_advise(syscall_context &)
+cloudabi_errno_t cloudos::syscall_mem_advise(syscall_context &c)
 {
-	return ENOSYS;
+	auto args = arguments_t<void*, size_t, cloudabi_advice_t>(c);
+	auto address = args.first();
+	auto len = args.second();
+	auto advice = args.third();
+
+	if(advice < CLOUDABI_ADVICE_DONTNEED || advice > CLOUDABI_ADVICE_WILLNEED) {
+		return EINVAL;
+	}
+
+	uintptr_t maxbound = UINTPTR_MAX - len;
+	if(reinterpret_cast<uintptr_t>(address) > maxbound) {
+		// crosses end of address space
+		return EINVAL;
+	}
+
+	// TODO: check if the address range is allocated by the application?
+	// TODO: act upon advice
+	return 0;
 }
 
 cloudabi_errno_t cloudos::syscall_mem_lock(syscall_context &)

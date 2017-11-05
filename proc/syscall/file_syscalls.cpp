@@ -4,9 +4,24 @@
 
 using namespace cloudos;
 
-cloudabi_errno_t cloudos::syscall_file_advise(syscall_context &)
+cloudabi_errno_t cloudos::syscall_file_advise(syscall_context &c)
 {
-	return ENOSYS;
+	auto args = arguments_t<cloudabi_fd_t, cloudabi_filesize_t, cloudabi_filesize_t, cloudabi_advice_t>(c);
+	auto fdnum = args.first();
+	auto advice = args.fourth();
+
+	if(advice < CLOUDABI_ADVICE_DONTNEED || advice > CLOUDABI_ADVICE_WILLNEED) {
+		return EINVAL;
+	}
+
+	fd_mapping_t *mapping;
+	auto res = c.process()->get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FILE_ADVISE);
+	if(res != 0) {
+		return res;
+	}
+
+	// TODO: act upon advice
+	return 0;
 }
 
 cloudabi_errno_t cloudos::syscall_file_allocate(syscall_context &)
