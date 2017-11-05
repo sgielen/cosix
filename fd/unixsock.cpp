@@ -250,16 +250,19 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 	} else if(type == CLOUDABI_FILETYPE_SOCKET_STREAM) {
 		// Stream receiving: while the current buffers aren't full,
 		// fill them with parts of the next message, taking them off
-		// the list when they are fully consumed
+		// the list when they are fully consumed.
+		// However, if a new buffer contains file descriptors, these
+		// act as read boundaries, i.e. the read stops before the data.
 
 		auto *recv_message = recv_messages;
 		size_t total_written = 0;
 		size_t messages_consumed = 0;
 		bool next_message_read = false;
-		for(size_t i = 0; i < in->ri_data_len && recv_message; ++i) {
+		bool fd_boundary_encountered = false;
+		for(size_t i = 0; i < in->ri_data_len && recv_message && !fd_boundary_encountered; ++i) {
 			auto &iovec = in->ri_data[i];
 			size_t written = 0;
-			while(written < iovec.buf_len && recv_message) {
+			while(written < iovec.buf_len && recv_message && !fd_boundary_encountered) {
 				auto *body = recv_message->data;
 				assert(body->buf.size >= body->stream_data_recv);
 				size_t message_remaining = body->buf.size - body->stream_data_recv;
@@ -279,6 +282,10 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 					recv_message = recv_message->next;
 					++messages_consumed;
 					next_message_read = false;
+
+					// move on to the next buffer only if it has no file descriptors
+					// attached to it; these act as a read boundary
+					fd_boundary_encountered = recv_message && recv_message->data->fd_list != nullptr;
 				}
 			}
 			total_written += written;
