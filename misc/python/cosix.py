@@ -186,8 +186,7 @@ def run_binary(binary):
 
 def run_tests():
   tests = ("pipe_test", "concur_test", "time_test",
-    "mmap_test", "forkfork_test", "unixsock_test",
-    "udptest", "tcptest")
+    "mmap_test", "unixsock_test", "udptest", "tcptest")
   for test in tests:
     run_binary(test)
   run_unittests()

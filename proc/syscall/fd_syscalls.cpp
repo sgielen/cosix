@@ -6,7 +6,7 @@
 using namespace cloudos;
 
 // All rights, except all rights that were removed over time.
-static const cloudabi_rights_t all_rights = 0x081fffff7ff;
+static const cloudabi_rights_t all_rights = 0x0815ffff7ff;
 
 cloudabi_errno_t cloudos::syscall_fd_close(syscall_context &c)
 {
