@@ -66,12 +66,23 @@ bool unixsock::is_writeable()
 
 cloudabi_errno_t unixsock::get_read_signaler(thread_condition_signaler **s)
 {
+	if(status != sockstatus_t::CONNECTED && status != sockstatus_t::SHUTDOWN) {
+		return EPIPE;
+	}
+	auto other = othersock.lock();
+	if(!other || other->status == sockstatus_t::SHUTDOWN) {
+		// EOF
+		return EPIPE;
+	}
 	*s = &recv_signaler;
 	return 0;
 }
 
 cloudabi_errno_t unixsock::get_write_signaler(thread_condition_signaler **s)
 {
+	if(status != sockstatus_t::CONNECTED) {
+		return EPIPE;
+	}
 	*s = &send_signaler;
 	return 0;
 }

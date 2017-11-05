@@ -175,9 +175,12 @@ cloudabi_errno_t cloudos::syscall_poll(syscall_context &c)
 				signaler = &null_signaler;
 			} else {
 				res = proc_mapping->fd->get_write_signaler(&signaler);
-				if(res != 0) {
+				if(res == EINVAL) {
 					// TODO: this eventtype is unimplemented for this FD type; for now,
 					// assume fd is writeable
+					signaler = &null_signaler;
+				} else if(res != 0) {
+					userdata->error = res;
 					signaler = &null_signaler;
 				}
 			}

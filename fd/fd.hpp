@@ -77,11 +77,15 @@ struct fd_t {
 		return 0;
 	}
 
+	// Returns EPIPE if the file descriptor will never become readable, e.g. because the
+	// other end of the socket is shut down.
 	virtual cloudabi_errno_t get_read_signaler(thread_condition_signaler **s) {
 		*s = nullptr;
 		return EINVAL;
 	}
 
+	// Returns EPIPE if the file descriptor will never become writable, e.g. because the
+	// socket is shut down.
 	virtual cloudabi_errno_t get_write_signaler(thread_condition_signaler **s) {
 		*s = nullptr;
 		return EINVAL;
