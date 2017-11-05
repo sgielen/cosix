@@ -185,7 +185,7 @@ def run_binary(binary):
   return res
 
 def run_tests():
-  tests = ("pipe_test", "concur_test", "time_test",
+  tests = ("pipe_test", "concur_test", "time_test", "tmptest",
     "mmap_test", "unixsock_test", "udptest", "tcptest")
   for test in tests:
     run_binary(test)

@@ -49,11 +49,74 @@ pseudofd_t tmpfs::open(cloudabi_inode_t inode, int)
 	return fd;
 }
 
+void tmpfs::rename(pseudofd_t pseudo1, const char *path1, size_t path1len, pseudofd_t pseudo2, const char *path2, size_t path2len)
+{
+	file_entry_ptr dir1 = get_file_entry_from_pseudo(pseudo1);
+	file_entry_ptr dir2 = get_file_entry_from_pseudo(pseudo2);
+
+	std::string filename1 = normalize_path(dir1, path1, path1len, 0);
+	std::string filename2 = normalize_path(dir2, path2, path2len, 0);
+
+	// TODO: check if dir1/fn1 is a parent of dir2/fn2 (i.e. directory would be moved inside itself)
+
+	if(filename1 == "." || filename1 == "..") {
+		throw cloudabi_system_error(EINVAL);
+	}
+
+	// source file exists?
+	auto it1 = dir1->files.find(filename1);
+	if(it1 == dir1->files.end()) {
+		throw cloudabi_system_error(ENOENT);
+	}
+
+	file_entry_ptr entry = it1->second;
+
+	// destination doesn't exist? -> rename file
+	auto it2 = dir2->files.find(filename2);
+	if(it2 == dir2->files.end()) {
+		dir1->files.erase(it1);
+		if(entry->type == CLOUDABI_FILETYPE_DIRECTORY) {
+			entry->files[".."] = dir2;
+		}
+		dir2->files[filename2] = entry;
+		return;
+	}
+
+	// destination is directory? -> move directory
+	if(it2->second->type == CLOUDABI_FILETYPE_DIRECTORY) {
+		if(entry->type != CLOUDABI_FILETYPE_DIRECTORY) {
+			throw cloudabi_system_error(EISDIR);
+		}
+		bool empty = true;
+		for(auto const &e : it2->second->files) {
+			if(e.first != "." && e.first != "..") {
+				empty = false;
+				break;
+			}
+		}
+		if(!empty) {
+			throw cloudabi_system_error(ENOTEMPTY);
+		}
+		dir2->files[filename2] = entry;
+		entry->files[".."] = dir2;
+		dir1->files.erase(it1);
+		return;
+	}
+
+	// both are non-directory? move file
+	if(entry->type == CLOUDABI_FILETYPE_DIRECTORY) {
+		throw cloudabi_system_error(ENOTDIR);
+	}
+
+	dir2->files[filename2] = entry;
+	dir1->files.erase(it1);
+}
+
 void tmpfs::unlink(pseudofd_t pseudo, const char *path, size_t len, cloudabi_ulflags_t unlinkflags)
 {
 	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
 
-	std::string filename = normalize_path(directory, path, len, 0 /* TODO: lookupflags */);
+	std::string filename = normalize_path(directory, path, len, 0);
 	auto it = directory->files.find(filename);
 	if(it == directory->files.end()) {
 		throw cloudabi_system_error(ENOENT);
@@ -86,7 +149,7 @@ cloudabi_inode_t tmpfs::create(pseudofd_t pseudo, const char *path, size_t len, 
 {
 	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
 
-	std::string filename = normalize_path(directory, path, len, 0 /* TODO: lookup flags */);
+	std::string filename = normalize_path(directory, path, len, 0);
 	auto it = directory->files.find(filename);
 	if(it != directory->files.end()) {
 		// TODO: only for directories, or if O_CREAT and O_EXCL are given?

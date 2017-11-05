@@ -129,9 +129,33 @@ cloudabi_errno_t cloudos::syscall_file_readlink(syscall_context &)
 	return ENOSYS;
 }
 
-cloudabi_errno_t cloudos::syscall_file_rename(syscall_context &)
+cloudabi_errno_t cloudos::syscall_file_rename(syscall_context &c)
 {
-	return ENOSYS;
+	auto args = arguments_t<cloudabi_fd_t, const char*, size_t, cloudabi_fd_t, const char*, size_t>(c);
+	auto fd1 = args.first();
+	fd_mapping_t *mapping1;
+	auto res = c.process()->get_fd(&mapping1, fd1, CLOUDABI_RIGHT_FILE_RENAME_SOURCE);
+	if(res != 0) {
+		get_vga_stream() << "rename source failed\n";
+		return res;
+	}
+
+	auto fd2 = args.fourth();
+	fd_mapping_t *mapping2;
+	res = c.process()->get_fd(&mapping2, fd2, CLOUDABI_RIGHT_FILE_RENAME_TARGET);
+	if(res != 0) {
+		get_vga_stream() << "rename target failed\n";
+		return res;
+	}
+
+	auto path1 = args.second();
+	auto path1_len = args.third();
+
+	auto path2 = args.fifth();
+	auto path2_len = args.sixth();
+
+	mapping1->fd->file_rename(path1, path1_len, mapping2->fd, path2, path2_len);
+	return mapping1->fd->error;
 }
 
 cloudabi_errno_t cloudos::syscall_file_stat_fget(syscall_context &c)

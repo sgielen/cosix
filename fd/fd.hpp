@@ -45,7 +45,7 @@ struct fd_t {
 	cloudabi_fdflags_t flags = 0;
 
 	/* If this device represents a filesystem, this number must
-	 * be positie and unique for this filesystem
+	 * be positive and unique for this filesystem
 	 */
 	cloudabi_device_t device = 0;
 
@@ -121,6 +121,13 @@ struct fd_t {
 	{
 		error = EINVAL;
 		return 0;
+	}
+
+	/** Rename a file. Is only possible if the given fd is on the same device as this fd.
+	 */
+	virtual void file_rename(const char * /*path1*/, size_t /*path1len*/, shared_ptr<fd_t> /*fd2*/, const char * /*path2*/, size_t /*path2len*/)
+	{
+		error = EINVAL;
 	}
 
 	/** Unlinks a path of given type.

@@ -33,6 +33,10 @@ pseudofd_t reverse_handler::open(cloudabi_inode_t, int) {
 	throw cloudabi_system_error(EINVAL);
 }
 
+void reverse_handler::rename(pseudofd_t, const char*, size_t, pseudofd_t, const char*, size_t) {
+	throw cloudabi_system_error(EINVAL);
+}
+
 void reverse_handler::unlink(pseudofd_t, const char*, size_t, cloudabi_ulflags_t) {
 	throw cloudabi_system_error(EINVAL);
 }

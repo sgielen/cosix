@@ -227,6 +227,51 @@ cloudabi_inode_t pseudo_fd::file_create(const char *path, size_t pathlen, clouda
 	}
 }
 
+void pseudo_fd::file_rename(const char *path1, size_t path1len, shared_ptr<fd_t> fd2, const char *path2, size_t path2len)
+{
+	pseudo_fd *fd2ps = dynamic_cast<pseudo_fd*>(fd2.get());
+	if(fd2ps == nullptr) {
+		error = CLOUDABI_EXDEV;
+		return;
+	}
+
+	// must be on the same reverse FD
+	if(reverse_fd != fd2ps->reverse_fd) {
+		error = CLOUDABI_EXDEV;
+		return;
+	}
+
+	// path1 cannot contain null characters, as they are used as delimiters
+	for(size_t i = 0; i < path1len; ++i) {
+		if(path1[i] == 0) {
+			error = CLOUDABI_EINVAL;
+			return;
+		}
+	}
+
+	Blk path = allocate(path1len + path2len + 1);
+	char *pathstr = reinterpret_cast<char*>(path.ptr);
+	memcpy(pathstr, path1, path1len);
+	pathstr[path1len] = 0;
+	memcpy(pathstr + path1len + 1, path2, path2len);
+
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::rename;
+	request.inode = 0;
+	request.flags = fd2ps->pseudo_id;
+	request.send_length = path.size;
+
+	reverse_response_t response;
+	maybe_deallocate(send_request(&request, pathstr, &response));
+	deallocate(path);
+	if(response.result < 0) {
+		error = -response.result;
+	} else {
+		error = 0;
+	}
+}
+
 void pseudo_fd::file_unlink(const char *path, size_t pathlen, cloudabi_ulflags_t flags)
 {
 	reverse_request_t request;

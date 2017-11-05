@@ -125,12 +125,11 @@ void program_main(const argdata_t *ad) {
 		dprintf(stdout, "Failed to renameat() tmpfile: %s\n", strerror(errno));
 		exit(1);
 	}
-	closedir(dir);
 
 	/* re-read file */
 	char *full_filename;
 	asprintf(&full_filename, "%s/%s", dirname, filename);
-	dprintf(stdout, "Reopening file \"%s\"", full_filename);
+	dprintf(stdout, "Reopening file \"%s\"\n", full_filename);
 	tmpfile = openat(tmpdir, full_filename, O_RDONLY);
 	if(tmpfile < 0) {
 		dprintf(stdout, "Failed to reopen \"%s\": %s\n", full_filename, strerror(errno));

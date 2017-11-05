@@ -16,7 +16,7 @@ struct reverse_request_t {
 		open,
 		create,
 		readdir, // cookie in result (0 if last entry), put a cloudabi_dirent_t + name in buffer
-		rename,
+		rename, // send fd2 as 'flags', and buffer is 'path1<nullbyte>path2'
 		unlink,
 		pread,
 		pwrite,
