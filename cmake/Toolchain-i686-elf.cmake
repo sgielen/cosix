@@ -40,7 +40,7 @@ set(CMAKE_VDSO_MODULE_LINKER ${CMAKE_GLD_LINKER})
 set(CMAKE_CXX_LINK_EXECUTABLE "${CMAKE_GLD_LINKER} <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> -o <TARGET> <LINK_LIBRARIES>")
 
 set(C_AND_CXX_FLAGS "-ffreestanding -O0 -g -mno-sse -mno-mmx -fno-sanitize=safe-stack -Wno-reserved-id-macro")
-set(CMAKE_CXX_FLAGS_INIT "${C_AND_CXX_FLAGS} -fno-exceptions -fno-rtti")
+set(CMAKE_CXX_FLAGS_INIT "${C_AND_CXX_FLAGS} -fno-exceptions")
 set(CMAKE_C_FLAGS_INIT "${C_AND_CXX_FLAGS}")
 set(CMAKE_EXE_LINKER_FLAGS_INIT "-O0 -g -nostdlib -melf_i386")
 set(CMAKE_MODULE_LINKER_FLAGS_INIT "-O0 -g -melf_i386")
