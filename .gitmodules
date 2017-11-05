@@ -2,7 +2,7 @@
 	path = wubwubcmake
 	url = https://github.com/NickNick/wubwubcmake.git
 [submodule "catch"]
-	path = catch
+	path = contrib/catch
 	url = https://github.com/philsquared/Catch.git
 [submodule "cloudabi"]
 	path = cloudabi
