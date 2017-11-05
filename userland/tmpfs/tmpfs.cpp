@@ -122,6 +122,12 @@ void tmpfs::close(pseudofd_t pseudo)
 size_t tmpfs::pread(pseudofd_t pseudo, off_t offset, char *dest, size_t requested)
 {
 	auto entry = get_file_entry_from_pseudo(pseudo);
+
+	if(entry->type != CLOUDABI_FILETYPE_REGULAR_FILE) {
+		// Don't perform reads on non-files through the tmpfs
+		throw cloudabi_system_error(EBADF);
+	}
+
 	if(offset > entry->contents.size()) {
 		throw cloudabi_system_error(EINVAL /* The specified file offset is invalid */);
 	}
@@ -136,6 +142,12 @@ size_t tmpfs::pread(pseudofd_t pseudo, off_t offset, char *dest, size_t requeste
 void tmpfs::pwrite(pseudofd_t pseudo, off_t offset, const char *buf, size_t length)
 {
 	auto entry = get_file_entry_from_pseudo(pseudo);
+
+	if(entry->type != CLOUDABI_FILETYPE_REGULAR_FILE) {
+		// Don't perform writes on non-files through the tmpfs
+		throw cloudabi_system_error(EBADF);
+	}
+
 	if(entry->contents.size() < offset + length) {
 		entry->contents.resize(offset + length, 0);
 	}
