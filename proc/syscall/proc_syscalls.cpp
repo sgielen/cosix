@@ -18,6 +18,11 @@ cloudabi_errno_t cloudos::syscall_proc_exec(syscall_context &c)
 		return res;
 	}
 
+	// not allowed to exec() a file descriptor also open for writing
+	if(mapping->rights_base & CLOUDABI_RIGHT_FD_WRITE) {
+		return EBADF;
+	}
+
 	fd_mapping_t *new_fds[fdslen];
 	for(size_t i = 0; i < fdslen; ++i) {
 		fd_mapping_t *old_mapping;

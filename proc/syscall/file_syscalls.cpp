@@ -78,13 +78,17 @@ cloudabi_errno_t cloudos::syscall_file_open(syscall_context &c)
 		return mapping->fd->error;
 	}
 
-	// Depending on filetype, drop inheriting rights if they don't make sense
+	// Depending on filetype, drop some rights if they don't make sense
+	auto base = fds->fs_rights_base;
 	auto inheriting = fds->fs_rights_inheriting;
 	if(new_fd->type == CLOUDABI_FILETYPE_REGULAR_FILE) {
 		inheriting = 0;
 	}
+	if(new_fd->type != CLOUDABI_FILETYPE_REGULAR_FILE) {
+		base &= ~(CLOUDABI_RIGHT_PROC_EXEC);
+	}
 
-	c.result = c.process()->add_fd(new_fd, fds->fs_rights_base, inheriting);
+	c.result = c.process()->add_fd(new_fd, base, inheriting);
 	return 0;
 }
 
