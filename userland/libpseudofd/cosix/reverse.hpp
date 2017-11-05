@@ -67,8 +67,10 @@ struct reverse_handler {
 	virtual size_t readlink(pseudofd_t pseudo, const char *path, size_t pathlen, char *buf, size_t buflen);
 	virtual void rename(pseudofd_t pseudo1, const char *path1, size_t path1len, pseudofd_t pseudo2, const char *path2, size_t path2len);
 	virtual void symlink(pseudofd_t pseudo ,const char *path1, size_t path1len, const char *path2, size_t path2len);
+	virtual void link(pseudofd_t pseudo1, const char *path1, size_t path1len, cloudabi_lookupflags_t lookupflags, pseudofd_t pseudo2, const char *path2, size_t path2len);
 	virtual void unlink(pseudofd_t pseudo, const char *path, size_t len, cloudabi_ulflags_t unlinkflags);
 	virtual cloudabi_inode_t create(pseudofd_t pseudo, const char *path, size_t len, cloudabi_filetype_t type);
+	virtual void allocate(pseudofd_t pseudo, off_t offset, off_t length);
 	virtual void close(pseudofd_t pseudo);
 	virtual bool is_readable(pseudofd_t pseudo);
 	virtual size_t pread(pseudofd_t pseudo, off_t offset, char *dest, size_t requested);

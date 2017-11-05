@@ -301,6 +301,52 @@ void pseudo_fd::file_rename(const char *path1, size_t path1len, shared_ptr<fd_t>
 	}
 }
 
+void pseudo_fd::file_link(const char *path1, size_t path1len, cloudabi_lookupflags_t lookupflags, shared_ptr<fd_t> fd2, const char *path2, size_t path2len)
+{
+	pseudo_fd *fd2ps = dynamic_cast<pseudo_fd*>(fd2.get());
+	if(fd2ps == nullptr) {
+		error = CLOUDABI_EXDEV;
+		return;
+	}
+
+	// must be on the same reverse FD
+	if(reverse_fd != fd2ps->reverse_fd) {
+		error = CLOUDABI_EXDEV;
+		return;
+	}
+
+	// path1 cannot contain null characters, as they are used as delimiters
+	for(size_t i = 0; i < path1len; ++i) {
+		if(path1[i] == 0) {
+			error = CLOUDABI_EINVAL;
+			return;
+		}
+	}
+
+	Blk path = allocate(path1len + path2len + 1);
+	char *pathstr = reinterpret_cast<char*>(path.ptr);
+	memcpy(pathstr, path1, path1len);
+	pathstr[path1len] = 0;
+	memcpy(pathstr + path1len + 1, path2, path2len);
+
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::link;
+	request.inode = 0;
+	request.flags = fd2ps->pseudo_id;
+	request.offset = lookupflags;
+	request.send_length = path.size;
+
+	reverse_response_t response;
+	maybe_deallocate(send_request(&request, pathstr, &response));
+	deallocate(path);
+	if(response.result < 0) {
+		error = -response.result;
+	} else {
+		error = 0;
+	}
+}
+
 void pseudo_fd::file_symlink(const char *path1, size_t path1len, const char *path2, size_t path2len)
 {
 	// path1 cannot contain null characters, as they are used as delimiters
@@ -423,6 +469,23 @@ void pseudo_fd::file_stat_fget(cloudabi_filestat_t *buf)
 		}
 		error = 0;
 	}
+}
+
+void pseudo_fd::file_allocate(cloudabi_filesize_t offset, cloudabi_filesize_t length)
+{
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::allocate;
+	request.inode = 0;
+	request.offset = offset;
+	request.flags = length;
+
+	reverse_response_t response;
+	maybe_deallocate(send_request(&request, nullptr, &response));
+	if(response.result < 0) {
+		error = -response.result;
+	}
+	error = 0;
 }
 
 size_t pseudo_fd::readdir(char *buf, size_t nbyte, cloudabi_dircookie_t cookie)

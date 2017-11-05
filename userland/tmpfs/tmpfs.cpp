@@ -57,6 +57,41 @@ pseudofd_t tmpfs::open(cloudabi_inode_t inode, int)
 	return fd;
 }
 
+void tmpfs::link(pseudofd_t pseudo1, const char *path1, size_t path1len, cloudabi_lookupflags_t lookupflags, pseudofd_t pseudo2, const char *path2, size_t path2len) {
+	file_entry_ptr dir1 = get_file_entry_from_pseudo(pseudo1);
+	std::string filename1 = normalize_path(dir1, path1, path1len, lookupflags);
+
+	auto it1 = dir1->files.find(filename1);
+	if(it1 == dir1->files.end()) {
+		throw cloudabi_system_error(ENOENT);
+	} else if(it1->second->type == CLOUDABI_FILETYPE_DIRECTORY) {
+		throw cloudabi_system_error(EPERM);
+	}
+
+	file_entry_ptr dir2 = get_file_entry_from_pseudo(pseudo2);
+	std::string filename2 = normalize_path(dir2, path2, path2len, 0);
+
+	auto it2 = dir2->files.find(filename2);
+	if(it2 != dir2->files.end()) {
+		throw cloudabi_system_error(EEXIST);
+	}
+
+	it1->second->hardlinks += 1;
+	dir2->files[filename2] = it1->second;
+}
+
+void tmpfs::allocate(pseudofd_t pseudo, off_t offset, off_t length) {
+	file_entry_ptr file = get_file_entry_from_pseudo(pseudo);
+	if(file->type != CLOUDABI_FILETYPE_REGULAR_FILE) {
+		throw cloudabi_system_error(EINVAL);
+	}
+
+	size_t minsize = offset + length;
+	if(file->contents.size() < minsize) {
+		file->contents.resize(minsize);
+	}
+}
+
 size_t tmpfs::readlink(pseudofd_t pseudo, const char *path, size_t pathlen, char *buf, size_t buflen) {
 	file_entry_ptr dir = get_file_entry_from_pseudo(pseudo);
 	std::string filename = normalize_path(dir, path, pathlen, 0);
@@ -186,8 +221,11 @@ void tmpfs::unlink(pseudofd_t pseudo, const char *path, size_t len, cloudabi_ulf
 	}
 
 	directory->files.erase(filename);
-	// TODO: erase inode if this was the last reference to it
-	// (possibly, using the deleter of the inode bound to this tmpfs*)
+	entry->hardlinks -= 1;
+	if(entry->hardlinks == 0) {
+		// TODO: erase inode if this was the last reference to it
+		// (possibly, using the deleter of the inode bound to this tmpfs*)
+	}
 }
 
 cloudabi_inode_t tmpfs::create(pseudofd_t pseudo, const char *path, size_t len, cloudabi_filetype_t type)
@@ -308,8 +346,7 @@ static void file_entry_to_filestat(file_entry_ptr &entry, cloudabi_filestat_t *b
 	buf->st_dev = entry->device;
 	buf->st_ino = entry->inode;
 	buf->st_filetype = entry->type;
-	/* TODO: hard link count */
-	buf->st_nlink = 1;
+	buf->st_nlink = entry->hardlinks;
 	/* TODO directory size? */
 	buf->st_size = entry->contents.size();
 	/* TODO: times */

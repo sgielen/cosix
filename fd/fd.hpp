@@ -115,12 +115,27 @@ struct fd_t {
 		return 0;
 	}
 
+	/** Allocate space for a file.
+	 */
+	virtual void file_allocate(cloudabi_filesize_t /*offset*/, cloudabi_filesize_t /*length*/)
+	{
+		error = EINVAL;
+	}
+
 	/** Create a path of given type. Returns the inode if no error is set.
 	 */
 	virtual cloudabi_inode_t file_create(const char * /*path*/, size_t /*pathlen*/, cloudabi_filetype_t /*type*/)
 	{
 		error = EINVAL;
 		return 0;
+	}
+
+	/** Create a hardlink. Is only possible if the given fd is on the same device as this fd, and
+	 * the device supports hardlinks.
+	 */
+	virtual void file_link(const char * /*path1*/, size_t /*path1len*/, cloudabi_lookupflags_t /* lookupflags */, shared_ptr<fd_t> /*fd2*/, const char * /*path2*/, size_t /*path2len*/)
+	{
+		error = EINVAL;
 	}
 
 	/** Read a symlink. Returns the number of bytes used in the output buffer.

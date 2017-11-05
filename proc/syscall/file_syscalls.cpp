@@ -24,9 +24,21 @@ cloudabi_errno_t cloudos::syscall_file_advise(syscall_context &c)
 	return 0;
 }
 
-cloudabi_errno_t cloudos::syscall_file_allocate(syscall_context &)
+cloudabi_errno_t cloudos::syscall_file_allocate(syscall_context &c)
 {
-	return ENOSYS;
+	auto args = arguments_t<cloudabi_fd_t, cloudabi_filesize_t, cloudabi_filesize_t>(c);
+	auto fdnum = args.first();
+	fd_mapping_t *mapping;
+	auto res = c.process()->get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FILE_ALLOCATE);
+	if(res != 0) {
+		return res;
+	}
+
+	auto offset = args.second();
+	auto len = args.third();
+
+	mapping->fd->file_allocate(offset, len);
+	return mapping->fd->error;
 }
 
 cloudabi_errno_t cloudos::syscall_file_create(syscall_context &c)
@@ -56,9 +68,31 @@ cloudabi_errno_t cloudos::syscall_file_create(syscall_context &c)
 	return mapping->fd->error;
 }
 
-cloudabi_errno_t cloudos::syscall_file_link(syscall_context &)
+cloudabi_errno_t cloudos::syscall_file_link(syscall_context &c)
 {
-	return ENOSYS;
+	auto args = arguments_t<cloudabi_lookup_t, const char*, size_t, cloudabi_fd_t, const char*, size_t>(c);
+	auto fd1 = args.first().fd;
+	fd_mapping_t *mapping1;
+	auto res = c.process()->get_fd(&mapping1, fd1, CLOUDABI_RIGHT_FILE_LINK_SOURCE);
+	if(res != 0) {
+		return res;
+	}
+
+	auto fd2 = args.fourth();
+	fd_mapping_t *mapping2;
+	res = c.process()->get_fd(&mapping2, fd2, CLOUDABI_RIGHT_FILE_LINK_TARGET);
+	if(res != 0) {
+		return res;
+	}
+
+	auto path1 = args.second();
+	auto path1_len = args.third();
+
+	auto path2 = args.fifth();
+	auto path2_len = args.sixth();
+
+	mapping1->fd->file_link(path1, path1_len, args.first().flags, mapping2->fd, path2, path2_len);
+	return mapping1->fd->error;
 }
 
 cloudabi_errno_t cloudos::syscall_file_open(syscall_context &c)

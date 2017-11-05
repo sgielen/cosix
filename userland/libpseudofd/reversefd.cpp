@@ -136,6 +136,26 @@ char *cosix::handle_request(reverse_request_t *request, char *buf, reverse_respo
 			response->result = 0;
 			break;
 		}
+		case op::allocate:
+			h->allocate(request->pseudofd, request->offset, request->flags);
+			break;
+		case op::link: {
+			pseudofd_t pseudo2 = request->flags;
+			char *path1 = buf;
+			size_t path1len = 0;
+			while(path1len < request->send_length && path1[path1len] != 0) {
+				path1len++;
+			}
+			if(path1len == request->send_length) {
+				// no delimiter found, fail
+				throw cloudabi_system_error(EIO);
+			}
+			char *path2 = path1 + path1len + 1;
+			size_t path2len = request->send_length - path1len - 1;
+			h->link(request->pseudofd, path1, path1len, request->offset, pseudo2, path2, path2len);
+			response->result = 0;
+			break;
+		}
 		case op::sock_shutdown:
 		case op::stat_put:
 		default:

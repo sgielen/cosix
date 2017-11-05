@@ -15,10 +15,12 @@ struct reverse_request_t {
 		stat_put,
 		open,
 		create,
+		allocate, // length in flags
 		readdir, // cookie in result (0 if last entry), put a cloudabi_dirent_t + name in buffer
 		readlink,
 		rename, // send fd2 as 'flags', and buffer is 'path1<nullbyte>path2'
-		symlink,
+		symlink, // buffer is 'path1<nullbyte>path2'
+		link, // offset is lookupflags, send fd2 as 'flags', and buffer is 'path1<nullbyte>path2'
 		unlink,
 		pread,
 		pwrite,

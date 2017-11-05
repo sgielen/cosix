@@ -41,6 +41,14 @@ void reverse_handler::rename(pseudofd_t, const char*, size_t, pseudofd_t, const 
 	throw cloudabi_system_error(EINVAL);
 }
 
+void reverse_handler::link(pseudofd_t, const char*, size_t, cloudabi_lookupflags_t, pseudofd_t, const char*, size_t) {
+	throw cloudabi_system_error(EINVAL);
+}
+
+void reverse_handler::allocate(pseudofd_t, off_t, off_t) {
+	throw cloudabi_system_error(EINVAL);
+}
+
 void reverse_handler::symlink(pseudofd_t, const char*, size_t, const char*, size_t) {
 	throw cloudabi_system_error(EINVAL);
 }
