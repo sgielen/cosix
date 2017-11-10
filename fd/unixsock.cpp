@@ -152,6 +152,11 @@ void unixsock::sock_shutdown(cloudabi_sdflags_t how)
 	}
 	if(how & CLOUDABI_SHUT_WR) {
 		status = sockstatus_t::SHUTDOWN;
+		if(other) {
+			// Let a potential reader know that we shut down so it can
+			// trigger EOF
+			other->recv_messages_cv.broadcast();
+		}
 	}
 	error = 0;
 }
@@ -182,8 +187,11 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 		assert(other->status == sockstatus_t::CONNECTED || other->status == sockstatus_t::SHUTDOWN);
 
 		// wait until there is at least one more message
-		while(other->status == sockstatus_t::CONNECTED && recv_messages == nullptr) {
+		while(other && other->status == sockstatus_t::CONNECTED && recv_messages == nullptr) {
+			// release other, so it can be destructed during this wait() if needed
+			other.reset();
 			recv_messages_cv.wait();
+			other = othersock.lock();
 		}
 
 		if(recv_messages == nullptr) {

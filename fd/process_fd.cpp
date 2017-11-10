@@ -14,6 +14,7 @@
 #include <hw/vga_stream.hpp>
 #include <memory/map_virtual.hpp>
 #include <oslibc/string.h>
+#include <rng/rng.hpp>
 #include <term/terminal_store.hpp>
 #include <userland/vdso_support.h>
 
@@ -680,15 +681,24 @@ cloudabi_errno_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *
 	vdso_mapping->ensure_completely_backed();
 	memcpy(vdso_address, vdso_blob, vdso_size);
 
+	// choose a pid
+	get_random()->get(reinterpret_cast<char*>(pid), sizeof(pid));
+	pid[6] = (pid[6] & 0x0f) | 0x40;
+	pid[8] = (pid[8] & 0x3f) | 0x80;
+
 	// initialize auxv
-	size_t auxv_entries = 8; // including CLOUDABI_AT_NULL
+	size_t auxv_entries = 9; // including CLOUDABI_AT_NULL
 	size_t auxv_size = auxv_entries * sizeof(cloudabi_auxv_t);
 	uint8_t *auxv_address = reinterpret_cast<uint8_t*>(0x80010000);
+	uint8_t *pid_address = auxv_address + auxv_size;
+	auxv_size += sizeof(pid);
 	mem_mapping_t *auxv_mapping = allocate<mem_mapping_t>(this, auxv_address, len_to_pages(auxv_size), nullptr, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE);
 	add_mem_mapping(auxv_mapping);
 	auxv_mapping->ensure_completely_backed();
+	memcpy(pid_address, pid, sizeof(pid));
 	
 	cloudabi_auxv_t *auxv = reinterpret_cast<cloudabi_auxv_t*>(auxv_address);
+	auto *auxv_orig = auxv;
 	auxv->a_type = CLOUDABI_AT_ARGDATA;
 	auxv->a_ptr = argdata;
 	auxv++;
@@ -710,7 +720,12 @@ cloudabi_errno_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *
 	auxv->a_type = CLOUDABI_AT_PHNUM;
 	auxv->a_val = elf_phnum;
 	auxv++;
+	auxv->a_type = CLOUDABI_AT_PID;
+	auxv->a_ptr = pid_address;
+	auxv++;
 	auxv->a_type = CLOUDABI_AT_NULL;
+	auxv++;
+	assert(auxv_orig + auxv_entries == auxv);
 
 	// detach all existing threads from the process
 	// (note that one of them will be currently running to do this exec(),

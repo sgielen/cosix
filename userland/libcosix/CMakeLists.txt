@@ -9,5 +9,5 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 include(../../wubwubcmake/warning_settings.cmake)
 add_sane_warning_flags()
 
-add_library(cosix networkd.cpp cosix/networkd.hpp)
+add_library(cosix networkd.cpp cosix/networkd.hpp util.cpp cosix/util.hpp)
 target_include_directories(cosix PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

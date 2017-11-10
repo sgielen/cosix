@@ -151,6 +151,7 @@ private:
 	// TODO: for shared mutexes, all cloudabi_tid_t's should be globally
 	// unique; we don't have shared mutexes yet
 	cloudabi_tid_t last_thread = MAIN_THREAD - 1;
+	uint8_t pid[16] = {0};
 
 	static const int PAGE_DIRECTORY_SIZE = 1024 /* entries */;
 

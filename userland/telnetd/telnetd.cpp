@@ -18,7 +18,6 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include <sys/procdesc.h>
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -27,6 +26,7 @@
 
 #include <cosix/networkd.hpp>
 #include <cosix/reverse.hpp>
+#include <cosix/util.hpp>
 #include <flower/protocol/server.ad.h>
 #include <flower/protocol/switchboard.ad.h>
 
@@ -96,15 +96,13 @@ public:
 			}
 			auto client_ad = argdata_t::create_map(key_ptrs, value_ptrs);
 
-			int client_pfd = program_spawn(shell, client_ad.get());
-			if(client_pfd < 0) {
+			auto *pd2 = cosix::program_spawn2(shell, client_ad.get());
+			if(pd2 == nullptr) {
 				fprintf(stderr, "Failed to spawn shell: %s\n", strerror(errno));
 				exit(1);
 			}
 
-			siginfo_t si;
-			pdwait(client_pfd, &si, 0);
-			close(client_pfd);
+			program_wait2(pd2, nullptr, nullptr);
 		});
 		thr.detach();
 

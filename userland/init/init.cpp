@@ -7,7 +7,6 @@
 #include <errno.h>
 #include <string.h>
 #include <sched.h>
-#include <sys/procdesc.h>
 #include <signal.h>
 #include <pthread.h>
 #include <unistd.h>
@@ -22,11 +21,13 @@
 
 #include <cosix/networkd.hpp>
 #include <cosix/reverse.hpp>
+#include <cosix/util.hpp>
 
 #include <flower/switchboard/configuration.ad.h>
 #include <flower_test/configuration.ad.h>
 
 using namespace arpc;
+using namespace cosix;
 
 int stdout;
 int procfs;
@@ -60,21 +61,20 @@ argdata_t *argdata_create_string(const char *value) {
 }
 
 int program_run(const char *name, int bfd, argdata_t const *ad) {
-	int pfd = program_spawn(bfd, ad);
-	if(pfd < 0) {
+	auto *pd2 = program_spawn2(bfd, ad);
+	if(pd2 == nullptr) {
 		dprintf(stdout, "INIT: %s failed to start: %s\n", name, strerror(errno));
 		return -1;
 	}
 
 	dprintf(stdout, "INIT: %s started.\n", name);
 
-	siginfo_t si;
-	pdwait(pfd, &si, 0);
-	dprintf(stdout, "INIT: %s exited, exit status %d\n", name, si.si_status);
+	int64_t exit_status;
+	program_wait2(pd2, &exit_status, nullptr);
+	dprintf(stdout, "INIT: %s exited, exit status %lld\n", name, exit_status);
 	dprintf(stdout, "INIT: current uptime: %ld seconds\n", uptime());
 
-	close(pfd);
-	return si.si_status;
+	return exit_status;
 }
 
 void start_tmpfs() {
@@ -89,11 +89,11 @@ void start_tmpfs() {
 	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(reversefd), argdata_create_int(1)};
 	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 
-	int pfd = program_spawn(bfd, ad);
-	if(pfd < 0) {
+	auto *pd2 = program_spawn2(bfd, ad);
+	if(pd2 == nullptr) {
 		dprintf(stdout, "tmpfs failed to spawn: %s\n", strerror(errno));
 	} else {
-		dprintf(stdout, "tmpfs spawned, fd: %d\n", pfd);
+		dprintf(stdout, "tmpfs spawned\n");
 	}
 }
 
@@ -164,11 +164,11 @@ void start_networkd() {
 	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(pseudofd), argdata_create_fd(bootfs), argdata_create_fd(new_ifstorefd), argdata_create_fd(switchboard->get())};
 	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 
-	int pfd = program_spawn(bfd, ad);
-	if(pfd < 0) {
+	auto *pd2 = program_spawn2(bfd, ad);
+	if(pd2 == nullptr) {
 		dprintf(stdout, "networkd failed to spawn: %s\n", strerror(errno));
 	} else {
-		dprintf(stdout, "networkd spawned, fd: %d\n", pfd);
+		dprintf(stdout, "networkd spawned\n");
 	}
 }
 
@@ -222,8 +222,8 @@ int start_networked_binary(const char *name, int port, bool wait = true) {
 		close(bfd);
 		return r;
 	} else {
-		int pfd = program_spawn(bfd, ad);
-		if(pfd < 0) {
+		auto *pd2 = program_spawn2(bfd, ad);
+		if(pd2 == nullptr) {
 			dprintf(stdout, "%s failed to spawn: %s\n", name, strerror(errno));
 			return 1;
 		}
@@ -336,11 +336,11 @@ void run_pseudotest() {
 	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(new_ifstorefd)};
 	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 
-	int pfd = program_spawn(bfd, ad);
-	if(pfd < 0) {
+	auto *pd2 = program_spawn2(bfd, ad);
+	if(pd2 == nullptr) {
 		dprintf(stdout, "pseudo_test failed to spawn: %s\n", strerror(errno));
 	} else {
-		dprintf(stdout, "pseudo_test spawned, fd: %d\n", pfd);
+		dprintf(stdout, "pseudo_test spawned\n");
 	}
 }
 
@@ -431,12 +431,12 @@ void program_main(const argdata_t *) {
 		}
 		dprintf(stdout, "Running Flower switchboard...\n");
 		arpc::ArgdataBuilder builder;
-		int pfd = program_spawn(bfd, flowerconf.Build(&builder));
-		if(pfd < 0) {
+		auto *pd2 = program_spawn2(bfd, flowerconf.Build(&builder));
+		if(pd2 == nullptr) {
 			dprintf(stdout, "Switchboard failed to spawn: %s\n", strerror(errno));
 			exit(1);
 		} else {
-			dprintf(stdout, "Switchboard spawned, fd: %d\n", pfd);
+			dprintf(stdout, "Switchboard spawned\n");
 		}
 	}
 

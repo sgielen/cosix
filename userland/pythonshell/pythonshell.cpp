@@ -19,7 +19,6 @@
 #include <arpa/inet.h>
 #include <mstd/range.hpp>
 #include <netinet/in.h>
-#include <sys/procdesc.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>

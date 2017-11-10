@@ -23,6 +23,7 @@
 
 #include <arpc++/arpc++.h>
 #include <cosix/networkd.hpp>
+#include <cosix/util.hpp>
 #include <flower/protocol/server.ad.h>
 #include <flower/protocol/switchboard.ad.h>
 
@@ -257,8 +258,8 @@ void start_dhclient(std::string iface) {
 	argdata_t *values[] = {argdata_create_fd(stdout), argdata_create_fd(networkfd), argdata_create_str_c(iface.c_str())};
 	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
 
-	int pfd = program_spawn(bfd, ad);
-	if(pfd < 0) {
+	auto *pd2 = cosix::program_spawn2(bfd, ad);
+	if(pd2 == nullptr) {
 		dprintf(stdout, "dhclient failed to spawn: %s\n", strerror(errno));
 	} else {
 		dprintf(stdout, "dhclient spawned for interface %s\n", iface.c_str());

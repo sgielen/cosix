@@ -17,7 +17,6 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/stat.h>
-#include <sys/procdesc.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 

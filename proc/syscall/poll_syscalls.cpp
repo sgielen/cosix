@@ -67,7 +67,6 @@ cloudabi_errno_t cloudos::syscall_poll(syscall_context &c)
 		out[0].userdata = in[0].userdata;
 		out[0].error = 0;
 		out[0].type = in[0].type;
-		out[0].lock.lock = in[0].lock.lock;
 		c.result = 1;
 		return 0;
 	} else if(first_event == CLOUDABI_EVENTTYPE_CONDVAR) {
@@ -93,7 +92,6 @@ cloudabi_errno_t cloudos::syscall_poll(syscall_context &c)
 		out[0].userdata = in[0].userdata;
 		out[0].error = 0;
 		out[0].type = in[0].type;
-		out[0].lock.lock = in[0].condvar.lock;
 		c.result = 1;
 		return 0;
 	}
@@ -224,10 +222,8 @@ cloudabi_errno_t cloudos::syscall_poll(syscall_context &c)
 		o.userdata = i->userdata;
 		o.type = i->type;
 		o.error = userdata->error;
-		if(i->type == CLOUDABI_EVENTTYPE_CLOCK) {
-			o.clock.identifier = i->clock.identifier;
-		} else if(i->type == CLOUDABI_EVENTTYPE_PROC_TERMINATE && o.error == 0) {
-			cloudabi_fd_t proc_fdnum = o.proc_terminate.fd = i->proc_terminate.fd;
+		if(i->type == CLOUDABI_EVENTTYPE_PROC_TERMINATE && o.error == 0) {
+			cloudabi_fd_t proc_fdnum = i->proc_terminate.fd;
 			// TODO: store signal and exitcode in the thread_condition when the process dies,
 			// so that if we closed the fd in the meantime, we don't error out here
 			fd_mapping_t *proc_mapping;
@@ -247,7 +243,6 @@ cloudabi_errno_t cloudos::syscall_poll(syscall_context &c)
 				return;
 			}
 		} else if(i->type == CLOUDABI_EVENTTYPE_FD_READ || i->type == CLOUDABI_EVENTTYPE_FD_WRITE) {
-			o.fd_readwrite.fd = i->fd_readwrite.fd;
 			// TODO set nbytes and flags correctly
 			o.fd_readwrite.nbytes = o.error == 0 ? 0xffff : 0;
 			o.fd_readwrite.flags = 0;

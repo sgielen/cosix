@@ -15,7 +15,6 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/stat.h>
-#include <sys/procdesc.h>
 
 int stdout;
 int tmpdir;
