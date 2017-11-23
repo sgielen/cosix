@@ -108,6 +108,10 @@ void thread_condition_signaler::condition_broadcast() {
 	}
 }
 
+bool thread_condition_signaler::has_conditions() {
+	return conditions != nullptr;
+}
+
 thread_condition_waiter::thread_condition_waiter()
 : conditions(nullptr)
 {}

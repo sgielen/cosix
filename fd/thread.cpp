@@ -346,12 +346,21 @@ void thread::acquire_userspace_lock(_Atomic(cloudabi_lock_t) *lock, cloudabi_eve
 	}
 
 	if(want_write_lock) {
-		thread_weaklist *t = allocate<thread_weaklist>(weak_from_this());
-		append(&(lock_info->waiting_writers), t);
-		thread_block();
+		auto *wake_item = allocate<thread_wakelist>();
+		wake_item->data.first = get_thread_id();
+		append(&(lock_info->waiting_writers), wake_item);
+
+		thread_condition c(&wake_item->data.second);
+		thread_condition_waiter w;
+		w.add_condition(&c);
+		w.wait();
 	} else {
 		lock_info->number_of_readers += 1;
-		lock_info->readers_cv.wait();
+
+		thread_condition c(&lock_info->readlock_obtained_signaler);
+		thread_condition_waiter w;
+		w.add_condition(&c);
+		w.wait();
 	}
 
 	// Verify that this thread has the lock now
@@ -390,13 +399,11 @@ void thread::drop_userspace_lock(_Atomic(cloudabi_lock_t) *lock)
 	// are there any write-waiters for this lock?
 	userland_lock_waiters_t *lock_info = process->get_userland_lock_info(lock);
 	if(lock_info != nullptr && lock_info->waiting_writers != nullptr) {
-		thread_weaklist *first_thread = lock_info->waiting_writers;
+		auto *first_thread = lock_info->waiting_writers;
 		lock_info->waiting_writers = first_thread->next;
-		shared_ptr<thread> new_owner = first_thread->data.lock();
-		// TODO: is this assertion correct, or should we continue to the next one if unset?
-		assert(new_owner);
-		*lock = CLOUDABI_LOCK_WRLOCKED | (new_owner->thread_id & 0x3fffffff);
-		deallocate(first_thread);
+		auto new_owner = first_thread->data.first;
+		auto &signaler = first_thread->data.second;
+		*lock = CLOUDABI_LOCK_WRLOCKED | (new_owner & 0x3fffffff);
 
 		// no more readers and writers?
 		if(lock_info->waiting_writers == nullptr && lock_info->number_of_readers == 0) {
@@ -408,26 +415,45 @@ void thread::drop_userspace_lock(_Atomic(cloudabi_lock_t) *lock)
 			*lock |= CLOUDABI_LOCK_KERNEL_MANAGED;
 		}
 
-		new_owner->thread_unblock();
+		// a single thread should be waiting for this signaler
+		assert(signaler.has_conditions());
+		signaler.condition_notify();
+		assert(!signaler.has_conditions());
+		deallocate(first_thread);
 		return;
 	}
 
 	// lock is no longer kernel-managed, because it's now contention-free
 	if(lock_info != nullptr) {
 		*lock = lock_info->number_of_readers;
-		lock_info->readers_cv.broadcast();
+		lock_info->readlock_obtained_signaler.condition_broadcast();
 		process->forget_userland_lock_info(lock);
 	} else {
 		*lock = 0;
 	}
 }
 
-void thread::wait_userspace_cv(_Atomic(cloudabi_condvar_t) *condvar)
+void thread::wait_userspace_cv(_Atomic(cloudabi_lock_t) *lock, _Atomic(cloudabi_condvar_t) *condvar)
 {
-	userland_condvar_waiters_t *condvar_cv = process->get_or_create_userland_condvar_cv(condvar);
-	condvar_cv->waiters += 1;
+	userland_condvar_waiters_t *condvar_cv = process->get_or_create_userland_condvar_cv(condvar, lock);
+	if(condvar_cv->lock != lock) {
+		get_vga_stream() << "*** Bug: condvar lock mismatch from userland, refusing to wait ***\n";
+		return;
+	}
+
+	drop_userspace_lock(lock);
 	*condvar = 1;
-	condvar_cv->cv.wait();
+
+	auto *wake_item = allocate<thread_wakelist>();
+	wake_item->data.first = get_thread_id();
+	append(&(condvar_cv->waiting_threads), wake_item);
+
+	// The condition will be moved to the lock writers queue as soon as the CV is signaled;
+	// then, we'll be woken up as soon as we have the lock
+	thread_condition c(&wake_item->data.second);
+	thread_condition_waiter w;
+	w.add_condition(&c);
+	w.wait();
 }
 
 void thread::signal_userspace_cv(_Atomic(cloudabi_condvar_t) *condvar, cloudabi_nthreads_t nwaiters)
@@ -435,19 +461,55 @@ void thread::signal_userspace_cv(_Atomic(cloudabi_condvar_t) *condvar, cloudabi_
 	userland_condvar_waiters_t *condvar_cv = process->get_userland_condvar_cv(condvar);
 	if(!condvar_cv) {
 		// no waiters
+		assert(*condvar == CLOUDABI_CONDVAR_HAS_NO_WAITERS);
 		return;
 	}
+	assert(*condvar != CLOUDABI_CONDVAR_HAS_NO_WAITERS);
 
-	// TODO: add the waked threads to the lock writers-waiting list, so that if the
-	// thread wakes up, it already atomically has the lock
-	if(condvar_cv->waiters <= nwaiters) {
-		*condvar = 0;
-		condvar_cv->cv.broadcast();
-		process->forget_userland_condvar_cv(condvar);
-	} else {
-		while(nwaiters-- > 0) {
-			condvar_cv->waiters -= 1;
-			condvar_cv->cv.notify();
+	auto *lock = condvar_cv->lock;
+
+	*lock = *lock | CLOUDABI_LOCK_KERNEL_MANAGED;
+	userland_lock_waiters_t *lock_info = process->get_or_create_userland_lock_info(lock);
+
+	while(nwaiters > 0 && condvar_cv->waiting_threads != nullptr) {
+		// Move the first waiting thread from the condvar CV to the back of the lock writers queue
+		auto *first_thread = condvar_cv->waiting_threads;
+		condvar_cv->waiting_threads = first_thread->next;
+		first_thread->next = nullptr;
+		append(&lock_info->waiting_writers, first_thread);
+		nwaiters--;
+	}
+
+	if(condvar_cv->waiting_threads == nullptr) {
+		// Nothing is waiting on the condvar anymore, so it is free.
+		// Note that this does not mean that all threads have been
+		// woken up; they might be waiting for the lock to be released.
+		*condvar = CLOUDABI_CONDVAR_HAS_NO_WAITERS;
+	}
+
+	// if the lock is free, give it to the first thread now
+	if((*lock & 0x3fffffff) == 0 && lock_info->waiting_writers != nullptr) {
+		auto *first_thread = lock_info->waiting_writers;
+		lock_info->waiting_writers = first_thread->next;
+		auto new_owner = first_thread->data.first;
+		auto &signaler = first_thread->data.second;
+		*lock = CLOUDABI_LOCK_WRLOCKED | (new_owner & 0x3fffffff);
+
+		// no more readers and writers?
+		if(lock_info->waiting_writers == nullptr && lock_info->number_of_readers == 0) {
+			// lock is now contention-free
+			lock_info = nullptr;
+			process->forget_userland_lock_info(lock);
+		} else {
+			// lock is still kernel managed
+			*lock |= CLOUDABI_LOCK_KERNEL_MANAGED;
 		}
+
+		// a single thread should be waiting for this signaler
+		assert(signaler.has_conditions());
+		signaler.condition_notify();
+		assert(!signaler.has_conditions());
+		deallocate(first_thread);
+		return;
 	}
 }

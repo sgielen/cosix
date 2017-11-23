@@ -22,19 +22,21 @@ struct fd_mapping_t {
 	cloudabi_rights_t rights_inheriting;
 };
 
+typedef linked_list<pair<cloudabi_tid_t, thread_condition_signaler>> thread_wakelist;
+
 struct userland_lock_waiters_t {
 	_Atomic(cloudabi_lock_t) *lock = nullptr;
-	cv_t readers_cv;
+	thread_condition_signaler readlock_obtained_signaler;
 	size_t number_of_readers = 0;
-	thread_weaklist *waiting_writers = nullptr;
+	thread_wakelist *waiting_writers = nullptr;
 };
 
 typedef linked_list<userland_lock_waiters_t*> userland_lock_waiters_list;
 
 struct userland_condvar_waiters_t {
 	_Atomic(cloudabi_condvar_t) *condvar = nullptr;
-	size_t waiters = 0;
-	cv_t cv;
+	thread_wakelist *waiting_threads = nullptr;
+	_Atomic(cloudabi_lock_t) *lock = nullptr;
 };
 
 typedef linked_list<userland_condvar_waiters_t*> userland_condvar_waiters_list;
@@ -119,7 +121,7 @@ struct process_fd : public fd_t {
 
 	/* Likewise, but for userland condition variables. */
 	userland_condvar_waiters_t *get_userland_condvar_cv(_Atomic(cloudabi_condvar_t) *condvar);
-	userland_condvar_waiters_t *get_or_create_userland_condvar_cv(_Atomic(cloudabi_condvar_t) *condvar);
+	userland_condvar_waiters_t *get_or_create_userland_condvar_cv(_Atomic(cloudabi_condvar_t) *condvar, _Atomic(cloudabi_condvar_t) *lock);
 	void forget_userland_condvar_cv(_Atomic(cloudabi_condvar_t) *condvar);
 
 	inline thread_condition_signaler *get_termination_signaler() {

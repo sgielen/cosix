@@ -44,4 +44,25 @@ struct enable_if<true, T> { typedef T type; };
 template<typename T>
 struct is_unsigned : integral_constant<bool, T(0) < T(-1)> {};
 
+template <typename T1, typename T2>
+struct pair {
+	typedef T1 first_type;
+	typedef T2 second_type;
+	first_type first;
+	second_type second;
+
+	explicit constexpr pair() = default;
+	explicit constexpr pair(const T1 &x, const T2 &y) : first(x), second(y) {}
+
+	template <typename U1, typename U2>
+	explicit constexpr pair(const pair<U1, U2> &p) : first(p.first), second(p.second) {}
+
+	pair(const pair&) = default;
+};
+
+template <typename T1, typename T2>
+pair<T1, T2> make_pair(T1 t1, T2 t2) {
+	return pair<T1, T2>(t1, t2);
+}
+
 }

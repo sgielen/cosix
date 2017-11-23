@@ -12,7 +12,6 @@ struct scheduler;
 
 struct thread;
 typedef linked_list<shared_ptr<thread>> thread_list;
-typedef linked_list<weak_ptr<thread>> thread_weaklist;
 
 // MAIN_THREAD should be set to a value higher than 0, so that locks that are
 // acquired by a thread always have a nonzero value. This is assumed in the
@@ -71,7 +70,7 @@ struct thread : enable_shared_from_this<thread> {
 	void acquire_userspace_lock(_Atomic(cloudabi_lock_t) *lock, cloudabi_eventtype_t locktype);
 	void drop_userspace_lock(_Atomic(cloudabi_lock_t) *lock);
 
-	void wait_userspace_cv(_Atomic(cloudabi_condvar_t) *condvar);
+	void wait_userspace_cv(_Atomic(cloudabi_lock_t) *lock, _Atomic(cloudabi_condvar_t) *condvar);
 	void signal_userspace_cv(_Atomic(cloudabi_condvar_t) *condvar, cloudabi_nthreads_t nwaiters);
 
 private:

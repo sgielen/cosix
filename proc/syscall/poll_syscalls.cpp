@@ -83,12 +83,8 @@ cloudabi_errno_t cloudos::syscall_poll(syscall_context &c)
 			get_vga_stream() << "poll(): non-private locks or condvars are not supported yet\n";
 			return ENOSYS;
 		}
-		// this call blocks this thread until the condition variable is notified
-		// TODO: this currently does not cause a race because we are UP and without
-		// kernel preemption, but will cause a race later
-		c.thread->drop_userspace_lock(lock);
-		c.thread->wait_userspace_cv(condvar);
-		c.thread->acquire_userspace_lock(lock, CLOUDABI_EVENTTYPE_LOCK_WRLOCK);
+		// this call blocks this thread until the condition variable is notified and the lock is obtained
+		c.thread->wait_userspace_cv(lock, condvar);
 		out[0].userdata = in[0].userdata;
 		out[0].error = 0;
 		out[0].type = in[0].type;

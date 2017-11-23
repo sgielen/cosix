@@ -928,7 +928,7 @@ userland_condvar_waiters_t *process_fd::get_userland_condvar_cv(_Atomic(cloudabi
 	return res == nullptr ? nullptr : res->data;
 }
 
-userland_condvar_waiters_t *process_fd::get_or_create_userland_condvar_cv(_Atomic(cloudabi_condvar_t) *condvar)
+userland_condvar_waiters_t *process_fd::get_or_create_userland_condvar_cv(_Atomic(cloudabi_condvar_t) *condvar, _Atomic(cloudabi_lock_t) *lock)
 {
 	auto res = get_userland_condvar_cv(condvar);
 	if(res != nullptr) {
@@ -937,6 +937,7 @@ userland_condvar_waiters_t *process_fd::get_or_create_userland_condvar_cv(_Atomi
 
 	userland_condvar_waiters_t *new_info = allocate<userland_condvar_waiters_t>();
 	new_info->condvar = condvar;
+	new_info->lock = lock;
 
 	userland_condvar_waiters_list *new_list = allocate<userland_condvar_waiters_list>(new_info);
 	append(&userland_condvars, new_list);

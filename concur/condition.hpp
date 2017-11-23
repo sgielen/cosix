@@ -52,6 +52,7 @@ private:
  */
 struct thread_condition_signaler {
 	thread_condition_signaler();
+	thread_condition_signaler(thread_condition_signaler const&) = delete;
 	~thread_condition_signaler();
 
 	typedef bool (*thread_condition_satisfied_function_t)(void*, thread_condition*);
@@ -64,6 +65,7 @@ struct thread_condition_signaler {
 
 	void condition_notify();
 	void condition_broadcast();
+	bool has_conditions();
 
 private:
 	thread_condition_satisfied_function_t satisfied_function;
