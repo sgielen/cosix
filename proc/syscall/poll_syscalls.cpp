@@ -49,49 +49,6 @@ cloudabi_errno_t cloudos::syscall_poll(syscall_context &c)
 		}
 	}
 
-	if(first_event == CLOUDABI_EVENTTYPE_LOCK_RDLOCK
-	|| first_event == CLOUDABI_EVENTTYPE_LOCK_WRLOCK) {
-		// acquire the lock, optionally timing out when the
-		// timeout passes.
-		auto *lock = in[0].lock.lock;
-		if(nsubscriptions == 2) {
-			get_vga_stream() << "poll(): clocks for locks are not supported yet\n";
-			return ENOSYS;
-		}
-		if(in[0].lock.lock_scope != CLOUDABI_SCOPE_PRIVATE) {
-			get_vga_stream() << "poll(): non-private locks are not supported yet\n";
-			return ENOSYS;
-		}
-		// this call blocks this thread until the lock is acquired
-		c.thread->acquire_userspace_lock(lock, in[0].type);
-		out[0].userdata = in[0].userdata;
-		out[0].error = 0;
-		out[0].type = in[0].type;
-		c.result = 1;
-		return 0;
-	} else if(first_event == CLOUDABI_EVENTTYPE_CONDVAR) {
-		// release the lock, wait() for the condvar, and
-		// re-acquire the lock when it is notified, optionally
-		// timing out when the timeout passes.
-		auto *condvar = in[0].condvar.condvar;
-		auto *lock = in[0].condvar.lock;
-		if(nsubscriptions == 2) {
-			get_vga_stream() << "poll(): clocks for condvars are not supported yet\n";
-			return ENOSYS;
-		}
-		if(in[0].condvar.condvar_scope != CLOUDABI_SCOPE_PRIVATE || in[0].condvar.lock_scope != CLOUDABI_SCOPE_PRIVATE) {
-			get_vga_stream() << "poll(): non-private locks or condvars are not supported yet\n";
-			return ENOSYS;
-		}
-		// this call blocks this thread until the condition variable is notified and the lock is obtained
-		c.thread->wait_userspace_cv(lock, condvar);
-		out[0].userdata = in[0].userdata;
-		out[0].error = 0;
-		out[0].type = in[0].type;
-		c.result = 1;
-		return 0;
-	}
-
 	size_t nevents = 0;
 
 	// return an event when any of these subscriptions happen.
@@ -110,6 +67,14 @@ cloudabi_errno_t cloudos::syscall_poll(syscall_context &c)
 	thread_condition_signaler null_signaler;
 	null_signaler.set_already_satisfied_function(return_true, nullptr);
 
+	// We only allow a single lock or condvar to be given to poll() above.
+	// However, in principle, the implementation below can handle waiting
+	// for one of multiple locks/condvars just fine.
+	typedef linked_list<pair<_Atomic(cloudabi_lock_t)*, cloudabi_eventtype_t>> locklist;
+	typedef linked_list<pair<_Atomic(cloudabi_lock_t)*, _Atomic(cloudabi_condvar_t)*>> cvlist;
+	locklist *waiting_locks = nullptr;
+	cvlist *waiting_condvars = nullptr;
+
 	for(size_t subi = 0; subi < nsubscriptions; ++subi) {
 		cloudabi_subscription_t const &i = in[subi];
 		thread_condition &condition = conditions[subi];
@@ -119,10 +84,46 @@ cloudabi_errno_t cloudos::syscall_poll(syscall_context &c)
 
 		thread_condition_signaler *signaler = nullptr;
 		switch(i.type) {
-		case CLOUDABI_EVENTTYPE_CONDVAR:
+		case CLOUDABI_EVENTTYPE_CONDVAR: {
+			auto *condvar = i.condvar.condvar;
+			auto *lock = i.condvar.lock;
+			if(i.condvar.condvar_scope != CLOUDABI_SCOPE_PRIVATE || i.condvar.lock_scope != CLOUDABI_SCOPE_PRIVATE) {
+				get_vga_stream() << "poll(): non-private locks or condvars are not supported yet\n";
+				signaler = &null_signaler;
+				userdata->error = ENOSYS;
+			} else {
+				// this signaler is only notified when the cv is signaled _and_ the lock is obtained
+				signaler = c.thread->wait_userspace_cv_signaler(lock, condvar);
+				if(signaler == nullptr) {
+					// invalid lock given
+					signaler = &null_signaler;
+					userdata->error = EINVAL;
+				} else {
+					cvlist *item = allocate<cvlist>(make_pair(lock, condvar));
+					append(&waiting_condvars, item);
+				}
+			}
+			break;
+		}
 		case CLOUDABI_EVENTTYPE_LOCK_RDLOCK:
-		case CLOUDABI_EVENTTYPE_LOCK_WRLOCK:
-			kernel_panic("Eventtype cannot exist here");
+		case CLOUDABI_EVENTTYPE_LOCK_WRLOCK: {
+			auto *lock = i.lock.lock;
+			if(i.lock.lock_scope != CLOUDABI_SCOPE_PRIVATE) {
+				get_vga_stream() << "poll(): non-private locks are not supported yet\n";
+				signaler = &null_signaler;
+				userdata->error = ENOSYS;
+			} else {
+				signaler = c.thread->acquisition_userspace_lock_signaler(lock, i.type);
+				if(signaler == nullptr) {
+					// lock is already acquired!
+					signaler = &null_signaler;
+				} else {
+					locklist *item = allocate<locklist>(make_pair(lock, i.type));
+					append(&waiting_locks, item);
+				}
+			}
+			break;
+		}
 		case CLOUDABI_EVENTTYPE_CLOCK: {
 			auto clock = get_clock_store()->get_clock(i.clock.clock_id);
 			if(clock == nullptr) {
@@ -242,8 +243,52 @@ cloudabi_errno_t cloudos::syscall_poll(syscall_context &c)
 			// TODO set nbytes and flags correctly
 			o.fd_readwrite.nbytes = o.error == 0 ? 0xffff : 0;
 			o.fd_readwrite.flags = 0;
+		} else if(i->type == CLOUDABI_EVENTTYPE_LOCK_RDLOCK || i->type == CLOUDABI_EVENTTYPE_LOCK_WRLOCK
+		|| i->type == CLOUDABI_EVENTTYPE_CONDVAR) {
+			// remove all received locks and signaled cv's from the waiting lists
+			if(i->type == CLOUDABI_EVENTTYPE_CONDVAR) {
+				remove_all(&waiting_condvars, [&](cvlist *cv_item) {
+					return cv_item->data.second == i->condvar.condvar;
+				});
+			} else {
+				remove_all(&waiting_locks, [&](locklist *l_item) {
+					return l_item->data.first == i->lock.lock;
+				});
+			}
+			// Verify that this thread has the lock now
+			// NOTE: it is possible that this thread is only scheduled after another thread already changed the
+			// lock value. For example, for pthread_once(), another userland thread may set the readcount to 0
+			// even if this thread just did a readlock, before this thread is scheduled again to do the check below.
+			// So, we'll warn because it helps to find potential bugs, but don't assert().
+			auto *lock = i->type == CLOUDABI_EVENTTYPE_CONDVAR ? i->condvar.lock : i->lock.lock;
+			if(i->type != CLOUDABI_EVENTTYPE_LOCK_RDLOCK) {
+				if((*lock & CLOUDABI_LOCK_WRLOCKED) == 0 || (*lock & 0x3fffffff) != c.thread->get_thread_id()) {
+					get_vga_stream() << "Warning: Thought I had a writelock, but it's not writelocked or thread ID isn't mine\n";
+				}
+			} else {
+				if((*lock & CLOUDABI_LOCK_WRLOCKED) == CLOUDABI_LOCK_WRLOCKED) {
+					get_vga_stream() << "Warning: Thought I had a readlock, but lock is writelocked.\n";
+				} else if((*lock & 0x3fffffff) == 0) {
+					get_vga_stream() << "Warning: Thought I had a readlock, but readcount is 0.\n";
+				}
+			}
 		}
 	});
+
+	// Remove this thread from the waiting lists of the locks
+	remove_all(&waiting_locks, [&](locklist *item) {
+		c.thread->cancel_userspace_lock(item->data.first, item->data.second);
+		return true;
+	});
+
+	// If we were waiting for a condvar to trigger but it timed out, we now
+	// have to block until we have the lock again, before we can return
+	// anything in the poll
+	remove_all(&waiting_condvars, [&](cvlist *item) {
+		c.thread->cancel_userspace_cv(item->data.first, item->data.second);
+		return true;
+	});
+
 	remove_all(&satisfied, [](thread_condition_list*){
 		return true;
 	});

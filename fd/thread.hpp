@@ -9,6 +9,7 @@ namespace cloudos {
 
 struct process_fd;
 struct scheduler;
+struct thread_condition_signaler;
 
 struct thread;
 typedef linked_list<shared_ptr<thread>> thread_list;
@@ -67,11 +68,19 @@ struct thread : enable_shared_from_this<thread> {
 	void thread_block();
 	void thread_unblock();
 
-	void acquire_userspace_lock(_Atomic(cloudabi_lock_t) *lock, cloudabi_eventtype_t locktype);
+	/** Return a signaler for acquisition of this lock. If this function
+	 * returns NULL, the lock could be immediately acquired. */
+	thread_condition_signaler *acquisition_userspace_lock_signaler(_Atomic(cloudabi_lock_t) *lock, cloudabi_eventtype_t locktype);
 	void drop_userspace_lock(_Atomic(cloudabi_lock_t) *lock);
+	void cancel_userspace_lock(_Atomic(cloudabi_lock_t) *lock, cloudabi_eventtype_t locktype);
 
-	void wait_userspace_cv(_Atomic(cloudabi_lock_t) *lock, _Atomic(cloudabi_condvar_t) *condvar);
+	/** Return a signaler for signaling of the CV and subsequent
+	 * acquisition of the lock. */
+	thread_condition_signaler *wait_userspace_cv_signaler(_Atomic(cloudabi_lock_t) *lock, _Atomic(cloudabi_condvar_t) *condvar);
 	void signal_userspace_cv(_Atomic(cloudabi_condvar_t) *condvar, cloudabi_nthreads_t nwaiters);
+	/** Cancel waiting for the given condvar to signal, and block until the
+	 * lock is obtained again. */
+	void cancel_userspace_cv(_Atomic(cloudabi_lock_t) *lock, _Atomic(cloudabi_condvar_t) *condvar);
 
 private:
 	process_fd *process = nullptr;

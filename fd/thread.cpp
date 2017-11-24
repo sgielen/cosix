@@ -304,7 +304,7 @@ bool thread::is_ready() {
 	return !exited && process->is_running() && !blocked;
 }
 
-void thread::acquire_userspace_lock(_Atomic(cloudabi_lock_t) *lock, cloudabi_eventtype_t locktype)
+thread_condition_signaler *thread::acquisition_userspace_lock_signaler(_Atomic(cloudabi_lock_t) *lock, cloudabi_eventtype_t locktype)
 {
 	bool is_write_locked = (*lock & CLOUDABI_LOCK_WRLOCKED) != 0;
 	bool want_write_lock = locktype == CLOUDABI_EVENTTYPE_LOCK_WRLOCK;
@@ -320,7 +320,7 @@ void thread::acquire_userspace_lock(_Atomic(cloudabi_lock_t) *lock, cloudabi_eve
 			// Make this thread reader
 			*lock = 1;
 		}
-		return;
+		return nullptr;
 	}
 
 	userland_lock_waiters_t *lock_info = process->get_userland_lock_info(lock);
@@ -329,7 +329,7 @@ void thread::acquire_userspace_lock(_Atomic(cloudabi_lock_t) *lock, cloudabi_eve
 		// The lock is read-locked, this thread wants a read-lock, there are no waiting writers
 		// Add it as a reader, still not kernel-managed as this could have been done in userspace as well
 		*lock += 1;
-		return;
+		return nullptr;
 	}
 
 	// All other cases:
@@ -349,33 +349,10 @@ void thread::acquire_userspace_lock(_Atomic(cloudabi_lock_t) *lock, cloudabi_eve
 		auto *wake_item = allocate<thread_wakelist>();
 		wake_item->data.first = get_thread_id();
 		append(&(lock_info->waiting_writers), wake_item);
-
-		thread_condition c(&wake_item->data.second);
-		thread_condition_waiter w;
-		w.add_condition(&c);
-		w.wait();
+		return &wake_item->data.second;
 	} else {
 		lock_info->number_of_readers += 1;
-
-		thread_condition c(&lock_info->readlock_obtained_signaler);
-		thread_condition_waiter w;
-		w.add_condition(&c);
-		w.wait();
-	}
-
-	// Verify that this thread has the lock now
-	// NOTE: it is possible that this thread is only scheduled after another thread already changed the
-	// lock value. For example, for pthread_once(), another userland thread may set the readcount to 0
-	// even if this thread just did a readlock, before this thread is scheduled again to do the check below.
-	// So, we'll warn because it helps to find potential bugs, but don't assert().
-	if(want_write_lock) {
-		if((*lock & CLOUDABI_LOCK_WRLOCKED) == 0 || (*lock & 0x3fffffff) != thread_id) {
-			get_vga_stream() << "Warning: Thought I had a writelock, but it's not writelocked or thread ID isn't mine\n";
-		}
-	} else {
-		if((*lock & 0x3fffffff) == 0) {
-			get_vga_stream() << "Warning: Thought I had a readlock, but readcount is 0.\n";
-		}
+		return &lock_info->readlock_obtained_signaler;
 	}
 }
 
@@ -433,12 +410,29 @@ void thread::drop_userspace_lock(_Atomic(cloudabi_lock_t) *lock)
 	}
 }
 
-void thread::wait_userspace_cv(_Atomic(cloudabi_lock_t) *lock, _Atomic(cloudabi_condvar_t) *condvar)
+void thread::cancel_userspace_lock(_Atomic(cloudabi_lock_t) *lock, cloudabi_eventtype_t locktype)
+{
+	userland_lock_waiters_t *lock_info = process->get_userland_lock_info(lock);
+	assert(lock_info);
+
+	bool wanted_write_lock = locktype == CLOUDABI_EVENTTYPE_LOCK_WRLOCK;
+	if(wanted_write_lock) {
+		size_t num_unlocked = remove_all(&lock_info->waiting_writers, [&](thread_wakelist *item) {
+			return item->data.first == get_thread_id();
+		});
+		assert(num_unlocked == 1);
+	} else {
+		assert(lock_info->number_of_readers >= 1);
+		lock_info->number_of_readers -= 1;
+	}
+}
+
+thread_condition_signaler *thread::wait_userspace_cv_signaler(_Atomic(cloudabi_lock_t) *lock, _Atomic(cloudabi_condvar_t) *condvar)
 {
 	userland_condvar_waiters_t *condvar_cv = process->get_or_create_userland_condvar_cv(condvar, lock);
 	if(condvar_cv->lock != lock) {
 		get_vga_stream() << "*** Bug: condvar lock mismatch from userland, refusing to wait ***\n";
-		return;
+		return nullptr;
 	}
 
 	drop_userspace_lock(lock);
@@ -449,11 +443,8 @@ void thread::wait_userspace_cv(_Atomic(cloudabi_lock_t) *lock, _Atomic(cloudabi_
 	append(&(condvar_cv->waiting_threads), wake_item);
 
 	// The condition will be moved to the lock writers queue as soon as the CV is signaled;
-	// then, we'll be woken up as soon as we have the lock
-	thread_condition c(&wake_item->data.second);
-	thread_condition_waiter w;
-	w.add_condition(&c);
-	w.wait();
+	// then, the signaler will be notified as soon as we have the lock
+	return &wake_item->data.second;
 }
 
 void thread::signal_userspace_cv(_Atomic(cloudabi_condvar_t) *condvar, cloudabi_nthreads_t nwaiters)
@@ -511,5 +502,56 @@ void thread::signal_userspace_cv(_Atomic(cloudabi_condvar_t) *condvar, cloudabi_
 		assert(!signaler.has_conditions());
 		deallocate(first_thread);
 		return;
+	}
+}
+
+void thread::cancel_userspace_cv(_Atomic(cloudabi_lock_t) *lock, _Atomic(cloudabi_condvar_t) *condvar)
+{
+	userland_condvar_waiters_t *condvar_cv = process->get_userland_condvar_cv(condvar);
+	assert(condvar_cv);
+
+	assert(condvar_cv->lock == lock);
+	size_t num_removed = remove_all(&condvar_cv->waiting_threads, [&](thread_wakelist *item) {
+		return item->data.first == thread_id;
+	});
+	assert(num_removed == 0 || num_removed == 1);
+	bool was_blocked_on_cv = num_removed == 1;
+
+	if(condvar_cv->waiting_threads == nullptr) {
+		// Nothing is waiting on the condvar anymore, so it is free.
+		*condvar = CLOUDABI_CONDVAR_HAS_NO_WAITERS;
+	}
+
+	if((*lock & 0x3fffffff) == 0) {
+		// The lock is unlocked, lock it
+		*lock = CLOUDABI_LOCK_WRLOCKED | (thread_id & 0x3fffffff);
+	} else {
+		// Block until the lock is acquired again
+		*lock = *lock | CLOUDABI_LOCK_KERNEL_MANAGED;
+		userland_lock_waiters_t *lock_info = process->get_or_create_userland_lock_info(lock);
+
+		thread_condition_signaler *signaler = nullptr;
+		if(was_blocked_on_cv) {
+			// We were not yet blocked on the thread, so do so now
+			auto *wake_item = allocate<thread_wakelist>();
+			wake_item->data.first = thread_id;
+			append(&(lock_info->waiting_writers), wake_item);
+			signaler = &wake_item->data.second;
+		} else {
+			// Find our existing signaler in the waiting_threads list, and
+			// subscribe to it
+			iterate(lock_info->waiting_writers, [&](thread_wakelist *item) {
+				if(item->data.first == thread_id) {
+					assert(signaler == nullptr);
+					signaler = &item->data.second;
+				}
+			});
+		}
+
+		assert(signaler != nullptr);
+		thread_condition c(signaler);
+		thread_condition_waiter w;
+		w.add_condition(&c);
+		w.wait();
 	}
 }

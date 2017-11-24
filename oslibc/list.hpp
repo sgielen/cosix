@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#include <memory/allocation.hpp>
+
 /* A linked list item. Holds a copy of the input data, so use raw, shared
  * or weak pointers if you need to. When destructed, will only destruct its
  * copy, it won't dereference.
@@ -91,7 +93,7 @@ inline void append(linked_list<T> **list, linked_list<T> *entry) {
 template <typename T>
 struct default_list_deallocator {
 	void operator()(linked_list<T> *item) {
-		deallocate(item);
+		cloudos::deallocate(item);
 	}
 };
 
