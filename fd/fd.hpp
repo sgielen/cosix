@@ -286,6 +286,15 @@ struct seekable_fd_t : public fd_t {
 	}
 
 	virtual cloudabi_filesize_t seek(cloudabi_filedelta_t offset, cloudabi_whence_t whence) override {
+		if(whence == CLOUDABI_WHENCE_END) {
+			cloudabi_filestat_t statbuf;
+			file_stat_fget(&statbuf);
+			if(error != 0) {
+				return pos;
+			}
+			whence = CLOUDABI_WHENCE_CUR;
+			pos = statbuf.st_size;
+		}
 		if(whence == CLOUDABI_WHENCE_CUR) {
 			if(offset > 0 && static_cast<uint64_t>(offset) > (UINT64_MAX - pos)) {
 				// prevent overflow
@@ -298,20 +307,6 @@ struct seekable_fd_t : public fd_t {
 				error = 0;
 				pos = pos + offset;
 			}
-		} else if(whence == CLOUDABI_WHENCE_END) {
-			// TODO: this needs to obtain the filesize, so it needs file_stat
-			error = ENOSYS;
-			get_vga_stream() << "CLOUDABI_WHENCE_END not supported yet in seek\n";
-			/*
-			cloudabi_filesize_t size = stat(...);
-			if(offset > (UINT64_MAX - size)) {
-				error = EOVERFLOW;
-			} else if(offset < 0 && -offset > size) {
-				error = EINVAL;
-			} else {
-				pos = size + offset;
-			}
-			*/
 		} else if(whence == CLOUDABI_WHENCE_SET) {
 			if(offset < 0) {
 				error = EINVAL;
