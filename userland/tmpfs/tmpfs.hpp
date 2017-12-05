@@ -15,6 +15,9 @@ struct tmpfs_file_entry : public cosix::file_entry {
 	std::map<std::string, file_entry_ptr> files;
 	std::string contents;
 	int hardlinks = 1;
+	cloudabi_timestamp_t access_time = 0; // Last time contents were read
+	cloudabi_timestamp_t content_time = 0; // Last time contents were changed
+	cloudabi_timestamp_t metadata_time = 0; // Last time contents or metadata were changed
 };
 
 struct pseudo_fd_entry {

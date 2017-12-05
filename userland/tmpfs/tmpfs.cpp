@@ -2,8 +2,17 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <cassert>
+#include <cloudabi_syscalls.h>
 
 using namespace cosix;
+
+static cloudabi_timestamp_t timestamp() {
+	cloudabi_timestamp_t ts;
+	if(cloudabi_sys_clock_time_get(CLOUDABI_CLOCK_REALTIME, 1, &ts) == 0) {
+		return ts;
+	}
+	return 0;
+}
 
 tmpfs::tmpfs(cloudabi_device_t d)
 {
@@ -17,6 +26,8 @@ tmpfs::tmpfs(cloudabi_device_t d)
 	root->inode = root_inode;
 	root->type = CLOUDABI_FILETYPE_DIRECTORY;
 	inodes[root_inode] = root;
+
+	root->access_time = root->content_time = root->metadata_time = timestamp();
 
 	root->files["."] = root;
 	root->files[".."] = root;
@@ -32,6 +43,7 @@ file_entry tmpfs::lookup(pseudofd_t pseudo, const char *path, size_t len, clouda
 
 	std::string filename = normalize_path(directory, path, len, lookupflags);
 	auto it = directory->files.find(filename);
+	directory->access_time = timestamp();
 	if(it == directory->files.end()) {
 		throw cloudabi_system_error(ENOENT);
 	} else {
@@ -49,6 +61,8 @@ pseudofd_t tmpfs::open(cloudabi_inode_t inode, int)
 		// can't open via the tmpfs
 		throw cloudabi_system_error(EINVAL);
 	}
+
+	entry->access_time = timestamp();
 
 	pseudo_fd_ptr pseudo(new pseudo_fd_entry);
 	pseudo->file = entry;
@@ -77,7 +91,11 @@ void tmpfs::link(pseudofd_t pseudo1, const char *path1, size_t path1len, cloudab
 	}
 
 	it1->second->hardlinks += 1;
+	auto ts = timestamp();
+	it1->second->metadata_time = ts;
+
 	dir2->files[filename2] = it1->second;
+	dir2->content_time = dir2->metadata_time = ts;
 }
 
 void tmpfs::allocate(pseudofd_t pseudo, off_t offset, off_t length) {
@@ -89,6 +107,7 @@ void tmpfs::allocate(pseudofd_t pseudo, off_t offset, off_t length) {
 	size_t minsize = offset + length;
 	if(file->contents.size() < minsize) {
 		file->contents.resize(minsize);
+		file->content_time = file->metadata_time = timestamp();
 	}
 }
 
@@ -106,6 +125,7 @@ size_t tmpfs::readlink(pseudofd_t pseudo, const char *path, size_t pathlen, char
 
 	size_t copy = std::min(it->second->contents.size(), buflen);
 	memcpy(buf, it->second->contents.c_str(), copy);
+	it->second->access_time = timestamp();
 	return copy;
 }
 
@@ -139,6 +159,10 @@ void tmpfs::rename(pseudofd_t pseudo1, const char *path1, size_t path1len, pseud
 			entry->files[".."] = dir2;
 		}
 		dir2->files[filename2] = entry;
+		auto ts = timestamp();
+		dir1->content_time = dir1->metadata_time = ts;
+		dir2->content_time = dir2->metadata_time = ts;
+		entry->content_time = entry->metadata_time = ts;
 		return;
 	}
 
@@ -147,19 +171,18 @@ void tmpfs::rename(pseudofd_t pseudo1, const char *path1, size_t path1len, pseud
 		if(entry->type != CLOUDABI_FILETYPE_DIRECTORY) {
 			throw cloudabi_system_error(EISDIR);
 		}
-		bool empty = true;
 		for(auto const &e : it2->second->files) {
 			if(e.first != "." && e.first != "..") {
-				empty = false;
-				break;
+				throw cloudabi_system_error(ENOTEMPTY);
 			}
-		}
-		if(!empty) {
-			throw cloudabi_system_error(ENOTEMPTY);
 		}
 		dir2->files[filename2] = entry;
 		entry->files[".."] = dir2;
 		dir1->files.erase(it1);
+		auto ts = timestamp();
+		dir1->content_time = dir1->metadata_time = ts;
+		dir2->content_time = dir2->metadata_time = ts;
+		entry->content_time = entry->metadata_time = ts;
 		return;
 	}
 
@@ -170,6 +193,9 @@ void tmpfs::rename(pseudofd_t pseudo1, const char *path1, size_t path1len, pseud
 
 	dir2->files[filename2] = entry;
 	dir1->files.erase(it1);
+	auto ts = timestamp();
+	dir1->content_time = dir1->metadata_time = ts;
+	dir2->content_time = dir2->metadata_time = ts;
 }
 
 void tmpfs::symlink(pseudofd_t pseudo ,const char *path1, size_t path1len, const char *path2, size_t path2len) {
@@ -188,8 +214,12 @@ void tmpfs::symlink(pseudofd_t pseudo ,const char *path1, size_t path1len, const
 	entry->type = CLOUDABI_FILETYPE_SYMBOLIC_LINK;
 	entry->contents = std::string(path1, path1len);
 
+	entry->access_time = entry->content_time = entry->metadata_time = timestamp();
+
 	inodes[inode] = entry;
 	directory->files[filename] = entry;
+
+	directory->content_time = directory->metadata_time = timestamp();
 }
 
 void tmpfs::unlink(pseudofd_t pseudo, const char *path, size_t len, cloudabi_ulflags_t unlinkflags)
@@ -221,7 +251,10 @@ void tmpfs::unlink(pseudofd_t pseudo, const char *path, size_t len, cloudabi_ulf
 	}
 
 	directory->files.erase(filename);
+	auto ts = timestamp();
+	directory->content_time = directory->metadata_time = ts;
 	entry->hardlinks -= 1;
+	entry->metadata_time = ts;
 	if(entry->hardlinks == 0) {
 		// TODO: erase inode if this was the last reference to it
 		// (possibly, using the deleter of the inode bound to this tmpfs*)
@@ -250,8 +283,12 @@ cloudabi_inode_t tmpfs::create(pseudofd_t pseudo, const char *path, size_t len, 
 		entry->files[".."] = directory;
 	}
 
+	auto ts = timestamp();
+	entry->access_time = entry->content_time = entry->metadata_time = ts;
+
 	inodes[inode] = entry;
 	directory->files[filename] = entry;
+	directory->content_time = directory->metadata_time = ts;
 	return inode;
 }
 
@@ -282,6 +319,7 @@ size_t tmpfs::pread(pseudofd_t pseudo, off_t offset, char *dest, size_t requeste
 	size_t returned = remaining < requested ? remaining : requested;
 	const char *data = entry->contents.c_str() + offset;
 	memcpy(dest, data, returned);
+	entry->access_time = timestamp();
 	return returned;
 }
 
@@ -299,6 +337,7 @@ void tmpfs::pwrite(pseudofd_t pseudo, off_t offset, const char *buf, size_t leng
 	}
 
 	entry->contents.replace(offset, length, std::string(buf, length));
+	entry->content_time = timestamp();
 }
 
 /**
@@ -316,6 +355,7 @@ size_t tmpfs::readdir(pseudofd_t pseudo, char *buffer, size_t buflen, cloudabi_d
 	// TODO: if files are created or removed during a readdir, this may cause readdir to miss
 	// files or return them twice
 	auto it = directory->files.begin();
+	directory->access_time = timestamp();
 	for(auto c = cookie; c-- > 0 && it != directory->files.end(); ++it);
 	if(it == directory->files.end()) {
 		cookie = CLOUDABI_DIRCOOKIE_START;
@@ -347,12 +387,14 @@ static void file_entry_to_filestat(file_entry_ptr &entry, cloudabi_filestat_t *b
 	buf->st_ino = entry->inode;
 	buf->st_filetype = entry->type;
 	buf->st_nlink = entry->hardlinks;
-	/* TODO directory size? */
-	buf->st_size = entry->contents.size();
-	/* TODO: times */
-	buf->st_atim = 0;
-	buf->st_mtim = 0;
-	buf->st_ctim = 0;
+	if(entry->type == CLOUDABI_FILETYPE_REGULAR_FILE) {
+		buf->st_size = entry->contents.size();
+	} else {
+		buf->st_size = 0;
+	}
+	buf->st_atim = entry->access_time;
+	buf->st_mtim = entry->content_time;
+	buf->st_ctim = entry->metadata_time;
 }
 
 void tmpfs::stat_get(pseudofd_t pseudo, cloudabi_lookupflags_t flags, char *path, size_t len, cloudabi_filestat_t *buf) {
