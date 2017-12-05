@@ -85,6 +85,24 @@ char *cosix::handle_request(reverse_request_t *request, char *buf, reverse_respo
 			response->result = 0;
 			break;
 		}
+		case op::stat_fput: {
+			if(request->send_length != sizeof(cloudabi_filestat_t)) {
+				throw cloudabi_system_error(EIO);
+			}
+			h->stat_fput(request->pseudofd, reinterpret_cast<const cloudabi_filestat_t*>(buf), request->inode);
+			response->result = 0;
+			break;
+		}
+		case op::stat_put: {
+			if(request->send_length < sizeof(cloudabi_filestat_t)) {
+				throw cloudabi_system_error(EIO);
+			}
+			auto *path = reinterpret_cast<const char*>(buf + sizeof(cloudabi_filestat_t));
+			size_t pathlen = request->send_length - sizeof(cloudabi_filestat_t);
+			h->stat_put(request->pseudofd, request->flags, path, pathlen, reinterpret_cast<const cloudabi_filestat_t*>(buf), request->inode);
+			response->result = 0;
+			break;
+		}
 		case op::sock_recv: {
 			res = reinterpret_cast<char*>(malloc(request->recv_length));
 			response->send_length = h->sock_recv(request->pseudofd, res, request->recv_length);
@@ -157,7 +175,6 @@ char *cosix::handle_request(reverse_request_t *request, char *buf, reverse_respo
 			break;
 		}
 		case op::sock_shutdown:
-		case op::stat_put:
 		default:
 			response->result = -ENOSYS;
 		}

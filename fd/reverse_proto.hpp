@@ -10,9 +10,10 @@ struct reverse_request_t {
 		lookup /* path in buffer -> inode */,
 		stat_get,
 		stat_fget,
+		stat_put, // fsflags in inode, lookupflags in flags, buffer is filestat_t* + path
+		stat_fput, // fsflags in inode, buffer is filestat_t*
 		is_readable,
 		// all the calls below use the inode, not the path
-		stat_put,
 		open,
 		create,
 		allocate, // length in flags

@@ -199,6 +199,28 @@ struct fd_t {
 		error = 0;
 	}
 
+	/** Set attributes of a file by path.
+	 */
+	virtual void file_stat_put(cloudabi_lookupflags_t lookupflags, const char *path, size_t pathlen, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags)
+	{
+		// If file_stat_put is unimplemented, use openat() + file_stat_fput
+		cloudabi_fdstat_t stat;
+		auto fd = openat(path, pathlen, lookupflags, 0, &stat);
+		if(error) {
+			return;
+		}
+		fd->file_stat_fput(buf, fsflags);
+		if(fd->error) {
+			error = fd->error;
+		}
+	}
+
+	/** Set attributes of the open file.
+	 */
+	virtual void file_stat_fput(const cloudabi_filestat_t*, cloudabi_fsflags_t) {
+		error = EINVAL;
+	}
+
 	/* For sockets */
 	virtual void sock_shutdown(cloudabi_sdflags_t /*how*/)
 	{

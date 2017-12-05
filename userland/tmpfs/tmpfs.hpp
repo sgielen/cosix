@@ -50,6 +50,8 @@ struct tmpfs : public cosix::reverse_handler {
 	size_t readdir(pseudofd_t pseudo, char *buffer, size_t buflen, cloudabi_dircookie_t &cookie) override;
 	void stat_get(pseudofd_t pseudo, cloudabi_lookupflags_t flags, char *path, size_t len, cloudabi_filestat_t *statbuf) override;
 	void stat_fget(pseudofd_t pseudo, cloudabi_filestat_t *statbuf) override;
+	void stat_fput(pseudofd_t pseudo, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags) override;
+	void stat_put(pseudofd_t pseudo, cloudabi_lookupflags_t lookupflags, const char *path, size_t pathlen, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags) override;
 
 private:
 	std::map<cloudabi_inode_t, file_entry_ptr> inodes;

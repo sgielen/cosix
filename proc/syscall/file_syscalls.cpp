@@ -224,9 +224,40 @@ cloudabi_errno_t cloudos::syscall_file_stat_fget(syscall_context &c)
 	return mapping->fd->error;
 }
 
-cloudabi_errno_t cloudos::syscall_file_stat_fput(syscall_context &)
+cloudabi_errno_t cloudos::syscall_file_stat_fput(syscall_context &c)
 {
-	return ENOSYS;
+	auto args = arguments_t<cloudabi_fd_t, const cloudabi_filestat_t*, cloudabi_fsflags_t>(c);
+	auto fdnum = args.first();
+	auto statbuf = args.second();
+	auto flags = args.third();
+
+	cloudabi_fsflags_t flags_counted = 0;
+	cloudabi_rights_t rights_needed = 0;
+
+	if(flags & CLOUDABI_FILESTAT_ATIM || flags & CLOUDABI_FILESTAT_ATIM_NOW
+	|| flags & CLOUDABI_FILESTAT_MTIM || flags & CLOUDABI_FILESTAT_MTIM_NOW) {
+		flags_counted |= flags & (CLOUDABI_FILESTAT_ATIM | CLOUDABI_FILESTAT_ATIM_NOW | CLOUDABI_FILESTAT_MTIM | CLOUDABI_FILESTAT_MTIM_NOW);
+		rights_needed |= CLOUDABI_RIGHT_FILE_STAT_FPUT_TIMES;
+	}
+
+	if(flags & CLOUDABI_FILESTAT_SIZE) {
+		flags_counted |= CLOUDABI_FILESTAT_SIZE;
+		rights_needed |= CLOUDABI_RIGHT_FILE_STAT_FPUT_SIZE;
+	}
+
+	if(flags != flags_counted) {
+		// unknown flags given
+		return EINVAL;
+	}
+
+	fd_mapping_t *mapping;
+	auto res = c.process()->get_fd(&mapping, fdnum, rights_needed);
+	if(res != 0) {
+		return res;
+	}
+
+	mapping->fd->file_stat_fput(statbuf, flags);
+	return mapping->fd->error;
 }
 
 cloudabi_errno_t cloudos::syscall_file_stat_get(syscall_context &c)
@@ -251,9 +282,43 @@ cloudabi_errno_t cloudos::syscall_file_stat_get(syscall_context &c)
 	return mapping->fd->error;
 }
 
-cloudabi_errno_t cloudos::syscall_file_stat_put(syscall_context &)
+cloudabi_errno_t cloudos::syscall_file_stat_put(syscall_context &c)
 {
-	return ENOSYS;
+	auto args = arguments_t<cloudabi_lookup_t, const char*, size_t, const cloudabi_filestat_t*, cloudabi_fsflags_t>(c);
+	auto dirfd = args.first();
+	auto path = args.second();
+	auto pathlen = args.third();
+	auto statbuf = args.fourth();
+	auto flags = args.fifth();
+
+	cloudabi_fsflags_t flags_counted = 0;
+	cloudabi_rights_t rights_needed = 0;
+
+	if(flags & CLOUDABI_FILESTAT_ATIM || flags & CLOUDABI_FILESTAT_ATIM_NOW
+	|| flags & CLOUDABI_FILESTAT_MTIM || flags & CLOUDABI_FILESTAT_MTIM_NOW) {
+		flags_counted |= flags & (CLOUDABI_FILESTAT_ATIM | CLOUDABI_FILESTAT_ATIM_NOW | CLOUDABI_FILESTAT_MTIM | CLOUDABI_FILESTAT_MTIM_NOW);
+		rights_needed |= CLOUDABI_RIGHT_FILE_STAT_FPUT_TIMES;
+	}
+
+	if(flags & CLOUDABI_FILESTAT_SIZE) {
+		flags_counted |= CLOUDABI_FILESTAT_SIZE;
+		rights_needed |= CLOUDABI_RIGHT_FILE_STAT_FPUT_SIZE;
+	}
+
+	if(flags != flags_counted) {
+		// unknown flags given
+		return EINVAL;
+	}
+
+	int fdnum = dirfd.fd;
+	fd_mapping_t *mapping;
+	auto res = c.process()->get_fd(&mapping, fdnum, rights_needed);
+	if(res != 0) {
+		return res;
+	}
+
+	mapping->fd->file_stat_put(dirfd.flags, path, pathlen, statbuf, flags);
+	return mapping->fd->error;
 }
 
 cloudabi_errno_t cloudos::syscall_file_symlink(syscall_context &c)

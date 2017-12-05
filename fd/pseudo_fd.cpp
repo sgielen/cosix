@@ -471,6 +471,60 @@ void pseudo_fd::file_stat_fget(cloudabi_filestat_t *buf)
 	}
 }
 
+void pseudo_fd::file_stat_put(cloudabi_lookupflags_t lookupflags, const char *path, size_t pathlen, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags)
+{
+	auto res = lookup_device_id();
+	if(res != 0) {
+		error = res;
+		return;
+	}
+
+	Blk buffer = allocate(sizeof(*buf) + pathlen);
+	char *bufstr = reinterpret_cast<char*>(buffer.ptr);
+	memcpy(bufstr, buf, sizeof(*buf));
+	memcpy(bufstr + sizeof(*buf), path, pathlen);
+
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::stat_put;
+	request.inode = fsflags;
+	request.flags = lookupflags;
+	request.send_length = buffer.size;
+
+	reverse_response_t response;
+	maybe_deallocate(send_request(&request, bufstr, &response));
+	deallocate(buffer);
+	if(response.result < 0) {
+		error = -response.result;
+	} else {
+		error = 0;
+	}
+}
+
+void pseudo_fd::file_stat_fput(const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags)
+{
+	auto res = lookup_device_id();
+	if(res != 0) {
+		error = res;
+		return;
+	}
+
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::stat_fput;
+	request.inode = fsflags;
+	request.flags = 0;
+	request.send_length = sizeof(*buf);
+
+	reverse_response_t response;
+	maybe_deallocate(send_request(&request, reinterpret_cast<const char*>(buf), &response));
+	if(response.result < 0) {
+		error = -response.result;
+	} else {
+		error = 0;
+	}
+}
+
 void pseudo_fd::file_allocate(cloudabi_filesize_t offset, cloudabi_filesize_t length)
 {
 	reverse_request_t request;

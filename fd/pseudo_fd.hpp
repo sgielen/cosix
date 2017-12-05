@@ -45,6 +45,8 @@ struct pseudo_fd : public seekable_fd_t, public enable_shared_from_this<pseudo_f
 	void file_unlink(const char *path, size_t pathlen, cloudabi_ulflags_t flags) override;
 	void file_stat_get(cloudabi_lookupflags_t flags, const char *path, size_t pathlen, cloudabi_filestat_t *buf) override;
 	void file_stat_fget(cloudabi_filestat_t *buf) override;
+	void file_stat_put(cloudabi_lookupflags_t lookupflags, const char *path, size_t pathlen, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags) override;
+	void file_stat_fput(const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags) override;
 
 	/* For sockets */
 	void sock_shutdown(cloudabi_sdflags_t how) override;

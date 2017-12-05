@@ -80,6 +80,8 @@ struct reverse_handler {
 	virtual size_t sock_recv(pseudofd_t pseudo, char *dest, size_t requested);
 	virtual void sock_send(pseudofd_t pseudo, const char *buf, size_t length);
 	virtual void stat_fget(pseudofd_t pseudo, cloudabi_filestat_t *statbuf);
+	virtual void stat_fput(pseudofd_t pseudo, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags);
+	virtual void stat_put(pseudofd_t pseudo, cloudabi_lookupflags_t lookupflags, const char *path, size_t pathlen, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags);
 
 	cloudabi_device_t device;
 };

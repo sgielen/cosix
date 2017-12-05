@@ -414,6 +414,50 @@ void tmpfs::stat_fget(pseudofd_t pseudo, cloudabi_filestat_t *buf) {
 	file_entry_to_filestat(entry, buf);
 }
 
+static void update_file_entry_stat(file_entry_ptr entry, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags) {
+	auto ts = timestamp();
+	entry->metadata_time = ts;
+
+	if(fsflags & CLOUDABI_FILESTAT_SIZE) {
+		if(entry->type != CLOUDABI_FILETYPE_REGULAR_FILE) {
+			throw cloudabi_system_error(EINVAL);
+		}
+
+		entry->contents.resize(buf->st_size);
+		entry->content_time = ts;
+	}
+
+	if(fsflags & CLOUDABI_FILESTAT_ATIM) {
+		entry->access_time = buf->st_atim;
+	}
+	if(fsflags & CLOUDABI_FILESTAT_ATIM_NOW) {
+		entry->access_time = ts;
+	}
+
+	if(fsflags & CLOUDABI_FILESTAT_MTIM) {
+		entry->content_time = buf->st_mtim;
+	}
+	if(fsflags & CLOUDABI_FILESTAT_MTIM_NOW) {
+		entry->content_time = ts;
+	}
+}
+
+void tmpfs::stat_fput(pseudofd_t pseudo, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags) {
+	file_entry_ptr entry = get_file_entry_from_pseudo(pseudo);
+	update_file_entry_stat(entry, buf, fsflags);
+}
+
+void tmpfs::stat_put(pseudofd_t pseudo, cloudabi_lookupflags_t lookupflags, const char *path, size_t pathlen, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags) {
+	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
+	std::string filename = normalize_path(directory, path, pathlen, lookupflags);
+	auto it = directory->files.find(filename);
+	if(it == directory->files.end()) {
+		throw cloudabi_system_error(ENOENT);
+	}
+
+	update_file_entry_stat(it->second, buf, fsflags);
+}
+
 /** Normalizes the given path. When it returns normally, directory
  * points at the innermost directory pointed to by path. It returns the
  * filename that is to be opened, created or unlinked.
