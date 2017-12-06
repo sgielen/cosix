@@ -177,14 +177,19 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 
 	if(recv_messages == nullptr) {
 		auto other = othersock.lock();
-		if(!other) {
-			// othersock is already destroyed
+		if(!other || other->status == sockstatus_t::SHUTDOWN) {
+			// there are no messages and othersock is already destroyed or shut down, so signal EOF
 			error = 0;
 			return;
 		}
 		assert(other->othersock.lock().get() == this);
 
 		assert(other->status == sockstatus_t::CONNECTED || other->status == sockstatus_t::SHUTDOWN);
+
+		if(flags & CLOUDABI_FDFLAG_NONBLOCK) {
+			error = EAGAIN;
+			return;
+		}
 
 		// wait until there is at least one more message
 		while(other && other->status == sockstatus_t::CONNECTED && recv_messages == nullptr) {

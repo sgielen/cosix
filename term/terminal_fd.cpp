@@ -22,7 +22,8 @@ terminal_fd::~terminal_fd()
 
 size_t terminal_fd::read(void *dest, size_t count)
 {
-	error = term->read_keystrokes(reinterpret_cast<char*>(dest), &count);
+	bool nonblock = flags & CLOUDABI_FDFLAG_NONBLOCK;
+	error = term->read_keystrokes(reinterpret_cast<char*>(dest), &count, !nonblock);
 	return error == 0 ? count : 0;
 }
 

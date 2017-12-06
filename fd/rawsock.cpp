@@ -41,6 +41,11 @@ void rawsock::sock_shutdown(cloudabi_sdflags_t how)
 
 void rawsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 {
+	if(messages == nullptr && (flags & CLOUDABI_FDFLAG_NONBLOCK)) {
+		error = EAGAIN;
+		return;
+	}
+
 	while(messages == nullptr) {
 		read_cv.wait();
 	}

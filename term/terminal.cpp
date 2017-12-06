@@ -98,7 +98,11 @@ cloudabi_errno_t terminal_impl::write_keystrokes(const char *data, size_t length
 	return 0;
 }
 
-cloudabi_errno_t terminal_impl::read_keystrokes(char *data, size_t *length) {
+cloudabi_errno_t terminal_impl::read_keystrokes(char *data, size_t *length, bool blocking) {
+	if(keystroke_buffer_used == 0 && !blocking) {
+		return EAGAIN;
+	}
+
 	while(keystroke_buffer_used == 0) {
 		read_cv.wait();
 	}

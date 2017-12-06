@@ -32,6 +32,11 @@ void ifstoresock::sock_shutdown(cloudabi_sdflags_t how)
 
 void ifstoresock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 {
+	if(!has_message && (flags & CLOUDABI_FDFLAG_NONBLOCK)) {
+		error = EAGAIN;
+		return;
+	}
+
 	while(!has_message) {
 		read_cv.wait();
 	}
@@ -93,6 +98,11 @@ void ifstoresock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *o
 		return;
 	}
 	assert(status == sockstatus_t::CONNECTED);
+
+	if(has_message && (flags & CLOUDABI_FDFLAG_NONBLOCK)) {
+		error = EAGAIN;
+		return;
+	}
 
 	while(has_message) {
 		write_cv.wait();

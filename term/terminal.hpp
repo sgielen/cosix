@@ -26,8 +26,8 @@ struct terminal {
 	virtual const char *get_name() = 0;
 	virtual cloudabi_errno_t write_output(const char *data, size_t length) = 0;
 	virtual cloudabi_errno_t write_keystrokes(const char *data, size_t length) = 0;
-	// Blocks until there is at least one keystroke
-	virtual cloudabi_errno_t read_keystrokes(char *data, size_t *length) = 0;
+	// Read at least one keystroke, blocking if enabled and necessary
+	virtual cloudabi_errno_t read_keystrokes(char *data, size_t *length, bool blocking) = 0;
 };
 
 /**
@@ -39,7 +39,7 @@ struct terminal_impl : public terminal {
 	const char *get_name() final override;
 	cloudabi_errno_t write_output(const char *data, size_t length) final override;
 	cloudabi_errno_t write_keystrokes(const char *data, size_t length) override;
-	cloudabi_errno_t read_keystrokes(char *data, size_t *length) override;
+	cloudabi_errno_t read_keystrokes(char *data, size_t *length, bool blocking) override;
 
 protected:
 	// Inside write_output_token, do not call write_keystrokes or write_output as the
