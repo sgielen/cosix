@@ -25,7 +25,7 @@ static bool process_already_terminated(void *userdata, thread_condition*) {
 }
 
 process_fd::process_fd(const char *n)
-: fd_t(CLOUDABI_FILETYPE_PROCESS, n)
+: fd_t(CLOUDABI_FILETYPE_PROCESS, 0, n)
 {
 	Blk page_directory_alloc = allocate_aligned(PAGE_SIZE, PAGE_SIZE);
 	if(page_directory_alloc.ptr == nullptr) {
@@ -145,6 +145,7 @@ void process_fd::add_initial_fds() {
 		CLOUDABI_RIGHT_FILE_STAT_GET,
 		// inherited rights
 		CLOUDABI_RIGHT_FD_READ |
+		CLOUDABI_RIGHT_FD_SEEK |
 		CLOUDABI_RIGHT_FD_WRITE
 	);
 }

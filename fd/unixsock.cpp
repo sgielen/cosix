@@ -13,8 +13,8 @@ static bool unixsock_is_writeable(void *r, thread_condition*) {
 	return unixsock->is_writeable();
 }
 
-unixsock::unixsock(cloudabi_filetype_t sockettype, const char *n)
-: sock_t(sockettype, n)
+unixsock::unixsock(cloudabi_filetype_t sockettype, cloudabi_fdflags_t flags, const char *n)
+: sock_t(sockettype, flags, n)
 {
 	recv_signaler.set_already_satisfied_function(unixsock_is_readable, this);
 	send_signaler.set_already_satisfied_function(unixsock_is_writeable, this);

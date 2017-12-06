@@ -14,7 +14,7 @@ struct pseudo_fd;
 typedef linked_list<weak_ptr<pseudo_fd>> pseudo_list;
 
 struct reversefd_t : public unixsock {
-	reversefd_t(cloudabi_filetype_t sockettype, const char *n);
+	reversefd_t(cloudabi_filetype_t sockettype, cloudabi_fdflags_t f, const char *n);
 	~reversefd_t() override;
 
 	void subscribe_fd_read_events(shared_ptr<pseudo_fd> fd);

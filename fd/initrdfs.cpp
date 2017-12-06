@@ -13,7 +13,7 @@ static const int INITRDFS_PATH_MAX = 100; /* longer paths can't exist in a tar f
 
 struct initrdfs_directory_fd : fd_t {
 	initrdfs_directory_fd(uint8_t *st, size_t sz, const char *s, cloudabi_inode_t i, const char *n)
-	: fd_t(CLOUDABI_FILETYPE_DIRECTORY, n)
+	: fd_t(CLOUDABI_FILETYPE_DIRECTORY, 0, n)
 	, initrd_start(st)
 	, initrd_size(sz)
 	, inode(i)

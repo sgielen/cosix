@@ -42,7 +42,7 @@ inline vga_stream &operator<<(vga_stream &s, cloudabi_filetype_t type) {
 
 struct fd_t {
 	cloudabi_filetype_t type;
-	cloudabi_fdflags_t flags = 0;
+	cloudabi_fdflags_t flags;
 
 	/* If this device represents a filesystem, this number must
 	 * be positive and unique for this filesystem
@@ -240,7 +240,7 @@ struct fd_t {
 	virtual ~fd_t() {}
 
 protected:
-	inline fd_t(cloudabi_filetype_t t, const char *n) : type(t) {
+	inline fd_t(cloudabi_filetype_t t, cloudabi_fdflags_t f, const char *n) : type(t), flags(f) {
 		strncpy(name, n, sizeof(name));
 		name[sizeof(name)-1] = 0;
 	}
@@ -322,7 +322,7 @@ struct seekable_fd_t : public fd_t {
 	}
 
 protected:
-	inline seekable_fd_t(cloudabi_filetype_t t, const char *n) : fd_t(t, n), pos(0) {
+	inline seekable_fd_t(cloudabi_filetype_t t, cloudabi_fdflags_t f, const char *n) : fd_t(t, f, n), pos(0) {
 	}
 };
 

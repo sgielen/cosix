@@ -10,7 +10,7 @@ namespace cloudos {
 
 struct bootfs_directory_fd : fd_t {
 	bootfs_directory_fd(const char *n)
-	: fd_t(CLOUDABI_FILETYPE_DIRECTORY, n) {}
+	: fd_t(CLOUDABI_FILETYPE_DIRECTORY, 0, n) {}
 
 	shared_ptr<fd_t> openat(const char * /*path */, size_t /*pathlen*/, cloudabi_lookupflags_t /*lookupflags*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) override;
 };

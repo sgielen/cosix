@@ -20,23 +20,11 @@ cloudabi_errno_t cloudos::syscall_fd_create1(syscall_context &c)
 	auto args = arguments_t<cloudabi_filetype_t, cloudabi_fd_t*>(c);
 	auto type = args.first();
 
-	if(type == CLOUDABI_FILETYPE_SOCKET_DGRAM
-	|| type == CLOUDABI_FILETYPE_SOCKET_STREAM)
-	{
-		auto fd = make_shared<unixsock>(type, "unixsock");
-
-		auto sock_rights = CLOUDABI_RIGHT_FD_READ
-				| CLOUDABI_RIGHT_FD_STAT_PUT_FLAGS
-				| CLOUDABI_RIGHT_FD_WRITE
-				| CLOUDABI_RIGHT_FILE_STAT_FGET
-				| CLOUDABI_RIGHT_POLL_FD_READWRITE
-				| CLOUDABI_RIGHT_SOCK_SHUTDOWN;
-		cloudabi_rights_t sock_inheriting = all_rights;
-		auto fdnum = c.process()->add_fd(fd, sock_rights, sock_inheriting);
-		c.result = fdnum;
-		return 0;
+	if(type == CLOUDABI_FILETYPE_SHARED_MEMORY) {
+		return ENOSYS;
+	} else {
+		return EINVAL;
 	}
-	return ENOSYS;
 }
 
 cloudabi_errno_t cloudos::syscall_fd_create2(syscall_context &c)
@@ -47,8 +35,8 @@ cloudabi_errno_t cloudos::syscall_fd_create2(syscall_context &c)
 	if(type == CLOUDABI_FILETYPE_SOCKET_DGRAM
 	|| type == CLOUDABI_FILETYPE_SOCKET_STREAM)
 	{
-		auto a = make_shared<unixsock>(type, "socketpair A");
-		auto b = make_shared<unixsock>(type, "socketpair B");
+		auto a = make_shared<unixsock>(type, 0, "socketpair A");
+		auto b = make_shared<unixsock>(type, 0, "socketpair B");
 		a->socketpair(b);
 		assert(a->error == 0);
 		assert(b->error == 0);
@@ -66,7 +54,7 @@ cloudabi_errno_t cloudos::syscall_fd_create2(syscall_context &c)
 		c.set_results(afd, bfd);
 		return 0;
 	} else {
-		return ENOSYS;
+		return EINVAL;
 	}
 }
 
@@ -256,14 +244,23 @@ cloudabi_errno_t cloudos::syscall_fd_stat_put(syscall_context &c)
 {
 	auto args = arguments_t<cloudabi_fd_t, const cloudabi_fdstat_t*, cloudabi_fdsflags_t>(c);
 	auto fdnum = args.first();
+	auto stat = args.second();
+	auto flags = args.third();
+
+	if((flags & ~(CLOUDABI_FDSTAT_FLAGS | CLOUDABI_FDSTAT_RIGHTS)) != 0) {
+		return EINVAL;
+	}
+
+	cloudabi_rights_t rights_needed = 0;
+	if(flags & CLOUDABI_FDSTAT_FLAGS) {
+		rights_needed |= CLOUDABI_RIGHT_FD_STAT_PUT_FLAGS;
+	}
+
 	fd_mapping_t *mapping;
-	auto res = c.process()->get_fd(&mapping, fdnum, 0);
+	auto res = c.process()->get_fd(&mapping, fdnum, rights_needed);
 	if(res != 0) {
 		return res;
 	}
-
-	auto stat = args.second();
-	auto flags = args.third();
 
 	if(flags & CLOUDABI_FDSTAT_FLAGS) {
 		mapping->fd->flags = stat->fs_flags;

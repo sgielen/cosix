@@ -8,7 +8,7 @@
 namespace cloudos {
 
 struct rawsock : public sock_t, public enable_shared_from_this<rawsock> {
-	rawsock(interface *iface, const char *n);
+	rawsock(interface *iface, cloudabi_fdflags_t f, const char *n);
 	~rawsock() override;
 
 	void init();

@@ -31,7 +31,7 @@ struct procfs_uptime_fd : public memory_fd {
 };
 
 struct procfs_alloctrack_fd : public fd_t {
-	procfs_alloctrack_fd(const char *n) : fd_t(CLOUDABI_FILETYPE_REGULAR_FILE, n) {}
+	procfs_alloctrack_fd(const char *n) : fd_t(CLOUDABI_FILETYPE_REGULAR_FILE, 0, n) {}
 
 	size_t write(const char *buf, size_t count) override;
 };
@@ -39,7 +39,7 @@ struct procfs_alloctrack_fd : public fd_t {
 }
 
 procfs_directory_fd::procfs_directory_fd(const char (*p)[PROCFS_FILE_MAX], const char *n)
-: fd_t(CLOUDABI_FILETYPE_DIRECTORY, n)
+: fd_t(CLOUDABI_FILETYPE_DIRECTORY, 0, n)
 {
 	for(depth = 0; depth < PROCFS_DEPTH_MAX; ++depth) {
 		if(p[depth] && p[depth][0]) {

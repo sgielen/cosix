@@ -12,7 +12,7 @@
 using namespace cloudos;
 
 ifstoresock::ifstoresock(const char *n)
-: sock_t(CLOUDABI_FILETYPE_SOCKET_DGRAM, n)
+: sock_t(CLOUDABI_FILETYPE_SOCKET_DGRAM, 0, n)
 {
 	status = sockstatus_t::CONNECTED;
 }
@@ -135,8 +135,8 @@ void ifstoresock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *o
 		goto send;
 	} else if(strcmp(command, "PSEUDOPAIR") == 0) {
 		// Request a reverse/pseudo socketpair
-		auto my_reverse = make_shared<reversefd_t>(CLOUDABI_FILETYPE_SOCKET_STREAM, "reversefd_t");
-		auto their_reverse = make_shared<unixsock>(CLOUDABI_FILETYPE_SOCKET_STREAM, "reverse_unixsock");
+		auto my_reverse = make_shared<reversefd_t>(CLOUDABI_FILETYPE_SOCKET_STREAM, 0, "reversefd_t");
+		auto their_reverse = make_shared<unixsock>(CLOUDABI_FILETYPE_SOCKET_STREAM, 0, "reverse_unixsock");
 		my_reverse->socketpair(their_reverse);
 		assert(my_reverse->error == 0);
 		assert(their_reverse->error == 0);
@@ -151,7 +151,7 @@ void ifstoresock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *o
 			goto send;
 		}
 
-		auto pseudo = make_shared<pseudo_fd>(0, my_reverse, filetype, "pseudo");
+		auto pseudo = make_shared<pseudo_fd>(0, my_reverse, filetype, 0, "pseudo");
 		int pseudo_fd = process->add_fd(pseudo, all_rights, all_rights);
 
 		fd_mapping_t *fd_mapping;
@@ -237,7 +237,7 @@ void ifstoresock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *o
 		goto send;
 	} else if(strcmp(command, "RAWSOCK") == 0) {
 		auto process = get_scheduler()->get_running_thread()->get_process();
-		auto sock = make_shared<rawsock>(iface, "rawsock to ");
+		auto sock = make_shared<rawsock>(iface, 0, "rawsock to ");
 		strlcat(sock->name, iface->get_name(), sizeof(sock->name));
 		auto rawsockfd = process->add_fd(sock, -1, -1);
 		sock->init();

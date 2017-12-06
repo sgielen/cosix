@@ -3,8 +3,8 @@
 
 using namespace cloudos;
 
-reversefd_t::reversefd_t(cloudabi_filetype_t type, const char *name)
-: unixsock(type, name)
+reversefd_t::reversefd_t(cloudabi_filetype_t type, cloudabi_fdflags_t flags, const char *name)
+: unixsock(type, flags, name)
 {
 }
 

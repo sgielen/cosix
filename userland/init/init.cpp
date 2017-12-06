@@ -468,7 +468,7 @@ void program_main(const argdata_t *) {
 	start_networked_binary("httpd", 80, false);
 	start_networked_binary("telnetd", 26, false);
 
-	int consolefd = openat(termstore, "console", O_RDWR | O_APPEND);
+	int consolefd = openat(termstore, "console", O_RDWR);
 	if(consolefd < 0) {
 		dprintf(stdout, "Failed to open consolefd: %s\n", strerror(errno));
 		exit(1);

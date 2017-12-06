@@ -6,8 +6,8 @@
 namespace cloudos {
 
 struct terminal_fd : public fd_t {
-	terminal_fd(shared_ptr<terminal>);
-	terminal_fd(shared_ptr<terminal>, const char *n);
+	terminal_fd(shared_ptr<terminal>, cloudabi_fdflags_t f);
+	terminal_fd(shared_ptr<terminal>, cloudabi_fdflags_t f, const char *n);
 
 	~terminal_fd() override;
 

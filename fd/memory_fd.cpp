@@ -3,7 +3,7 @@
 using namespace cloudos;
 
 memory_fd::memory_fd(const char *n, cloudabi_inode_t i)
-: seekable_fd_t(CLOUDABI_FILETYPE_REGULAR_FILE, n)
+: seekable_fd_t(CLOUDABI_FILETYPE_REGULAR_FILE, 0, n)
 , alloc({nullptr, 0})
 , file_length(0)
 , inode(i)

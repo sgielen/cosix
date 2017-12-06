@@ -2,13 +2,13 @@
 
 using namespace cloudos;
 
-terminal_fd::terminal_fd(shared_ptr<terminal> t)
-: terminal_fd(t, nullptr)
+terminal_fd::terminal_fd(shared_ptr<terminal> t, cloudabi_fdflags_t flags)
+: terminal_fd(t, flags, nullptr)
 {
 }
 
-terminal_fd::terminal_fd(shared_ptr<terminal> t, const char *n)
-: fd_t(CLOUDABI_FILETYPE_CHARACTER_DEVICE, n ? n : "")
+terminal_fd::terminal_fd(shared_ptr<terminal> t, cloudabi_fdflags_t f, const char *n)
+: fd_t(CLOUDABI_FILETYPE_CHARACTER_DEVICE, f, n ? n : "")
 , term(t)
 {
 	if(n == nullptr) {

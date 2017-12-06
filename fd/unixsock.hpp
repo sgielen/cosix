@@ -19,7 +19,7 @@ struct unixsock_message {
 };
 
 struct unixsock : public sock_t, public enable_shared_from_this<unixsock> {
-	unixsock(cloudabi_filetype_t sockettype, const char *n);
+	unixsock(cloudabi_filetype_t sockettype, cloudabi_fdflags_t flags, const char *n);
 	~unixsock() override;
 
 	size_t bytes_readable() const;

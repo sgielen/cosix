@@ -9,10 +9,10 @@ using namespace cloudos;
 
 struct termfs_directory_fd : fd_t, enable_shared_from_this<termfs_directory_fd> {
 	termfs_directory_fd(const char *n)
-	: fd_t(CLOUDABI_FILETYPE_DIRECTORY, n)
+	: fd_t(CLOUDABI_FILETYPE_DIRECTORY, 0, n)
 	{}
 
-	shared_ptr<fd_t> openat(const char *path, size_t pathlen, cloudabi_lookupflags_t, cloudabi_oflags_t, const cloudabi_fdstat_t *) override
+	shared_ptr<fd_t> openat(const char *path, size_t pathlen, cloudabi_lookupflags_t, cloudabi_oflags_t, const cloudabi_fdstat_t *stat) override
 	{
 		if(pathlen == 0 || (pathlen == 1 && path[0] == '.')) {
 			error = 0;
@@ -32,7 +32,7 @@ struct termfs_directory_fd : fd_t, enable_shared_from_this<termfs_directory_fd> 
 			error = ENOENT;
 			return nullptr;
 		}
-		auto fd = make_shared<terminal_fd>(term);
+		auto fd = make_shared<terminal_fd>(term, stat->fs_flags);
 		error = 0;
 		return fd;
 	}

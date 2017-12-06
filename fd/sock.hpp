@@ -6,7 +6,7 @@
 namespace cloudos {
 
 struct sock_t : public fd_t {
-	sock_t(cloudabi_filetype_t sockettype, const char *n);
+	sock_t(cloudabi_filetype_t sockettype, cloudabi_fdflags_t flags, const char *n);
 
 	enum sockstatus_t {
 		// If this socket is in SHUTDOWN, it cannot send() anymore, but

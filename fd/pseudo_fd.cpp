@@ -14,8 +14,8 @@ static bool pseudofd_is_readable(void *r, thread_condition*) {
 	return fd->is_readable();
 }
 
-pseudo_fd::pseudo_fd(pseudofd_t id, shared_ptr<reversefd_t> r, cloudabi_filetype_t t, const char *n)
-: seekable_fd_t(t, n)
+pseudo_fd::pseudo_fd(pseudofd_t id, shared_ptr<reversefd_t> r, cloudabi_filetype_t t, cloudabi_fdflags_t f, const char *n)
+: seekable_fd_t(t, f, n)
 , pseudo_id(id)
 , reverse_fd(r)
 {
@@ -192,7 +192,7 @@ shared_ptr<fd_t> pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_lo
 	if(copy > pathlen) copy = pathlen;
 	strncat(new_name, path, copy);
 
-	auto new_fd = make_shared<pseudo_fd>(new_pseudo_id, reverse_fd, filetype, new_name);
+	auto new_fd = make_shared<pseudo_fd>(new_pseudo_id, reverse_fd, filetype, fdstat->fs_flags, new_name);
 	// TODO: check if the rights are actually obtainable before opening the file;
 	// ignore those that don't apply to this filetype, return ENOTCAPABLE if not
 	new_fd->flags = fdstat->fs_flags;

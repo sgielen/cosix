@@ -2,8 +2,8 @@
 
 using namespace cloudos;
 
-sock_t::sock_t(cloudabi_filetype_t sockettype, const char *n)
-: fd_t(sockettype, n)
+sock_t::sock_t(cloudabi_filetype_t sockettype, cloudabi_fdflags_t flags, const char *n)
+: fd_t(sockettype, flags, n)
 {
 	assert(sockettype == CLOUDABI_FILETYPE_SOCKET_DGRAM
 	    || sockettype == CLOUDABI_FILETYPE_SOCKET_STREAM);

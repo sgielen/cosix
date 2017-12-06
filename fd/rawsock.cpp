@@ -8,8 +8,8 @@ static bool rawsock_is_readable(void *r, thread_condition*) {
 	return rawsock->has_messages();
 }
 
-rawsock::rawsock(interface *i, const char *n)
-: sock_t(CLOUDABI_FILETYPE_SOCKET_DGRAM, n)
+rawsock::rawsock(interface *i, cloudabi_fdflags_t f, const char *n)
+: sock_t(CLOUDABI_FILETYPE_SOCKET_DGRAM, f, n)
 , iface(i)
 {
 	status = sockstatus_t::CONNECTED;
