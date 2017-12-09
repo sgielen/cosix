@@ -98,6 +98,8 @@ struct process_fd : public fd_t {
 	cloudabi_errno_t add_mem_mapping(mem_mapping_t *mapping, bool overwrite = false);
 	// Unmap the given address range
 	void mem_unmap(void *addr, size_t num_pages);
+	// Change protection on the given address range
+	void mem_protect(void *addr, size_t num_pages, cloudabi_mprot_t prot);
 
 	// Find a piece of the address space that's free to be mapped.
 	void *find_free_virtual_range(size_t num_pages);

@@ -78,10 +78,30 @@ bool mem_mapping_t::covers(void *addr, size_t len)
 	return his_start >= my_start && his_end >= my_start && his_start < my_end && his_end <= my_end;
 }
 
+static uint32_t prot_to_bits(cloudabi_mprot_t p) {
+	const int USER_ACCESSIBLE = 4;
+	const int WRITABLE = 2;
+	// TODO: there is no NX bit in x86 unless we use PAE
+
+	assert((p & ~(CLOUDABI_PROT_EXEC | CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE)) == 0);
+	uint32_t bits = p == 0 ? 0 : USER_ACCESSIBLE;
+	if(p & CLOUDABI_PROT_WRITE) {
+		bits |= WRITABLE;
+	}
+	return bits;
+}
+
 void mem_mapping_t::set_protection(cloudabi_mprot_t p)
 {
 	protection = p;
-	// TODO: set all backed page table entries to these bits
+
+	auto bits = prot_to_bits(protection);
+	for(size_t page = 0; page < number_of_pages; ++page) {
+		auto *page_entry = get_page_entry(page);
+		if(page_entry && (*page_entry & 0x1)) {
+			*page_entry = (*page_entry & 0xfffffff9) | bits;
+		}
+	}
 }
 
 uint32_t *mem_mapping_t::get_page_entry(size_t page)
@@ -133,7 +153,9 @@ void mem_mapping_t::ensure_backed(size_t page)
 
 		// Re-map to userland
 		void *phys = get_map_virtual()->to_physical_address(b.ptr);
-		*page_entry = reinterpret_cast<uint32_t>(phys) | 0x07; // TODO: use the correct permission bits
+		auto bits = prot_to_bits(protection);
+		*page_entry = reinterpret_cast<uint32_t>(phys) | bits | 0x01;
+
 		get_map_virtual()->unmap_page_only(b.ptr);
 	}
 }

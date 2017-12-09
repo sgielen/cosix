@@ -90,9 +90,24 @@ cloudabi_errno_t cloudos::syscall_mem_map(syscall_context &c)
 	return 0;
 }
 
-cloudabi_errno_t cloudos::syscall_mem_protect(syscall_context &)
+cloudabi_errno_t cloudos::syscall_mem_protect(syscall_context &c)
 {
-	return ENOSYS;
+	auto args = arguments_t<void*, size_t, cloudabi_mprot_t>(c);
+	auto addr = args.first();
+	auto len = args.second();
+	auto prot = args.third();
+
+	if((prot & CLOUDABI_PROT_EXEC) && (prot & CLOUDABI_PROT_WRITE)) {
+		// CloudABI enforces W xor X
+		return ENOTSUP;
+	}
+	if(prot & ~(CLOUDABI_PROT_EXEC | CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE)) {
+		// invalid protection bits
+		return ENOTSUP;
+	}
+
+	c.process()->mem_protect(addr, len_to_pages(len), prot);
+	return 0;
 }
 
 cloudabi_errno_t cloudos::syscall_mem_sync(syscall_context &)
@@ -107,7 +122,6 @@ cloudabi_errno_t cloudos::syscall_mem_unlock(syscall_context &)
 
 cloudabi_errno_t cloudos::syscall_mem_unmap(syscall_context &c)
 {
-	// find mapping, remove it from list, remove it from page tables
 	auto args = arguments_t<void*, size_t>(c);
 	auto addr = args.first();
 	auto len = args.second();

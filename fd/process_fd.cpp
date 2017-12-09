@@ -311,14 +311,107 @@ cloudabi_errno_t process_fd::add_mem_mapping(mem_mapping_t *mapping, bool overwr
 	// we will allocate physical pages and alter the page table.
 }
 
+/** Calls the Functor for every memory mapping in the list that falls within the given range. */
+template <typename Functor>
+static void iterate_mappings(mem_mapping_list **mappings, void *begin_addr, size_t num_pages, Functor f) {
+	auto const PAGE_SIZE = process_fd::PAGE_SIZE;
+
+	auto begin = reinterpret_cast<size_t>(begin_addr);
+	auto end = begin + num_pages * PAGE_SIZE;
+	assert(begin < end);
+
+	mem_mapping_list *prev = nullptr;
+	for(mem_mapping_list *item = *mappings; item != nullptr; item = item->next) {
+		auto i_begin = reinterpret_cast<size_t>(item->data->virtual_address);
+		auto i_end = i_begin + item->data->number_of_pages * PAGE_SIZE;
+		assert(i_begin < i_end);
+
+		if(end <= i_begin) {
+			// this mapping is completely after the search range
+			// TODO: return here, if mapping becomes sorted
+		} else if(begin >= i_end) {
+			// this mapping is completely before the search range
+		} else if(begin <= i_begin && end >= i_end) {
+			// this mapping is fully within the search range
+			f(item);
+		} else if(begin <= i_begin) {
+			// the beginning of this mapping falls within the search range
+			assert(end > i_begin);
+			assert(((end - i_begin) % PAGE_SIZE) == 0);
+			size_t unmap_pages = (end - i_begin) / PAGE_SIZE;
+
+			mem_mapping_t *new_mapping = item->data->split_at(unmap_pages, false);
+			mem_mapping_list *entry = allocate<mem_mapping_list>(new_mapping);
+			assert(new_mapping->number_of_pages > 0);
+			assert(new_mapping->virtual_address == reinterpret_cast<void*>(end));
+
+			entry->next = item->next;
+			item->next = entry;
+			f(item);
+			// TODO: return here, if mapping becomes sorted
+		} else if(end >= i_end) {
+			// the end of this mapping falls within the search range
+			assert(begin > i_begin);
+			assert(((begin - i_begin) % PAGE_SIZE) == 0);
+			size_t pages_left = (begin - i_begin) / PAGE_SIZE;
+			mem_mapping_t *new_mapping = item->data->split_at(pages_left, true);
+			mem_mapping_list *entry = allocate<mem_mapping_list>(new_mapping);
+			assert(new_mapping->number_of_pages > 0);
+			assert(item->data->virtual_address == begin_addr);
+
+			if(prev == nullptr) {
+				*mappings = entry;
+			} else {
+				assert(prev->next == item);
+				prev->next = entry;
+			}
+			entry->next = item;
+			f(item);
+		} else {
+			// the search range is throughout the middle of this mapping
+			// split it twice, such that this item is exactly the search range
+			assert(((begin - i_begin) % PAGE_SIZE) == 0);
+			size_t pages_left = (begin - i_begin) / PAGE_SIZE;
+
+			assert(((end - begin) % PAGE_SIZE) == 0);
+			size_t pages_middle = (end - begin) / PAGE_SIZE;
+
+			mem_mapping_t *mapping_left = item->data->split_at(pages_left, true);
+			mem_mapping_list *entry_left = allocate<mem_mapping_list>(mapping_left);
+			assert(mapping_left->number_of_pages > 0);
+			assert(item->data->virtual_address == begin_addr);
+
+			mem_mapping_t *mapping_right = item->data->split_at(pages_middle, false);
+			mem_mapping_list *entry_right = allocate<mem_mapping_list>(mapping_right);
+			assert(mapping_right->number_of_pages > 0);
+			assert(mapping_right->virtual_address == reinterpret_cast<void*>(end));
+
+			if(prev == nullptr) {
+				*mappings = entry_left;
+			} else {
+				assert(prev->next == item);
+				prev->next = entry_left;
+			}
+			entry_left->next = item;
+			entry_right->next = item->next;
+			item->next = entry_right;
+			f(item);
+		}
+
+		prev = item;
+	}
+}
+
 void process_fd::mem_unmap(void *begin_addr, size_t num_pages)
 {
 	auto begin = reinterpret_cast<size_t>(begin_addr);
 	auto end = begin + num_pages * PAGE_SIZE;
 	assert(begin < end);
 
-	mem_mapping_list *new_mappings = nullptr;
+	// first, split the mappings if necessary
+	iterate_mappings(&mappings, begin_addr, num_pages, [](mem_mapping_list*){/* ignore */});
 
+	// then, unmap all if necessary
 	remove_all(&mappings, [&](mem_mapping_list *item) {
 		auto i_begin = reinterpret_cast<size_t>(item->data->virtual_address);
 		auto i_end = i_begin + item->data->number_of_pages * PAGE_SIZE;
@@ -332,58 +425,21 @@ void process_fd::mem_unmap(void *begin_addr, size_t num_pages)
 			// this mapping must be fully unmapped
 			return true;
 		}
-
-		if(begin <= i_begin) {
-			// the beginning of this mapping must be unmapped
-			assert(end > i_begin);
-			assert(((end - i_begin) % PAGE_SIZE) == 0);
-			size_t unmap_pages = (end - i_begin) / PAGE_SIZE;
-			mem_mapping_t *new_mapping = item->data->split_at(unmap_pages, false);
-			mem_mapping_list *entry = allocate<mem_mapping_list>(new_mapping);
-			assert(new_mapping->number_of_pages > 0);
-			append(&new_mappings, entry);
-			assert(new_mapping->virtual_address == reinterpret_cast<void*>(end));
-			return true;
-		} else if(end >= i_end) {
-			// the end of this mapping must be unmapped
-			assert(begin > i_begin);
-			assert(((begin - i_begin) % PAGE_SIZE) == 0);
-			size_t pages_left = (begin - i_begin) / PAGE_SIZE;
-			mem_mapping_t *new_mapping = item->data->split_at(pages_left, true);
-			mem_mapping_list *entry = allocate<mem_mapping_list>(new_mapping);
-			assert(new_mapping->number_of_pages > 0);
-			append(&new_mappings, entry);
-			assert(item->data->virtual_address == begin_addr);
-			return true;
-		} else {
-			// this mapping must be unmapped somewhere in the middle
-			// split it twice, such that this item remains the part to be unmapped
-			assert(((begin - i_begin) % PAGE_SIZE) == 0);
-			size_t pages_left = (begin - i_begin) / PAGE_SIZE;
-
-			assert(((end - begin) % PAGE_SIZE) == 0);
-			size_t pages_middle = (end - begin) / PAGE_SIZE;
-
-			mem_mapping_t *mapping_left = item->data->split_at(pages_left, true);
-			mem_mapping_list *entry_left = allocate<mem_mapping_list>(mapping_left);
-			assert(mapping_left->number_of_pages > 0);
-			append(&new_mappings, entry_left);
-			assert(item->data->virtual_address == begin_addr);
-
-			mem_mapping_t *mapping_right = item->data->split_at(pages_middle, false);
-			mem_mapping_list *entry_right = allocate<mem_mapping_list>(mapping_right);
-			assert(mapping_right->number_of_pages > 0);
-			append(&new_mappings, entry_right);
-			assert(mapping_right->virtual_address == reinterpret_cast<void*>(end));
-			return true;
+		else {
+			assert(!"Partial mappings should have been already split");
 		}
 	}, [&](mem_mapping_list *item) {
 		item->data->unmap_completely();
 		deallocate(item->data);
 		deallocate(item);
 	});
+}
 
-	append(&mappings, new_mappings);
+void process_fd::mem_protect(void *addr, size_t num_pages, cloudabi_mprot_t prot)
+{
+	iterate_mappings(&mappings, addr, num_pages, [prot](mem_mapping_list *item) {
+		item->data->set_protection(prot);
+	});
 }
 
 void *process_fd::find_free_virtual_range(size_t num_pages)
@@ -664,9 +720,21 @@ cloudabi_errno_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *
 				// Phdr load section wasn't aligned
 				return ENOEXEC;
 			}
+
+			cloudabi_mprot_t protection = 0;
+			if(phdr->p_flags & 1) {
+				protection |= CLOUDABI_PROT_EXEC;
+			}
+			if(phdr->p_flags & 2) {
+				protection |= CLOUDABI_PROT_WRITE;
+			}
+			if(phdr->p_flags & 4) {
+				protection |= CLOUDABI_PROT_READ;
+			}
+
 			uint8_t *vaddr = reinterpret_cast<uint8_t*>(phdr->p_vaddr);
 			uint8_t *code_offset = buffer + phdr->p_offset;
-			mem_mapping_t *t = allocate<mem_mapping_t>(this, vaddr, len_to_pages(phdr->p_memsz), nullptr, 0, CLOUDABI_PROT_EXEC | CLOUDABI_PROT_READ);
+			mem_mapping_t *t = allocate<mem_mapping_t>(this, vaddr, len_to_pages(phdr->p_memsz), nullptr, 0, protection);
 			add_mem_mapping(t);
 			t->ensure_completely_backed();
 			memcpy(vaddr, code_offset, phdr->p_filesz);
