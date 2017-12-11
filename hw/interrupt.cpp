@@ -190,7 +190,7 @@ void interrupt_handler::handle(interrupt_state_t *regs) {
 
 	bool in_kernel = regs->cs == 8;
 	auto running_thread = get_scheduler()->get_running_thread();
-	if(running_thread) {
+	if(running_thread && !in_kernel) {
 		running_thread->set_return_state(regs);
 	}
 
@@ -199,8 +199,25 @@ void interrupt_handler::handle(interrupt_state_t *regs) {
 		fatal_exception(int_no, err_code, regs);
 	}
 
-	// TODO: handle page fault as a special case, because it can be
-	// solved by the running_thread
+	// Try to fix page faults
+	if(int_no == 0x0e /* Page fault */ && running_thread) {
+		bool wanted_write = err_code & 0x02;
+		bool reserved_bits = err_code & 0x08;
+		bool wanted_exec = err_code & 0x10;
+
+		// The address is the actual fault address, not the base address of the
+		// instruction; e.g. in a cross-page 4-byte read where the second page
+		// isn't present, the address in cr2 is the address of the second page.
+		void *address;
+		asm volatile("mov %%cr2, %0" : "=a"(address));
+
+		if(reserved_bits) {
+			// this is always fatal, so continue
+		} else if(running_thread->get_process()->handle_pagefault(address, wanted_write, wanted_exec)) {
+			// pagefault is fixed, return normally
+			return;
+		}
+	}
 
 	// Any exceptions in the userland are handled by the thread
 	if(!in_kernel && (int_no < 0x20 || int_no >= 0x30)) {
@@ -209,7 +226,7 @@ void interrupt_handler::handle(interrupt_state_t *regs) {
 		assert(running_thread.use_count() > 1);
 		assert(get_scheduler()->get_running_thread() == running_thread);
 	}
-	// Any exceptions in the kernel lead to immediate kernel_panic
+	// Any other exceptions in the kernel lead to immediate kernel_panic
 	else if(int_no < 0x20 || int_no >= 0x30) {
 		fatal_exception(int_no, err_code, regs);
 	}

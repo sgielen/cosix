@@ -20,6 +20,8 @@
 
 using namespace cloudos;
 
+extern uint32_t _kernel_virtual_base;
+
 static bool process_already_terminated(void *userdata, thread_condition*) {
 	return reinterpret_cast<process_fd*>(userdata)->is_terminated();
 }
@@ -442,10 +444,49 @@ void process_fd::mem_protect(void *addr, size_t num_pages, cloudabi_mprot_t prot
 	});
 }
 
+bool process_fd::handle_pagefault(void *addr, bool for_writing, bool for_exec)
+{
+	mem_mapping_t *mapping = nullptr;
+	size_t page_i = 0;
+	iterate(mappings, [&](mem_mapping_list *item) {
+		auto pgnum = item->data->page_num(addr);
+		if(pgnum != -1) {
+			assert(mapping == nullptr);
+			mapping = item->data;
+			page_i = pgnum;
+		}
+	});
+	if(mapping == nullptr) {
+		// not a valid address
+		return false;
+	}
+	if(for_writing && !(mapping->protection & CLOUDABI_PROT_WRITE)) {
+		// writing not allowed
+		return false;
+	}
+	if(for_exec && !(mapping->protection & CLOUDABI_PROT_EXEC)) {
+		// execution not allowed
+		return false;
+	}
+
+	// if the page is present, and the action should be allowed, change
+	// protection (solve CoW here)
+
+	if(mapping->is_backed(page_i)) {
+		// TODO: if the action should be allowed, solve potential CoW and
+		// change protection on the page
+		return false;
+	} else {
+		// TODO: if for_writing is false, then CoW a page filled with zeroes.
+		mapping->ensure_backed(page_i);
+		return true;
+	}
+}
+
 void *process_fd::find_free_virtual_range(size_t num_pages)
 {
 	uint32_t address = 0x90000000;
-	while(address + num_pages * PAGE_SIZE < 0xc0000000) {
+	while(address + num_pages * PAGE_SIZE < _kernel_virtual_base) {
 		// - find the first lowest map after address
 		mem_mapping_t *lowest = nullptr;
 		iterate(mappings, [&](mem_mapping_list *item) {
@@ -813,7 +854,7 @@ cloudabi_errno_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *
 	uint8_t *userland_stack_bottom = userland_stack_top - userland_stack_size;
 	mem_mapping_t *stack_mapping = allocate<mem_mapping_t>(this, userland_stack_bottom, len_to_pages(userland_stack_size), nullptr, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE);
 	add_mem_mapping(stack_mapping);
-	stack_mapping->ensure_completely_backed();
+	stack_mapping->ensure_backed(len_to_pages(userland_stack_size) - 1);
 
 	// create the main thread
 	add_thread(userland_stack_bottom, userland_stack_size, auxv_address, reinterpret_cast<void*>(header->e_entry));

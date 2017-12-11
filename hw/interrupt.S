@@ -24,8 +24,6 @@ isr_common:
 	push %esp /* ptr to interrupt_state_t */
 	call isr_handler
 	add $4, %esp
-	jmp do_iret
-
 .global do_iret
 do_iret:
 	/* switch back to original segments */

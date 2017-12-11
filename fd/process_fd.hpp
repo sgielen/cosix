@@ -100,6 +100,8 @@ struct process_fd : public fd_t {
 	void mem_unmap(void *addr, size_t num_pages);
 	// Change protection on the given address range
 	void mem_protect(void *addr, size_t num_pages, cloudabi_mprot_t prot);
+	// Handle a pagefault; if the access should have been fine, fix memory to allow it and return 0
+	bool handle_pagefault(void *addr, bool for_writing, bool for_exec);
 
 	// Find a piece of the address space that's free to be mapped.
 	void *find_free_virtual_range(size_t num_pages);

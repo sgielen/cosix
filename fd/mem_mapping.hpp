@@ -44,6 +44,8 @@ struct mem_mapping_t {
 	void copy_from(mem_mapping_t *other);
 
 	bool covers(void *addr, size_t len = 0);
+	// returns 0...number_of_pages if addr is covered, -1 otherwise
+	int page_num(void *addr);
 
 	cloudabi_mprot_t protection;
 	// set in this object and, if pages are backed, in the page tables

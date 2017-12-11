@@ -10,6 +10,8 @@ using namespace cloudos;
 
 typedef uint8_t *addr_t;
 
+extern uint32_t _kernel_virtual_base;
+
 size_t cloudos::len_to_pages(size_t len) {
 	size_t num_pages = len / PAGE_SIZE;
 	if((len % PAGE_SIZE) != 0) {
@@ -31,9 +33,9 @@ mem_mapping_t::mem_mapping_t(process_fd *o, void *a,
 , backing_offset(offset)
 , advice(adv)
 {
-	if(reinterpret_cast<uint32_t>(virtual_address) % PAGE_SIZE != 0) {
-		kernel_panic("non-page-aligned requested_address");
-	}
+	assert(reinterpret_cast<uint32_t>(virtual_address) % PAGE_SIZE == 0);
+	assert(reinterpret_cast<uint32_t>(virtual_address) < _kernel_virtual_base);
+	assert((reinterpret_cast<uint32_t>(virtual_address) + number_of_pages * PAGE_SIZE) <= _kernel_virtual_base);
 }
 
 mem_mapping_t::mem_mapping_t(process_fd *o, mem_mapping_t *other)
@@ -49,9 +51,7 @@ mem_mapping_t::mem_mapping_t(process_fd *o, mem_mapping_t *other)
 
 void mem_mapping_t::copy_from(mem_mapping_t *other)
 {
-	if(other->number_of_pages != number_of_pages) {
-		kernel_panic("copy_from length mismatch");
-	}
+	assert(other->number_of_pages == number_of_pages);
 	// TODO: remove this method and use copy-on-write
 	char buf[PAGE_SIZE];
 	for(size_t i = 0; i < other->number_of_pages; ++i) {
@@ -76,6 +76,18 @@ bool mem_mapping_t::covers(void *addr, size_t len)
 	addr_t his_end = his_start + len;
 
 	return his_start >= my_start && his_end >= my_start && his_start < my_end && his_end <= my_end;
+}
+
+int mem_mapping_t::page_num(void *addr)
+{
+	addr_t my_start = reinterpret_cast<addr_t>(virtual_address);
+	addr_t his_start = reinterpret_cast<addr_t>(addr);
+	if(his_start < my_start) {
+		return -1;
+	}
+	auto diff = his_start - my_start;
+	size_t page_i = diff / PAGE_SIZE;
+	return page_i < number_of_pages ? page_i : -1;
 }
 
 static uint32_t prot_to_bits(cloudabi_mprot_t p) {
@@ -176,15 +188,17 @@ void mem_mapping_t::unmap(size_t page)
 	if(page_entry == nullptr) {
 		return;
 	}
-	void *phys = reinterpret_cast<void*>(*page_entry & 0xfffff000);
+	if(*page_entry & 1 /* present */) {
+		void *phys = reinterpret_cast<void*>(*page_entry & 0xfffff000);
 
-	*page_entry = 0;
+		*page_entry = 0;
 
-	uint8_t *address = reinterpret_cast<uint8_t*>(virtual_address) + PAGE_SIZE * page;
-	asm volatile ( "invlpg (%0)" : : "b"(address) : "memory");
+		uint8_t *address = reinterpret_cast<uint8_t*>(virtual_address) + PAGE_SIZE * page;
+		asm volatile ( "invlpg (%0)" : : "b"(address) : "memory");
 
-	// TODO: don't deallocate physical page if the page is shared!
-	get_page_allocator()->deallocate_phys({phys, PAGE_SIZE});
+		// TODO: don't deallocate physical page if the page is shared!
+		get_page_allocator()->deallocate_phys({phys, PAGE_SIZE});
+	}
 }
 
 void mem_mapping_t::unmap_completely()
