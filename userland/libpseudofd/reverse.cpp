@@ -104,3 +104,11 @@ void reverse_handler::stat_fput(pseudofd_t, const cloudabi_filestat_t*, cloudabi
 void reverse_handler::stat_put(pseudofd_t, cloudabi_lookupflags_t, const char*, size_t, const cloudabi_filestat_t*, cloudabi_fsflags_t) {
 	throw cloudabi_system_error(EINVAL);
 }
+
+void reverse_handler::datasync(pseudofd_t) {
+	throw cloudabi_system_error(EINVAL);
+}
+
+void reverse_handler::sync(pseudofd_t) {
+	throw cloudabi_system_error(EINVAL);
+}

@@ -77,6 +77,16 @@ struct fd_t {
 		return 0;
 	}
 
+	virtual void datasync()
+	{
+		error = EINVAL;
+	}
+
+	virtual void sync()
+	{
+		error = EINVAL;
+	}
+
 	// Returns EPIPE if the file descriptor will never become readable, e.g. because the
 	// other end of the socket is shut down.
 	virtual cloudabi_errno_t get_read_signaler(thread_condition_signaler **s) {

@@ -32,6 +32,8 @@ struct pseudo_fd : public seekable_fd_t, public enable_shared_from_this<pseudo_f
 	bool is_readable();
 	cloudabi_errno_t get_read_signaler(thread_condition_signaler **s) override;
 	void became_readable();
+	void datasync() override;
+	void sync() override;
 
 	/* For directories */
 	shared_ptr<fd_t> openat(const char *path, size_t pathlen, cloudabi_lookupflags_t lookupflags, cloudabi_oflags_t oflags, const cloudabi_fdstat_t * fdstat) override;

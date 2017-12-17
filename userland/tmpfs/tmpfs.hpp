@@ -46,6 +46,8 @@ struct tmpfs : public cosix::reverse_handler {
 	void close(pseudofd_t pseudo) override;
 	size_t pread(pseudofd_t pseudo, off_t offset, char *dest, size_t requested) override;
 	void pwrite(pseudofd_t pseudo, off_t offset, const char *buf, size_t length) override;
+	void datasync(pseudofd_t pseudo) override;
+	void sync(pseudofd_t pseudo) override;
 
 	size_t readdir(pseudofd_t pseudo, char *buffer, size_t buflen, cloudabi_dircookie_t &cookie) override;
 	void stat_get(pseudofd_t pseudo, cloudabi_lookupflags_t flags, char *path, size_t len, cloudabi_filestat_t *statbuf) override;

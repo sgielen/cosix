@@ -75,6 +75,8 @@ struct reverse_handler {
 	virtual bool is_readable(pseudofd_t pseudo);
 	virtual size_t pread(pseudofd_t pseudo, off_t offset, char *dest, size_t requested);
 	virtual void pwrite(pseudofd_t pseudo, off_t offset, const char *buf, size_t length);
+	virtual void datasync(pseudofd_t pseudo);
+	virtual void sync(pseudofd_t pseudo);
 	virtual size_t readdir(pseudofd_t pseudo, char *buffer, size_t buflen, cloudabi_dircookie_t &cookie);
 	virtual void stat_get(pseudofd_t pseudo, cloudabi_lookupflags_t flags, char *path, size_t len, cloudabi_filestat_t *statbuf);
 	virtual size_t sock_recv(pseudofd_t pseudo, char *dest, size_t requested);

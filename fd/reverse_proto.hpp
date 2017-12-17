@@ -7,12 +7,14 @@ typedef uint64_t pseudofd_t;
 struct reverse_request_t {
 	pseudofd_t pseudofd = 0;
 	enum class operation {
-		lookup /* path in buffer -> inode */,
+		lookup = 0 /* path in buffer -> inode */,
 		stat_get,
 		stat_fget,
 		stat_put, // fsflags in inode, lookupflags in flags, buffer is filestat_t* + path
 		stat_fput, // fsflags in inode, buffer is filestat_t*
 		is_readable,
+		datasync,
+		sync,
 		// all the calls below use the inode, not the path
 		open,
 		create,

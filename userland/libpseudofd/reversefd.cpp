@@ -174,6 +174,14 @@ char *cosix::handle_request(reverse_request_t *request, char *buf, reverse_respo
 			response->result = 0;
 			break;
 		}
+		case op::datasync:
+			h->datasync(request->pseudofd);
+			response->result = 0;
+			break;
+		case op::sync:
+			h->sync(request->pseudofd);
+			response->result = 0;
+			break;
 		case op::sock_shutdown:
 		default:
 			response->result = -ENOSYS;

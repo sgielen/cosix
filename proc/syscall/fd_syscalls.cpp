@@ -58,9 +58,18 @@ cloudabi_errno_t cloudos::syscall_fd_create2(syscall_context &c)
 	}
 }
 
-cloudabi_errno_t cloudos::syscall_fd_datasync(syscall_context &)
+cloudabi_errno_t cloudos::syscall_fd_datasync(syscall_context &c)
 {
-	return ENOSYS;
+	auto args = arguments_t<cloudabi_fd_t>(c);
+	auto fdnum = args.first();
+	fd_mapping_t *mapping;
+	auto res = c.process()->get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FD_DATASYNC);
+	if(res != 0) {
+		return res;
+	}
+
+	mapping->fd->datasync();
+	return mapping->fd->error;
 }
 
 cloudabi_errno_t cloudos::syscall_fd_dup(syscall_context &c)
@@ -273,9 +282,18 @@ cloudabi_errno_t cloudos::syscall_fd_stat_put(syscall_context &c)
 	return 0;
 }
 
-cloudabi_errno_t cloudos::syscall_fd_sync(syscall_context &)
+cloudabi_errno_t cloudos::syscall_fd_sync(syscall_context &c)
 {
-	return ENOSYS;
+	auto args = arguments_t<cloudabi_fd_t>(c);
+	auto fdnum = args.first();
+	fd_mapping_t *mapping;
+	auto res = c.process()->get_fd(&mapping, fdnum, CLOUDABI_RIGHT_FD_SYNC);
+	if(res != 0) {
+		return res;
+	}
+
+	mapping->fd->sync();
+	return mapping->fd->error;
 }
 
 cloudabi_errno_t cloudos::syscall_fd_write(syscall_context &c)

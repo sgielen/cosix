@@ -138,6 +138,34 @@ size_t pseudo_fd::write(const char *str, size_t size)
 	return size;
 }
 
+void pseudo_fd::datasync()
+{
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::datasync;
+	reverse_response_t response;
+	maybe_deallocate(send_request(&request, nullptr, &response));
+	if(response.result < 0) {
+		error = -response.result;
+	} else {
+		error = 0;
+	}
+}
+
+void pseudo_fd::sync()
+{
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::sync;
+	reverse_response_t response;
+	maybe_deallocate(send_request(&request, nullptr, &response));
+	if(response.result < 0) {
+		error = -response.result;
+	} else {
+		error = 0;
+	}
+}
+
 shared_ptr<fd_t> pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_lookupflags_t lookupflags, cloudabi_oflags_t oflags, const cloudabi_fdstat_t * fdstat)
 {
 	int64_t inode;

@@ -340,6 +340,16 @@ void tmpfs::pwrite(pseudofd_t pseudo, off_t offset, const char *buf, size_t leng
 	entry->content_time = timestamp();
 }
 
+void tmpfs::datasync(pseudofd_t)
+{
+	// there's nothing to sync
+}
+
+void tmpfs::sync(pseudofd_t)
+{
+	// there's nothing to sync
+}
+
 /**
  * Reads the next entry from the given directory. If there are no more entries,
  * sets cookie to 0 and returns 0.
