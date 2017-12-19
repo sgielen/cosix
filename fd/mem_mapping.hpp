@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <oslibc/list.hpp>
 #include <cloudabi_types.h>
+#include <memory/smart_ptr.hpp>
 
 namespace cloudos {
 
@@ -15,6 +16,7 @@ typedef linked_list<mem_mapping_t*> mem_mapping_list;
 
 struct process_fd;
 struct fd_mapping_t;
+struct fd_t;
 
 /** A process memory mapping.
  *
@@ -33,9 +35,11 @@ struct fd_mapping_t;
 struct mem_mapping_t {
 	mem_mapping_t(process_fd *owner,
 	  void *requested_address /* page aligned */,
-	  size_t number_of_pages, fd_mapping_t *backing_fd /* or NULL */,
+	  size_t number_of_pages, shared_ptr<fd_t> backing_fd /* optional */,
 	  cloudabi_filesize_t offset, cloudabi_mprot_t protection,
-	  cloudabi_advice_t adv = CLOUDABI_ADVICE_NORMAL);
+	  bool shared, cloudabi_advice_t adv = CLOUDABI_ADVICE_NORMAL);
+
+	~mem_mapping_t();
 
 	// Make a new mapping from the old one
 	mem_mapping_t(process_fd *owner, mem_mapping_t *other);
@@ -60,22 +64,34 @@ struct mem_mapping_t {
 	void ensure_backed(size_t page);
 	void ensure_completely_backed();
 
-	void unmap(size_t page);
-	void unmap_completely();
+	inline void unmap(size_t page) {
+		sync(page, CLOUDABI_MS_SYNC | CLOUDABI_MS_INVALIDATE);
+	}
+
+	inline void unmap_completely() {
+		sync_completely(CLOUDABI_MS_SYNC | CLOUDABI_MS_INVALIDATE);
+	}
 
 	mem_mapping_t *split_at(size_t page, bool return_left);
 
 	uint32_t *get_page_entry(size_t page);
 	uint32_t *ensure_get_page_entry(size_t page);
 
+	void *page_virtual_address(size_t page);
+	cloudabi_filesize_t fd_offset(size_t page);
+
+	cloudabi_errno_t sync(size_t page, cloudabi_msflags_t flags);
+	cloudabi_errno_t sync_completely(cloudabi_msflags_t flags);
+
 	void *virtual_address; /* always page-aligned */
 	size_t number_of_pages;
 
 	process_fd *owner;
-	// backing fd, which should be used for synchronization, or nullptr if
+	// backing fd, which should be used for synchronization, or empty if
 	// this is a CLOUDABI_MAP_ANON_FD mapping
-	fd_mapping_t *backing_fd;
+	shared_ptr<fd_t> backing_fd;
 	cloudabi_filesize_t backing_offset;
+	bool shared;
 
 	cloudabi_advice_t advice;
 };

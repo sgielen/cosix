@@ -26,11 +26,6 @@ cloudabi_errno_t cloudos::syscall_mem_advise(syscall_context &c)
 	return 0;
 }
 
-cloudabi_errno_t cloudos::syscall_mem_lock(syscall_context &)
-{
-	return ENOSYS;
-}
-
 cloudabi_errno_t cloudos::syscall_mem_map(syscall_context &c)
 {
 	auto args = arguments_t<void*, size_t, cloudabi_mprot_t, cloudabi_mflags_t, cloudabi_fd_t, cloudabi_filesize_t, void**>(c);
@@ -38,17 +33,27 @@ cloudabi_errno_t cloudos::syscall_mem_map(syscall_context &c)
 	auto len = args.second();
 	auto prot = args.third();
 	auto flags = args.fourth();
-	auto fd = args.fifth();
+	auto fdnum = args.fifth();
+	auto fdoff = args.sixth();
 
-	if(!(flags & CLOUDABI_MAP_ANON)) {
-		get_vga_stream() << "Only anonymous mappings are supported at the moment\n";
-		return ENOSYS;
+	if(flags & ~(CLOUDABI_MAP_ANON | CLOUDABI_MAP_FIXED | CLOUDABI_MAP_PRIVATE | CLOUDABI_MAP_SHARED)) {
+		// unsupported flags
+		return EINVAL;
 	}
-	if(!(flags & CLOUDABI_MAP_PRIVATE)) {
-		get_vga_stream() << "Only private mappings are supported at the moment\n";
-		return ENOSYS;
+
+	if((flags & CLOUDABI_MAP_PRIVATE) && (flags & CLOUDABI_MAP_SHARED)) {
+		// can't be both private and shared
+		return EINVAL;
 	}
-	if(flags & CLOUDABI_MAP_ANON && fd != CLOUDABI_MAP_ANON_FD) {
+
+	if(!(flags & CLOUDABI_MAP_PRIVATE) && !(flags & CLOUDABI_MAP_SHARED)) {
+		// must be either private or shared
+		return EINVAL;
+	}
+
+	bool shared = flags & CLOUDABI_MAP_SHARED;
+
+	if(flags & CLOUDABI_MAP_ANON && fdnum != CLOUDABI_MAP_ANON_FD) {
 		return EINVAL;
 	}
 	if((prot & CLOUDABI_PROT_EXEC) && (prot & CLOUDABI_PROT_WRITE)) {
@@ -81,7 +86,29 @@ cloudabi_errno_t cloudos::syscall_mem_map(syscall_context &c)
 		return EINVAL;
 	}
 
-	mem_mapping_t *mapping = allocate<mem_mapping_t>(c.process(), address_requested, len_to_pages(len), nullptr, 0, prot);
+	shared_ptr<fd_t> descriptor;
+	cloudabi_filesize_t off = 0;
+	if(!(flags & CLOUDABI_MAP_ANON)) {
+		int rights_needed = CLOUDABI_RIGHT_MEM_MAP;
+		if(prot & CLOUDABI_PROT_READ) {
+			rights_needed |= CLOUDABI_RIGHT_FD_READ;
+		}
+		if(prot & CLOUDABI_PROT_WRITE) {
+			rights_needed |= CLOUDABI_RIGHT_FD_WRITE;
+		}
+		if(prot & CLOUDABI_PROT_EXEC) {
+			rights_needed |= CLOUDABI_RIGHT_MEM_MAP_EXEC;
+		}
+		fd_mapping_t *mapping;
+		auto res = c.process()->get_fd(&mapping, fdnum, rights_needed);
+		if(res != 0) {
+			return res;
+		}
+		descriptor = mapping->fd;
+		off = fdoff;
+	}
+
+	mem_mapping_t *mapping = allocate<mem_mapping_t>(c.process(), address_requested, len_to_pages(len), descriptor, off, prot, shared);
 	c.process()->add_mem_mapping(mapping, fixed);
 	c.result = reinterpret_cast<uintptr_t>(address_requested);
 
@@ -108,14 +135,29 @@ cloudabi_errno_t cloudos::syscall_mem_protect(syscall_context &c)
 	return 0;
 }
 
-cloudabi_errno_t cloudos::syscall_mem_sync(syscall_context &)
+cloudabi_errno_t cloudos::syscall_mem_sync(syscall_context &c)
 {
-	return ENOSYS;
-}
+	auto args = arguments_t<void*, size_t, cloudabi_msflags_t>(c);
+	auto addr = args.first();
+	auto len = args.second();
+	auto flags = args.third();
 
-cloudabi_errno_t cloudos::syscall_mem_unlock(syscall_context &)
-{
-	return ENOSYS;
+	if((flags & CLOUDABI_MS_ASYNC) && flags != CLOUDABI_MS_ASYNC) {
+		// ASYNC may not be combined with other flags
+		return EINVAL;
+	}
+
+	if(!(flags & CLOUDABI_MS_ASYNC) && !(flags & CLOUDABI_MS_SYNC)) {
+		// either must be present
+		return EINVAL;
+	}
+
+	if(flags & ~(CLOUDABI_MS_ASYNC | CLOUDABI_MS_INVALIDATE | CLOUDABI_MS_SYNC)) {
+		// invalid sync flags
+		return ENOTSUP;
+	}
+
+	return c.process()->mem_sync(addr, len_to_pages(len), flags);
 }
 
 cloudabi_errno_t cloudos::syscall_mem_unmap(syscall_context &c)

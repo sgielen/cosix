@@ -100,6 +100,8 @@ struct process_fd : public fd_t {
 	void mem_unmap(void *addr, size_t num_pages);
 	// Change protection on the given address range
 	void mem_protect(void *addr, size_t num_pages, cloudabi_mprot_t prot);
+	// Sync this memory range
+	cloudabi_errno_t mem_sync(void *addr, size_t num_pages, cloudabi_msflags_t flags);
 	// Handle a pagefault; if the access should have been fine, fix memory to allow it and return 0
 	bool handle_pagefault(void *addr, bool for_writing, bool for_exec);
 

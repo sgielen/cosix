@@ -319,6 +319,12 @@ static void iterate_mappings(mem_mapping_list **mappings, void *begin_addr, size
 	auto const PAGE_SIZE = process_fd::PAGE_SIZE;
 
 	auto begin = reinterpret_cast<size_t>(begin_addr);
+
+	if((begin % PAGE_SIZE) != 0) {
+		// page-align
+		begin -= (begin % PAGE_SIZE);
+	}
+
 	auto end = begin + num_pages * PAGE_SIZE;
 	assert(begin < end);
 
@@ -359,7 +365,7 @@ static void iterate_mappings(mem_mapping_list **mappings, void *begin_addr, size
 			mem_mapping_t *new_mapping = item->data->split_at(pages_left, true);
 			mem_mapping_list *entry = allocate<mem_mapping_list>(new_mapping);
 			assert(new_mapping->number_of_pages > 0);
-			assert(item->data->virtual_address == begin_addr);
+			assert(item->data->virtual_address == reinterpret_cast<void*>(begin));
 
 			if(prev == nullptr) {
 				*mappings = entry;
@@ -381,7 +387,7 @@ static void iterate_mappings(mem_mapping_list **mappings, void *begin_addr, size
 			mem_mapping_t *mapping_left = item->data->split_at(pages_left, true);
 			mem_mapping_list *entry_left = allocate<mem_mapping_list>(mapping_left);
 			assert(mapping_left->number_of_pages > 0);
-			assert(item->data->virtual_address == begin_addr);
+			assert(item->data->virtual_address == reinterpret_cast<void*>(begin));
 
 			mem_mapping_t *mapping_right = item->data->split_at(pages_middle, false);
 			mem_mapping_list *entry_right = allocate<mem_mapping_list>(mapping_right);
@@ -442,6 +448,18 @@ void process_fd::mem_protect(void *addr, size_t num_pages, cloudabi_mprot_t prot
 	iterate_mappings(&mappings, addr, num_pages, [prot](mem_mapping_list *item) {
 		item->data->set_protection(prot);
 	});
+}
+
+cloudabi_errno_t process_fd::mem_sync(void *addr, size_t num_pages, cloudabi_msflags_t flags)
+{
+	cloudabi_errno_t res = 0;
+	// TODO: can we be sure that the entire range is covered?
+	iterate_mappings(&mappings, addr, num_pages, [&](mem_mapping_list *item) {
+		if(res == 0) {
+			res = item->data->sync_completely(flags);
+		}
+	});
+	return res;
 }
 
 bool process_fd::handle_pagefault(void *addr, bool for_writing, bool for_exec)
@@ -597,7 +615,7 @@ cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping
 	install_page_directory();
 
 	uint8_t *argdata_address = reinterpret_cast<uint8_t*>(0x80100000);
-	mem_mapping_t *argdata_mapping = allocate<mem_mapping_t>(this, argdata_address, len_to_pages(argdatalen == 0 ? 1 : argdatalen), nullptr, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE);
+	mem_mapping_t *argdata_mapping = allocate<mem_mapping_t>(this, argdata_address, len_to_pages(argdatalen == 0 ? 1 : argdatalen), nullptr, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE, false);
 	add_mem_mapping(argdata_mapping);
 	argdata_mapping->ensure_completely_backed();
 	memcpy(argdata_address, argdata_buffer, argdatalen);
@@ -651,6 +669,9 @@ cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping
 	page_tables = old_page_tables;
 	iterate(old_mappings, [&](mem_mapping_list *item) {
 		item->data->unmap_completely();
+		// set number of pages to 0 so that the deconstructor doesn't check if
+		// the pages are still backed
+		item->data->number_of_pages = 0;
 	});
 	page_directory = new_page_directory;
 	page_tables = new_page_tables;
@@ -736,7 +757,7 @@ cloudabi_errno_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *
 	}
 
 	void *elf_phdr = reinterpret_cast<uint8_t*>(0x80060000);
-	mem_mapping_t *phdr_mapping = allocate<mem_mapping_t>(this, elf_phdr, len_to_pages(elf_ph_size), nullptr, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE);
+	mem_mapping_t *phdr_mapping = allocate<mem_mapping_t>(this, elf_phdr, len_to_pages(elf_ph_size), nullptr, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE, false);
 	add_mem_mapping(phdr_mapping);
 	phdr_mapping->ensure_completely_backed();
 
@@ -775,7 +796,7 @@ cloudabi_errno_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *
 
 			uint8_t *vaddr = reinterpret_cast<uint8_t*>(phdr->p_vaddr);
 			uint8_t *code_offset = buffer + phdr->p_offset;
-			mem_mapping_t *t = allocate<mem_mapping_t>(this, vaddr, len_to_pages(phdr->p_memsz), nullptr, 0, protection);
+			mem_mapping_t *t = allocate<mem_mapping_t>(this, vaddr, len_to_pages(phdr->p_memsz), nullptr, 0, protection, false);
 			add_mem_mapping(t);
 			t->ensure_completely_backed();
 			memcpy(vaddr, code_offset, phdr->p_filesz);
@@ -786,7 +807,7 @@ cloudabi_errno_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *
 	// initialize vdso address
 	size_t vdso_size = vdso_blob_size;
 	uint8_t *vdso_address = reinterpret_cast<uint8_t*>(0x80040000);
-	mem_mapping_t *vdso_mapping = allocate<mem_mapping_t>(this, vdso_address, len_to_pages(vdso_size), nullptr, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE);
+	mem_mapping_t *vdso_mapping = allocate<mem_mapping_t>(this, vdso_address, len_to_pages(vdso_size), nullptr, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE, false);
 	add_mem_mapping(vdso_mapping);
 	vdso_mapping->ensure_completely_backed();
 	memcpy(vdso_address, vdso_blob, vdso_size);
@@ -802,7 +823,7 @@ cloudabi_errno_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *
 	uint8_t *auxv_address = reinterpret_cast<uint8_t*>(0x80010000);
 	uint8_t *pid_address = auxv_address + auxv_size;
 	auxv_size += sizeof(pid);
-	mem_mapping_t *auxv_mapping = allocate<mem_mapping_t>(this, auxv_address, len_to_pages(auxv_size), nullptr, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE);
+	mem_mapping_t *auxv_mapping = allocate<mem_mapping_t>(this, auxv_address, len_to_pages(auxv_size), nullptr, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE, false);
 	add_mem_mapping(auxv_mapping);
 	auxv_mapping->ensure_completely_backed();
 	memcpy(pid_address, pid, sizeof(pid));
@@ -852,7 +873,7 @@ cloudabi_errno_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *
 	size_t userland_stack_size = 0x10000 /* 64 kb */;
 	uint8_t *userland_stack_top = reinterpret_cast<uint8_t*>(0x80000000);
 	uint8_t *userland_stack_bottom = userland_stack_top - userland_stack_size;
-	mem_mapping_t *stack_mapping = allocate<mem_mapping_t>(this, userland_stack_bottom, len_to_pages(userland_stack_size), nullptr, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE);
+	mem_mapping_t *stack_mapping = allocate<mem_mapping_t>(this, userland_stack_bottom, len_to_pages(userland_stack_size), nullptr, 0, CLOUDABI_PROT_READ | CLOUDABI_PROT_WRITE, false);
 	add_mem_mapping(stack_mapping);
 	stack_mapping->ensure_backed(len_to_pages(userland_stack_size) - 1);
 
