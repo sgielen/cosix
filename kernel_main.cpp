@@ -21,6 +21,7 @@
 #include "fd/scheduler.hpp"
 #include "fd/bootfs.hpp"
 #include "fd/initrdfs.hpp"
+#include "fd/shmfs.hpp"
 #include "memory/allocator.hpp"
 #include "memory/page_allocator.hpp"
 #include "memory/map_virtual.hpp"
@@ -166,6 +167,9 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	global.init->install_page_directory();
 	stream << "Paging directory loaded, paging is in effect\n";
 	vmap.free_paging_stage2();
+
+	shmfs shared_memory_filesystem;
+	global.shmfs = &shared_memory_filesystem;
 
 	{
 		auto bootfs_fd = bootfs::get_root_fd();

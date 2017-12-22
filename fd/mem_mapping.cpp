@@ -187,6 +187,9 @@ void mem_mapping_t::ensure_backed(size_t page)
 		size_t bytes_read = 0;
 		if(backing_fd) {
 			bytes_read = backing_fd->pread(reinterpret_cast<char*>(b.ptr), PAGE_SIZE, fd_offset(page));
+			if(bytes_read != PAGE_SIZE && backing_fd->error == 0) {
+				backing_fd->error = EIO;
+			}
 			if(backing_fd->error != 0) {
 				// TODO: what now?
 				get_vga_stream() << "backing fd pread() failed for a page being backed!\n";
@@ -293,9 +296,12 @@ cloudabi_errno_t mem_mapping_t::sync(size_t page, cloudabi_msflags_t flags) {
 		// first, mark it nondirty
 		*page_entry = *page_entry & ~0x40;
 		// then, flush it to the fd
-		auto res = backing_fd->pwrite(reinterpret_cast<char*>(page_addr), PAGE_SIZE, fd_offset(page));
-		if(res != 0) {
-			return res;
+		auto bytes_written = backing_fd->pwrite(reinterpret_cast<char*>(page_addr), PAGE_SIZE, fd_offset(page));
+		if(bytes_written != PAGE_SIZE && backing_fd->error == 0) {
+			backing_fd->error = EIO;
+		}
+		if(backing_fd->error != 0) {
+			return backing_fd->error;
 		}
 	}
 

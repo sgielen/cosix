@@ -15,6 +15,7 @@ if(BAREMETAL_ENABLED)
 		ifstoresock.cpp ifstoresock.hpp
 		rawsock.cpp rawsock.hpp
 		reverse_fd.cpp reverse_fd.hpp
+		shmfs.cpp shmfs.hpp
 	)
 
 	# for elf.h:

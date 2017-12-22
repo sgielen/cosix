@@ -1,6 +1,7 @@
 #include <proc/syscalls.hpp>
 #include <fd/process_fd.hpp>
 #include <fd/unixsock.hpp>
+#include <fd/shmfs.hpp>
 #include <global.hpp>
 
 using namespace cloudos;
@@ -21,7 +22,17 @@ cloudabi_errno_t cloudos::syscall_fd_create1(syscall_context &c)
 	auto type = args.first();
 
 	if(type == CLOUDABI_FILETYPE_SHARED_MEMORY) {
-		return ENOSYS;
+		auto shm = get_shmfs()->get_shm();
+		auto sock_rights = 0
+			| CLOUDABI_RIGHT_FD_READ
+			| CLOUDABI_RIGHT_FD_WRITE
+			| CLOUDABI_RIGHT_FILE_STAT_FGET
+			| CLOUDABI_RIGHT_FILE_STAT_FPUT_SIZE
+			| CLOUDABI_RIGHT_MEM_MAP
+			| CLOUDABI_RIGHT_MEM_MAP_EXEC;
+		auto fd = c.process()->add_fd(shm, sock_rights, 0);
+		c.result = fd;
+		return 0;
 	} else {
 		return EINVAL;
 	}
