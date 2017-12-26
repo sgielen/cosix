@@ -29,7 +29,7 @@ file_entry reverse_handler::lookup(pseudofd_t, const char*, size_t, cloudabi_loo
 	throw cloudabi_system_error(EINVAL);
 }
 
-pseudofd_t reverse_handler::open(cloudabi_inode_t, int) {
+pseudofd_t reverse_handler::open(cloudabi_inode_t, cloudabi_oflags_t) {
 	throw cloudabi_system_error(EINVAL);
 }
 

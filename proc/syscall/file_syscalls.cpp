@@ -118,6 +118,11 @@ cloudabi_errno_t cloudos::syscall_file_open(syscall_context &c)
 	auto path = args.second();
 	auto pathlen = args.third();
 	auto oflags = args.fourth();
+
+	if((oflags & ~(CLOUDABI_O_CREAT | CLOUDABI_O_DIRECTORY | CLOUDABI_O_EXCL | CLOUDABI_O_TRUNC)) != 0) {
+		return EINVAL;
+	}
+
 	auto new_fd = mapping->fd->openat(path, pathlen, lookupflags, oflags, fds);
 	if(!new_fd || mapping->fd->error != 0) {
 		if(mapping->fd->error == 0) {
@@ -134,6 +139,23 @@ cloudabi_errno_t cloudos::syscall_file_open(syscall_context &c)
 	}
 	if(new_fd->type != CLOUDABI_FILETYPE_REGULAR_FILE) {
 		base &= ~(CLOUDABI_RIGHT_PROC_EXEC);
+	}
+	if(new_fd->type != CLOUDABI_FILETYPE_DIRECTORY) {
+		// remove all rights that only make sense on directories
+		base &= ~(0
+			| CLOUDABI_RIGHT_FILE_CREATE_DIRECTORY
+			| CLOUDABI_RIGHT_FILE_CREATE_FILE
+			| CLOUDABI_RIGHT_FILE_LINK_SOURCE
+			| CLOUDABI_RIGHT_FILE_LINK_TARGET
+			| CLOUDABI_RIGHT_FILE_OPEN
+			| CLOUDABI_RIGHT_FILE_READDIR
+			| CLOUDABI_RIGHT_FILE_READLINK
+			| CLOUDABI_RIGHT_FILE_RENAME_SOURCE
+			| CLOUDABI_RIGHT_FILE_RENAME_TARGET
+			| CLOUDABI_RIGHT_FILE_STAT_GET
+			| CLOUDABI_RIGHT_FILE_SYMLINK
+			| CLOUDABI_RIGHT_FILE_UNLINK
+		);
 	}
 
 	c.result = c.process()->add_fd(new_fd, base, inheriting);

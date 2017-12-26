@@ -51,7 +51,7 @@ file_entry tmpfs::lookup(pseudofd_t pseudo, const char *path, size_t len, clouda
 	}
 }
 
-pseudofd_t tmpfs::open(cloudabi_inode_t inode, int)
+pseudofd_t tmpfs::open(cloudabi_inode_t inode, cloudabi_oflags_t oflags)
 {
 	file_entry_ptr entry = get_file_entry_from_inode(inode);
 
@@ -63,6 +63,11 @@ pseudofd_t tmpfs::open(cloudabi_inode_t inode, int)
 	}
 
 	entry->access_time = timestamp();
+
+	if(oflags & CLOUDABI_O_TRUNC) {
+		entry->contents.clear();
+		entry->content_time = entry->metadata_time = timestamp();
+	}
 
 	pseudo_fd_ptr pseudo(new pseudo_fd_entry);
 	pseudo->file = entry;
