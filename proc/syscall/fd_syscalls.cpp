@@ -227,6 +227,10 @@ cloudabi_errno_t cloudos::syscall_fd_seek(syscall_context &c)
 	auto offset = args.second();
 	auto whence = args.third();
 
+	if(whence != CLOUDABI_WHENCE_CUR && whence != CLOUDABI_WHENCE_END && whence != CLOUDABI_WHENCE_SET) {
+		return EINVAL;
+	}
+
 	cloudabi_rights_t rights_needed = CLOUDABI_RIGHT_FD_TELL;
 	if(whence != CLOUDABI_WHENCE_CUR || offset != 0) {
 		rights_needed |= CLOUDABI_RIGHT_FD_SEEK;
