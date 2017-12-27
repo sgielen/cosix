@@ -62,8 +62,20 @@ char *cosix::handle_request(reverse_request_t *request, char *buf, reverse_respo
 			response->result = 0;
 			break;
 		case op::pwrite:
+			if(request->flags & CLOUDABI_FDFLAG_APPEND) {
+				// TODO: don't do this in pwrite, but create ::write and do it there
+				cloudabi_filestat_t statbuf;
+				h->stat_fget(request->pseudofd, &statbuf);
+				request->offset = statbuf.st_size;
+			}
 			h->pwrite(request->pseudofd, request->offset, buf, request->send_length);
-			response->result = 0;
+			if(request->flags & CLOUDABI_FDFLAG_APPEND) {
+				cloudabi_filestat_t statbuf;
+				h->stat_fget(request->pseudofd, &statbuf);
+				response->result = statbuf.st_size;
+			} else {
+				response->result = 0;
+			}
 			break;
 		case op::unlink:
 			h->unlink(request->pseudofd, buf, request->send_length, request->flags);

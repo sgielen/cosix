@@ -124,17 +124,20 @@ size_t pseudo_fd::write(const char *str, size_t size)
 	request.pseudofd = pseudo_id;
 	request.op = reverse_request_t::operation::pwrite;
 	request.inode = 0;
-	request.flags = 0;
+	request.flags = flags & CLOUDABI_FDFLAG_APPEND;
 	request.offset = pos;
 	request.send_length = size;
 	reverse_response_t response;
 	maybe_deallocate(send_request(&request, str, &response));
 	if(response.result < 0) {
 		error = -response.result;
+	} else if(flags & CLOUDABI_FDFLAG_APPEND) {
+		pos = response.result;
+		error = 0;
 	} else {
+		pos += size;
 		error = 0;
 	}
-	pos += size;
 	return size;
 }
 
@@ -193,6 +196,9 @@ shared_ptr<fd_t> pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_lo
 		inode = response.result;
 	} else if(response.result < 0) {
 		error = -response.result;
+		return nullptr;
+	} else if(oflags & CLOUDABI_O_EXCL) {
+		error = EEXIST;
 		return nullptr;
 	} else {
 		inode = response.result;

@@ -26,7 +26,7 @@ struct reverse_request_t {
 		link, // offset is lookupflags, send fd2 as 'flags', and buffer is 'path1<nullbyte>path2'
 		unlink,
 		pread,
-		pwrite,
+		pwrite, // if flags is CLOUDABI_FDFLAG_APPEND, ignore offset, always append, return pos in result
 		close,
 		// the calls below are for UNIX sockets; inode is 0
 		sock_shutdown,

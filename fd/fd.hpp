@@ -285,8 +285,16 @@ struct seekable_fd_t : public fd_t {
 			return 0;
 		}
 		assert(pos == offset);
+
+		bool had_append = flags & CLOUDABI_FDFLAG_APPEND;
+		flags &= ~CLOUDABI_FDFLAG_APPEND;
+
 		auto written = write(str, count);
 		auto write_error = error;
+
+		if(had_append) {
+			flags |= CLOUDABI_FDFLAG_APPEND;
+		}
 
 		seek(oldpos, CLOUDABI_WHENCE_SET);
 		if(write_error) {
