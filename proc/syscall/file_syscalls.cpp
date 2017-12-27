@@ -131,10 +131,18 @@ cloudabi_errno_t cloudos::syscall_file_open(syscall_context &c)
 		return mapping->fd->error;
 	}
 
+	// A directory may not be opened read-write
+	// (TODO: this should probably be done directly in openat, but openat doesn't know
+	// whether the file should be opened rdonly/wronly/rdwr)
+	if(new_fd->type == CLOUDABI_FILETYPE_DIRECTORY && fds->fs_rights_base & CLOUDABI_RIGHT_FD_WRITE) {
+		// because the fd isn't added to the process, it will be destructed again
+		return EISDIR;
+	}
+
 	// Depending on filetype, drop some rights if they don't make sense
 	auto base = fds->fs_rights_base;
 	auto inheriting = fds->fs_rights_inheriting;
-	if(new_fd->type == CLOUDABI_FILETYPE_REGULAR_FILE) {
+	if(new_fd->type != CLOUDABI_FILETYPE_DIRECTORY) {
 		inheriting = 0;
 	}
 	if(new_fd->type != CLOUDABI_FILETYPE_REGULAR_FILE) {
@@ -153,8 +161,18 @@ cloudabi_errno_t cloudos::syscall_file_open(syscall_context &c)
 			| CLOUDABI_RIGHT_FILE_RENAME_SOURCE
 			| CLOUDABI_RIGHT_FILE_RENAME_TARGET
 			| CLOUDABI_RIGHT_FILE_STAT_GET
+			| CLOUDABI_RIGHT_FILE_STAT_PUT_TIMES
 			| CLOUDABI_RIGHT_FILE_SYMLINK
 			| CLOUDABI_RIGHT_FILE_UNLINK
+		);
+	} else {
+		// remove all rights that don't make sense on directories
+		base &= ~(0
+			| CLOUDABI_RIGHT_FD_READ
+			| CLOUDABI_RIGHT_FD_SEEK
+			| CLOUDABI_RIGHT_FD_TELL
+			| CLOUDABI_RIGHT_MEM_MAP
+			| CLOUDABI_RIGHT_MEM_MAP_EXEC
 		);
 	}
 

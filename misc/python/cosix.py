@@ -118,7 +118,7 @@ def rm_rf(name, dir_fd):
 def run_unittests():
   rm_rf('unittests', sys.argdata['tmpdir'])
   os.mkdir('unittests', dir_fd=sys.argdata['tmpdir'])
-  dirfd = os.open("unittests", os.O_RDWR, dir_fd=sys.argdata['tmpdir'])
+  dirfd = os.open("unittests", os.O_RDONLY, dir_fd=sys.argdata['tmpdir'])
 
   binfd = os.open("unittests", os.O_RDONLY, dir_fd=sys.argdata['bootfs'])
   procfd = os.program_spawn(binfd,

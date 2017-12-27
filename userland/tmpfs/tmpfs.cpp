@@ -62,6 +62,10 @@ pseudofd_t tmpfs::open(cloudabi_inode_t inode, cloudabi_oflags_t oflags)
 		throw cloudabi_system_error(EINVAL);
 	}
 
+	if(oflags & CLOUDABI_O_DIRECTORY && entry->type != CLOUDABI_FILETYPE_DIRECTORY) {
+		throw cloudabi_system_error(ENOTDIR);
+	}
+
 	entry->access_time = timestamp();
 
 	if(oflags & CLOUDABI_O_TRUNC) {
