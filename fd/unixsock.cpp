@@ -175,15 +175,40 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 	assert(type == CLOUDABI_FILETYPE_SOCKET_DGRAM
 	    || type == CLOUDABI_FILETYPE_SOCKET_STREAM);
 
-	if(recv_messages == nullptr) {
+	bool waitall = type == CLOUDABI_FILETYPE_SOCKET_STREAM && in->ri_flags & CLOUDABI_SOCK_RECV_WAITALL;
+	bool peek = in->ri_flags & CLOUDABI_SOCK_RECV_PEEK;
+
+	size_t wanted_data = 0;
+	if(waitall) {
+		for(size_t i = 0; i < in->ri_data_len; ++i) {
+			wanted_data += in->ri_data[i].buf_len;
+		}
+	}
+
+	while(true) {
+		// see if condition is already satisfied
+		if(waitall) {
+			// count number of bytes present
+			size_t bytes_present = 0;
+			for(auto *message = recv_messages; message; message = message->next) {
+				bytes_present += message->data->buf.size - message->data->stream_data_recv;
+			}
+			if(bytes_present >= wanted_data) {
+				break;
+			}
+		} else {
+			if(recv_messages != nullptr) {
+				break;
+			}
+		}
+
 		auto other = othersock.lock();
 		if(!other || other->status == sockstatus_t::SHUTDOWN) {
-			// there are no messages and othersock is already destroyed or shut down, so signal EOF
+			// there is not enough data and othersock is already destroyed or shut down, so signal EOF
 			error = 0;
 			return;
 		}
 		assert(other->othersock.lock().get() == this);
-
 		assert(other->status == sockstatus_t::CONNECTED || other->status == sockstatus_t::SHUTDOWN);
 
 		if(flags & CLOUDABI_FDFLAG_NONBLOCK) {
@@ -192,18 +217,10 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 		}
 
 		// wait until there is at least one more message
-		while(other && other->status == sockstatus_t::CONNECTED && recv_messages == nullptr) {
-			// release other, so it can be destructed during this wait() if needed
-			other.reset();
-			recv_messages_cv.wait();
-			other = othersock.lock();
-		}
-
-		if(recv_messages == nullptr) {
-			// other socket is in shutdown and there are no messages
-			error = 0;
-			return;
-		}
+		// release other, so it can be destructed during this wait() if needed
+		other.reset();
+		recv_messages_cv.wait();
+		other = othersock.lock();
 	}
 	assert(recv_messages);
 
@@ -212,8 +229,10 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 		// with only it
 		auto item = recv_messages;
 		auto message = item->data;
-		recv_messages = item->next;
-		deallocate(item);
+		if(!peek) {
+			recv_messages = item->next;
+			deallocate(item);
+		}
 
 		char *buffer = reinterpret_cast<char*>(message->buf.ptr);
 		size_t datalen = 0;
@@ -249,7 +268,9 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 			}
 			auto d = fd_item;
 			fd_item = fd_item->next;
-			deallocate(d);
+			if(!peek) {
+				deallocate(d);
+			}
 		}
 
 		num_recv_bytes -= datalen;
@@ -257,9 +278,11 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 		out->ro_fdslen = fds_set;
 		error = 0;
 
-		deallocate(message->buf);
-		deallocate(message);
-		send_signaler.condition_broadcast();
+		if(!peek) {
+			deallocate(message->buf);
+			deallocate(message);
+			send_signaler.condition_broadcast();
+		}
 	} else if(type == CLOUDABI_FILETYPE_SOCKET_STREAM) {
 		// Stream receiving: while the current buffers aren't full,
 		// fill them with parts of the next message, taking them off
@@ -272,19 +295,23 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 		size_t messages_consumed = 0;
 		bool next_message_read = false;
 		bool fd_boundary_encountered = false;
+		size_t stream_data_recv = recv_message->data->stream_data_recv;
 		for(size_t i = 0; i < in->ri_data_len && recv_message && !fd_boundary_encountered; ++i) {
 			auto &iovec = in->ri_data[i];
 			size_t written = 0;
 			while(written < iovec.buf_len && recv_message && !fd_boundary_encountered) {
 				auto *body = recv_message->data;
-				assert(body->buf.size >= body->stream_data_recv);
-				size_t message_remaining = body->buf.size - body->stream_data_recv;
+				assert(body->buf.size >= stream_data_recv);
+				size_t message_remaining = body->buf.size - stream_data_recv;
 				if(message_remaining > 0) {
 					size_t iovec_remaining = iovec.buf_len - written;
 					size_t copy = iovec_remaining < message_remaining ? iovec_remaining : message_remaining;
 					memcpy(reinterpret_cast<char*>(iovec.buf) + written,
-						reinterpret_cast<char*>(body->buf.ptr) + body->stream_data_recv, copy);
-					body->stream_data_recv += copy;
+						reinterpret_cast<char*>(body->buf.ptr) + stream_data_recv, copy);
+					stream_data_recv += copy;
+					if(!peek) {
+						body->stream_data_recv = stream_data_recv;
+					}
 					written += copy;
 					message_remaining -= copy;
 					assert(copy > 0);
@@ -293,6 +320,9 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 				if(message_remaining == 0) {
 					// no data left in this buffer
 					recv_message = recv_message->next;
+					if(recv_message) {
+						stream_data_recv = recv_message->data->stream_data_recv;
+					}
 					++messages_consumed;
 					next_message_read = false;
 
@@ -326,28 +356,34 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 				}
 				auto d = fd_item;
 				fd_item = fd_item->next;
-				deallocate(d);
+				if(!peek) {
+					deallocate(d);
+				}
 			}
-			recv_messages->data->fd_list = nullptr;
+			if(!peek) {
+				recv_messages->data->fd_list = nullptr;
+			}
 
 			recv_message = recv_message->next;
 		}
 
-		for(; messages_consumed > 0; --messages_consumed) {
-			assert(recv_messages);
+		if(!peek) {
+			for(; messages_consumed > 0; --messages_consumed) {
+				assert(recv_messages);
 
-			auto *d = recv_messages;
-			recv_messages = recv_messages->next;
-			deallocate(d->data->buf);
-			deallocate(d->data);
-			deallocate(d);
+				auto *d = recv_messages;
+				recv_messages = recv_messages->next;
+				deallocate(d->data->buf);
+				deallocate(d->data);
+				deallocate(d);
+			}
 		}
 
 		num_recv_bytes -= total_written;
 		out->ro_datalen = total_written;
 		out->ro_fdslen = fds_set;
 		error = 0;
-		if(total_written > 0) {
+		if(!peek && total_written > 0) {
 			send_signaler.condition_broadcast();
 		}
 	}
