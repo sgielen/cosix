@@ -5,13 +5,12 @@ addons:
   apt:
     sources:
     - llvm-toolchain-trusty-4.0
-    - sourceline: 'deb https://nuxi.nl/distfiles/cloudabi-ports/debian/ cloudabi cloudabi'
+    - sourceline: 'deb http://nuxi.nl/distfiles/cloudabi-ports/debian/ cloudabi cloudabi'
       key_url: 'https://pgp.mit.edu/pks/lookup?op=get&search=0x0DA51B8531344B15'
     packages:
     - clang-4.0
     - lld-4.0
     - qemu-system-x86
-    - apt-transport-https
     - i686-unknown-cloudabi-cxx-runtime
     - i686-unknown-cloudabi-libircclient
     - i686-unknown-cloudabi-mstd
