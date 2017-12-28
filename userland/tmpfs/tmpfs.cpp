@@ -320,15 +320,17 @@ size_t tmpfs::pread(pseudofd_t pseudo, off_t offset, char *dest, size_t requeste
 		throw cloudabi_system_error(EBADF);
 	}
 
+	entry->access_time = timestamp();
+
 	if(offset > entry->contents.size()) {
-		throw cloudabi_system_error(EINVAL /* The specified file offset is invalid */);
+		// EOF
+		return 0;
 	}
 
 	size_t remaining = entry->contents.size() - offset;
 	size_t returned = remaining < requested ? remaining : requested;
 	const char *data = entry->contents.c_str() + offset;
 	memcpy(dest, data, returned);
-	entry->access_time = timestamp();
 	return returned;
 }
 
@@ -596,4 +598,13 @@ file_entry_ptr tmpfs::get_file_entry_from_pseudo(pseudofd_t pseudo)
 	} else {
 		throw cloudabi_system_error(EBADF);
 	}
+}
+
+bool tmpfs::is_readable(pseudofd_t pseudo) {
+	auto entry = get_file_entry_from_pseudo(pseudo);
+	if(entry->type == CLOUDABI_FILETYPE_REGULAR_FILE) {
+		// regular file always returns true
+		return true;
+	}
+	throw cloudabi_system_error(EINVAL);
 }

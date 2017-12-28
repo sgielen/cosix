@@ -54,6 +54,7 @@ struct tmpfs : public cosix::reverse_handler {
 	void stat_fget(pseudofd_t pseudo, cloudabi_filestat_t *statbuf) override;
 	void stat_fput(pseudofd_t pseudo, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags) override;
 	void stat_put(pseudofd_t pseudo, cloudabi_lookupflags_t lookupflags, const char *path, size_t pathlen, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags) override;
+	bool is_readable(pseudofd_t pseudo) override;
 
 private:
 	std::map<cloudabi_inode_t, file_entry_ptr> inodes;
