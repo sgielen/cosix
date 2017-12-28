@@ -23,7 +23,8 @@ struct unixsock : public sock_t, public enable_shared_from_this<unixsock> {
 	~unixsock() override;
 
 	size_t bytes_readable() const;
-	bool has_messages() const;
+	bool is_readable();
+	bool is_shutdown();
 	bool is_writeable();
 	cloudabi_errno_t get_read_signaler(thread_condition_signaler **s) override;
 	cloudabi_errno_t get_write_signaler(thread_condition_signaler **s) override;
@@ -36,6 +37,8 @@ struct unixsock : public sock_t, public enable_shared_from_this<unixsock> {
 	void sock_shutdown(cloudabi_sdflags_t how) override;
 	void sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out) override;
 	void sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *out) override;
+
+	thread_condition_data *allocate_current_condition_data();
 
 protected:
 	// This function is called by another unixsock when bytes were just added to

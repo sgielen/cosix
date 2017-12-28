@@ -9,7 +9,7 @@ static void maybe_deallocate(Blk b) {
 	}
 }
 
-static bool pseudofd_is_readable(void *r, thread_condition*) {
+static bool pseudofd_is_readable(void *r, thread_condition*, thread_condition_data**) {
 	auto *fd = reinterpret_cast<pseudo_fd*>(r);
 	return fd->is_readable();
 }

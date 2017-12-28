@@ -138,6 +138,8 @@ struct process_fd : public fd_t {
 		return !running;
 	}
 
+	thread_condition_data *allocate_current_condition_data();
+
 	inline bool is_terminated(cloudabi_exitcode_t &c, cloudabi_signal_t &s) {
 		if(running) {
 			return false;

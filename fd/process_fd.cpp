@@ -22,8 +22,18 @@ using namespace cloudos;
 
 extern uint32_t _kernel_virtual_base;
 
-static bool process_already_terminated(void *userdata, thread_condition*) {
-	return reinterpret_cast<process_fd*>(userdata)->is_terminated();
+static bool process_already_terminated(void *userdata, thread_condition*, thread_condition_data **conditiondata) {
+	auto *process = reinterpret_cast<process_fd*>(userdata);
+	if(!conditiondata) {
+		// only want to know if it terminated
+		return process->is_terminated();
+	} else {
+		auto *cd = process->allocate_current_condition_data();
+		if(cd) {
+			*conditiondata = cd;
+		}
+		return cd != nullptr;
+	}
 }
 
 process_fd::process_fd(const char *n)
@@ -976,7 +986,7 @@ void process_fd::exit(cloudabi_exitcode_t c, cloudabi_signal_t s)
 
 	get_vga_stream() << "Process \"" << name << "\" exited with signal " << exitsignal << ", code " << exitcode << ".\n";
 
-	termination_signaler.condition_broadcast();
+	termination_signaler.condition_broadcast(allocate_current_condition_data());
 
 	for(size_t i = 0; i < fd_capacity; ++i) {
 		close_fd(i);
@@ -1108,4 +1118,20 @@ void process_fd::exit_all_threads() {
 	}
 	assert(threads == nullptr);
 	last_thread = MAIN_THREAD - 1;
+}
+
+thread_condition_data *process_fd::allocate_current_condition_data()
+{
+	cloudabi_signal_t signal;
+	cloudabi_exitcode_t exitcode;
+
+	bool term = is_terminated(exitcode, signal);
+	if(term) {
+		auto *cd = allocate<thread_condition_data_proc_terminate>();
+		cd->signal = signal;
+		cd->exitcode = exitcode;
+		return cd;
+	} else {
+		return nullptr;
+	}
 }

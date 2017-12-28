@@ -3,7 +3,7 @@
 
 using namespace cloudos;
 
-static bool rawsock_is_readable(void *r, thread_condition*) {
+static bool rawsock_is_readable(void *r, thread_condition*, thread_condition_data**) {
 	auto *rawsock = reinterpret_cast<struct rawsock*>(r);
 	return rawsock->has_messages();
 }

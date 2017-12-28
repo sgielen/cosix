@@ -3,12 +3,16 @@
 
 using namespace cloudos;
 
-static bool unixsock_is_readable(void *r, thread_condition*) {
+static bool unixsock_is_readable(void *r, thread_condition*, thread_condition_data **conditiondata) {
 	auto *unixsock = reinterpret_cast<struct unixsock*>(r);
-	return unixsock->has_messages();
+	bool readable = unixsock->is_readable();
+	if(readable && conditiondata) {
+		*conditiondata = unixsock->allocate_current_condition_data();
+	}
+	return readable;
 }
 
-static bool unixsock_is_writeable(void *r, thread_condition*) {
+static bool unixsock_is_writeable(void *r, thread_condition*, thread_condition_data **) {
 	auto *unixsock = reinterpret_cast<struct unixsock*>(r);
 	return unixsock->is_writeable();
 }
@@ -48,9 +52,18 @@ size_t unixsock::bytes_readable() const
 	return num_recv_bytes;
 }
 
-bool unixsock::has_messages() const
+bool unixsock::is_readable()
 {
-	return recv_messages != nullptr;
+	if(recv_messages != nullptr) {
+		return true;
+	}
+	return is_shutdown();
+}
+
+bool unixsock::is_shutdown()
+{
+	auto other = othersock.lock();
+	return !other || other->status == sockstatus_t::SHUTDOWN;
 }
 
 bool unixsock::is_writeable()
@@ -64,16 +77,15 @@ bool unixsock::is_writeable()
 	return other->num_recv_bytes != MAX_SIZE_BUFFERS;
 }
 
+thread_condition_data *unixsock::allocate_current_condition_data() {
+	auto *cd = allocate<thread_condition_data_fd_readwrite>();
+	cd->nbytes = bytes_readable();
+	cd->flags = is_shutdown() ? CLOUDABI_EVENT_FD_READWRITE_HANGUP : 0;
+	return cd;
+}
+
 cloudabi_errno_t unixsock::get_read_signaler(thread_condition_signaler **s)
 {
-	if(status != sockstatus_t::CONNECTED && status != sockstatus_t::SHUTDOWN) {
-		return EPIPE;
-	}
-	auto other = othersock.lock();
-	if(!other || other->status == sockstatus_t::SHUTDOWN) {
-		// EOF
-		return EPIPE;
-	}
 	*s = &recv_signaler;
 	return 0;
 }
@@ -458,7 +470,7 @@ void unixsock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *out)
 	append(&other->recv_messages, message_item);
 	other->num_recv_bytes += total_message_size;
 	assert(other->num_recv_bytes <= MAX_SIZE_BUFFERS);
-	other->recv_signaler.condition_broadcast();
+	other->recv_signaler.condition_broadcast(other->allocate_current_condition_data());
 	other->recv_messages_cv.notify();
 	other->have_bytes_received();
 	out->so_datalen = total_message_size;

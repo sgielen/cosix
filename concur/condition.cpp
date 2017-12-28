@@ -14,12 +14,30 @@ thread_condition::~thread_condition()
 	if(signaler) {
 		cancel();
 	}
+	if(conditiondata) {
+		// this is a pointer to a base class, while implementations
+		// will always be of a derived class. Since the number of
+		// derived implementations are limited here, we can try them
+		// all; however, this may not work in the future and then we
+		// should keep track of the size of the block (either here or
+		// in the allocator).
+		if(auto *ptr = dynamic_cast<thread_condition_data_proc_terminate*>(conditiondata)) {
+			deallocate(ptr);
+		} else if(auto *ptr = dynamic_cast<thread_condition_data_fd_readwrite*>(conditiondata)) {
+			deallocate(ptr);
+		} else {
+			// don't know how to deallocate this
+			deallocate(conditiondata);
+		}
+	}
 }
 
-void thread_condition::satisfy()
+void thread_condition::satisfy(thread_condition_data *c)
 {
 	auto thr = thread.lock();
 	assert(thr);
+	assert(conditiondata == nullptr);
+	conditiondata = c;
 	satisfied = true;
 	// unblock if it was blocked
 	if(thr->is_blocked()) {
@@ -68,8 +86,11 @@ void thread_condition_signaler::set_already_satisfied_function(thread_condition_
 	satisfied_function_userdata = userdata;
 }
 
-bool thread_condition_signaler::already_satisfied(thread_condition *c) {
-	return satisfied_function ? satisfied_function(satisfied_function_userdata, c) : false;
+bool thread_condition_signaler::already_satisfied(thread_condition *c, thread_condition_data **conditiondata) {
+	if(*conditiondata) {
+		*conditiondata = nullptr;
+	}
+	return satisfied_function ? satisfied_function(satisfied_function_userdata, c, conditiondata) : false;
 }
 
 void thread_condition_signaler::subscribe_condition(thread_condition *c)
@@ -86,10 +107,10 @@ void thread_condition_signaler::remove_condition(thread_condition *c)
 	});
 }
 
-void thread_condition_signaler::condition_notify() {
+void thread_condition_signaler::condition_notify(thread_condition_data *conditiondata) {
 	if(conditions) {
 		auto *c = conditions;
-		conditions->data->satisfy();
+		conditions->data->satisfy(conditiondata);
 		// satisfy will call remove_condition(), which will call
 		// remove_one(), assert that the first condition changed
 		(void)c;
@@ -97,10 +118,10 @@ void thread_condition_signaler::condition_notify() {
 	}
 }
 
-void thread_condition_signaler::condition_broadcast() {
+void thread_condition_signaler::condition_broadcast(thread_condition_data *conditiondata) {
 	while(conditions) {
 		auto *c = conditions;
-		conditions->data->satisfy();
+		conditions->data->satisfy(conditiondata);
 		// satisfy will call remove_condition(), which will call
 		// remove_one(), assert that the first condition changed
 		(void)c;
@@ -146,7 +167,8 @@ void thread_condition_waiter::wait() {
 		assert(c);
 		assert(c->signaler);
 
-		if(c->signaler->already_satisfied(c)) {
+		thread_condition_data *conditiondata = nullptr;
+		if(c->signaler->already_satisfied(c, &conditiondata)) {
 			initially_satisfied = true;
 
 			if(!c->satisfied) {
@@ -154,7 +176,7 @@ void thread_condition_waiter::wait() {
 				c->thread = thr;
 				c->signaler->subscribe_condition(c);
 				// then satisfy it again
-				c->satisfy();
+				c->satisfy(conditiondata);
 			}
 		}
 	});

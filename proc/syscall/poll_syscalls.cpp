@@ -6,7 +6,7 @@
 
 using namespace cloudos;
 
-static bool return_true(void*, thread_condition*) {
+static bool return_true(void*, thread_condition*, thread_condition_data**) {
 	return true;
 }
 
@@ -215,34 +215,27 @@ cloudabi_errno_t cloudos::syscall_poll(syscall_context &c)
 		assert(nevents <= nsubscriptions);
 
 		thread_condition_userdata *userdata = reinterpret_cast<thread_condition_userdata*>(item->data->userdata);
+		thread_condition_data *waiterdata = item->data->conditiondata;
+
 		auto *i = userdata->subscription;
 		o.userdata = i->userdata;
 		o.type = i->type;
 		o.error = userdata->error;
 		if(i->type == CLOUDABI_EVENTTYPE_PROC_TERMINATE && o.error == 0) {
-			cloudabi_fd_t proc_fdnum = i->proc_terminate.fd;
-			// TODO: store signal and exitcode in the thread_condition when the process dies,
-			// so that if we closed the fd in the meantime, we don't error out here
-			fd_mapping_t *proc_mapping;
-			auto res = c.process()->get_fd(&proc_mapping, proc_fdnum, 0);
-			if(res != 0) {
-				o.error = res;
-				return;
-			}
-			shared_ptr<fd_t> proc_fd = proc_mapping->fd;
-			if(proc_fd->type != CLOUDABI_FILETYPE_PROCESS) {
-				o.error = EINVAL;
-				return;
-			}
-			auto proc = proc_fd.reinterpret_as<process_fd>();
-			if(!proc->is_terminated(o.proc_terminate.exitcode, o.proc_terminate.signal)) {
-				o.error = EINVAL;
-				return;
-			}
+			auto *waiterdata_proc = dynamic_cast<thread_condition_data_proc_terminate*>(waiterdata);
+			assert(waiterdata_proc);
+
+			o.proc_terminate.signal = waiterdata_proc->signal;
+			o.proc_terminate.exitcode = waiterdata_proc->exitcode;
 		} else if(i->type == CLOUDABI_EVENTTYPE_FD_READ || i->type == CLOUDABI_EVENTTYPE_FD_WRITE) {
-			// TODO set nbytes and flags correctly
-			o.fd_readwrite.nbytes = o.error == 0 ? 0xffff : 0;
-			o.fd_readwrite.flags = 0;
+			auto *waiterdata_fd = dynamic_cast<thread_condition_data_fd_readwrite*>(waiterdata);
+			if(!waiterdata_fd) {
+				o.fd_readwrite.nbytes = o.error == 0 ? 0xffff : 0;
+				o.fd_readwrite.flags = 0;
+			} else {
+				o.fd_readwrite.nbytes = waiterdata_fd->nbytes;
+				o.fd_readwrite.flags = waiterdata_fd->flags;
+			}
 		} else if(i->type == CLOUDABI_EVENTTYPE_LOCK_RDLOCK || i->type == CLOUDABI_EVENTTYPE_LOCK_WRLOCK
 		|| i->type == CLOUDABI_EVENTTYPE_CONDVAR) {
 			// remove all received locks and signaled cv's from the waiting lists
