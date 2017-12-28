@@ -1,6 +1,7 @@
-import os
-import sys
 import code
+import os
+import stat
+import sys
 import time
 
 original_print = print
@@ -100,13 +101,16 @@ def rm_rf(name, dir_fd):
   try:
     os.unlink(name, dir_fd=dir_fd)
     return
-  except IsADirectoryError:
-    pass
+  except PermissionError:
+    # this might be because the file is a directory
+    statbuf = os.stat(name, dir_fd=dir_fd)
+    if not stat.S_ISDIR(statbuf.st_mode):
+      raise
   except FileNotFoundError:
     return
   fd = -1
   try:
-    fd = os.open(name, os.O_RDWR, dir_fd=dir_fd)
+    fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY, dir_fd=dir_fd)
     for file in os.listdir(fd):
       rm_rf(file, fd)
     os.rmdir(name, dir_fd=dir_fd)
