@@ -145,8 +145,7 @@ void vga_buffer::scroll() {
 }
 
 void vga_buffer::write(const char *data) {
-	size_t datalen = strlen(data);
-	for (size_t i = 0; i < datalen; ++i) {
-		putc(data[i]);
+	for(; *data != 0; data++) {
+		putc(*data);
 	}
 }
