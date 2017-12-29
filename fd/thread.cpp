@@ -421,6 +421,7 @@ void thread::cancel_userspace_lock(_Atomic(cloudabi_lock_t) *lock, cloudabi_even
 			return item->data.first == get_thread_id();
 		});
 		assert(num_unlocked == 1);
+		(void)num_unlocked;
 	} else {
 		assert(lock_info->number_of_readers >= 1);
 		lock_info->number_of_readers -= 1;

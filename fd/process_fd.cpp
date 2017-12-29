@@ -445,6 +445,7 @@ void process_fd::mem_unmap(void *begin_addr, size_t num_pages)
 		}
 		else {
 			assert(!"Partial mappings should have been already split");
+			return true;
 		}
 	}, [&](mem_mapping_list *item) {
 		item->data->unmap_completely();
@@ -867,6 +868,7 @@ cloudabi_errno_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *
 	auxv->a_type = CLOUDABI_AT_NULL;
 	auxv++;
 	assert(auxv_orig + auxv_entries == auxv);
+	(void)auxv_orig;
 
 	// detach all existing threads from the process
 	// (note that one of them will be currently running to do this exec(),
@@ -1122,14 +1124,14 @@ void process_fd::exit_all_threads() {
 
 thread_condition_data *process_fd::allocate_current_condition_data()
 {
-	cloudabi_signal_t signal;
-	cloudabi_exitcode_t exitcode;
+	cloudabi_signal_t s;
+	cloudabi_exitcode_t e;
 
-	bool term = is_terminated(exitcode, signal);
+	bool term = is_terminated(e, s);
 	if(term) {
 		auto *cd = allocate<thread_condition_data_proc_terminate>();
-		cd->signal = signal;
-		cd->exitcode = exitcode;
+		cd->signal = s;
+		cd->exitcode = e;
 		return cd;
 	} else {
 		return nullptr;

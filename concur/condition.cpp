@@ -21,10 +21,10 @@ thread_condition::~thread_condition()
 		// all; however, this may not work in the future and then we
 		// should keep track of the size of the block (either here or
 		// in the allocator).
-		if(auto *ptr = dynamic_cast<thread_condition_data_proc_terminate*>(conditiondata)) {
-			deallocate(ptr);
-		} else if(auto *ptr = dynamic_cast<thread_condition_data_fd_readwrite*>(conditiondata)) {
-			deallocate(ptr);
+		if(auto *ptr1 = dynamic_cast<thread_condition_data_proc_terminate*>(conditiondata)) {
+			deallocate(ptr1);
+		} else if(auto *ptr2 = dynamic_cast<thread_condition_data_fd_readwrite*>(conditiondata)) {
+			deallocate(ptr2);
 		} else {
 			// don't know how to deallocate this
 			deallocate(conditiondata);
