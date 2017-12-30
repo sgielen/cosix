@@ -92,7 +92,18 @@ struct thread_condition_signaler {
 	void remove_condition(thread_condition *c);
 
 	void condition_notify(thread_condition_data *conditiondata = nullptr);
-	void condition_broadcast(thread_condition_data *conditiondata = nullptr);
+
+	struct no_conditiondata_builder {
+		thread_condition_data *operator()() { return nullptr; }
+	};
+
+	template <typename Function = no_conditiondata_builder>
+	void condition_broadcast(Function conditiondata_builder = {}) {
+		while(conditions) {
+			condition_notify(conditiondata_builder());
+		}
+	}
+
 	bool has_conditions();
 
 private:

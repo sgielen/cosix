@@ -470,7 +470,7 @@ void unixsock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *out)
 	append(&other->recv_messages, message_item);
 	other->num_recv_bytes += total_message_size;
 	assert(other->num_recv_bytes <= MAX_SIZE_BUFFERS);
-	other->recv_signaler.condition_broadcast(other->allocate_current_condition_data());
+	other->recv_signaler.condition_broadcast([&other]() { return other->allocate_current_condition_data(); });
 	other->recv_messages_cv.notify();
 	other->have_bytes_received();
 	out->so_datalen = total_message_size;

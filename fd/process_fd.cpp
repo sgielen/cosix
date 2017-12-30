@@ -988,7 +988,7 @@ void process_fd::exit(cloudabi_exitcode_t c, cloudabi_signal_t s)
 
 	get_vga_stream() << "Process \"" << name << "\" exited with signal " << exitsignal << ", code " << exitcode << ".\n";
 
-	termination_signaler.condition_broadcast(allocate_current_condition_data());
+	termination_signaler.condition_broadcast([this]() { return allocate_current_condition_data(); });
 
 	for(size_t i = 0; i < fd_capacity; ++i) {
 		close_fd(i);

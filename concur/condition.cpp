@@ -118,17 +118,6 @@ void thread_condition_signaler::condition_notify(thread_condition_data *conditio
 	}
 }
 
-void thread_condition_signaler::condition_broadcast(thread_condition_data *conditiondata) {
-	while(conditions) {
-		auto *c = conditions;
-		conditions->data->satisfy(conditiondata);
-		// satisfy will call remove_condition(), which will call
-		// remove_one(), assert that the first condition changed
-		(void)c;
-		assert(conditions != c);
-	}
-}
-
 bool thread_condition_signaler::has_conditions() {
 	return conditions != nullptr;
 }
