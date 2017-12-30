@@ -4,6 +4,7 @@ using namespace cloudos;
 
 struct shmfd : public fd_t {
 	shmfd(const char *name, cloudabi_device_t device);
+	~shmfd() override;
 
 	size_t pread(void *str, size_t count, size_t offset) override;
 	size_t pwrite(const char *str, size_t count, size_t offset) override;
@@ -34,6 +35,14 @@ shmfd::shmfd(const char *n, cloudabi_device_t d)
 {
 	device = d;
 }
+
+shmfd::~shmfd()
+{
+	if(alloc.ptr != nullptr) {
+		deallocate(alloc);
+	}
+}
+
 
 size_t shmfd::pread(void *str, size_t count, size_t offset)
 {
