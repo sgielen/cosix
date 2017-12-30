@@ -543,51 +543,37 @@ void *process_fd::find_free_virtual_range(size_t num_pages)
 }
 
 cloudabi_errno_t process_fd::exec(shared_ptr<fd_t> fd, size_t fdslen, fd_mapping_t **new_fds, void const *argdata, size_t argdatalen) {
-	// read from this fd until it gives EOF, then exec(buf, buf_size)
-	// TODO: memory map instead of reading it in full
-	linked_list<Blk> *elf_pieces = nullptr;
-	size_t total_size = 0;
-	do {
-		Blk blk = allocate(4096);
-		assert(blk.ptr != nullptr); // TODO: deallocate
-		size_t read = fd->pread(blk.ptr, blk.size, total_size);
-		if(read == 0) {
-			deallocate(blk);
-			break;
-		}
-		total_size += read;
-		linked_list<Blk> *piece = allocate<linked_list<Blk>>(blk);
-		append(&elf_pieces, piece);
-		if(read < blk.size) {
-			break;
-		}
-	} while(fd->error == 0);
-
-	if(fd->error != 0) {
-		// TODO: deallocate
+	cloudabi_filestat_t statbuf;
+	fd->file_stat_fget(&statbuf);
+	if(fd->error) {
 		return fd->error;
 	}
 
-	Blk elf_buffer_blk = allocate(total_size);
-	uint8_t *elf_buffer = reinterpret_cast<uint8_t*>(elf_buffer_blk.ptr);
-	if(elf_buffer == nullptr) {
-		// TODO: deallocate
+	if(statbuf.st_size == 0) {
+		return ENOEXEC;
+	}
+
+	Blk elf_buffer_blk = allocate(statbuf.st_size);
+	if(elf_buffer_blk.ptr == nullptr) {
 		return ENOMEM;
 	}
-	while(elf_pieces) {
-		auto *item = elf_pieces;
-		elf_pieces = item->next;
 
-		size_t copy = item->data.size < total_size ? item->data.size : total_size;
-		memcpy(elf_buffer, item->data.ptr, copy);
-		elf_buffer += copy;
-		total_size -= copy;
-
-		deallocate(item->data);
-		deallocate(item);
+	// read from this fd into the buffer
+	// TODO: map ELF and read from there
+	size_t total_read = 0;
+	while(total_read < elf_buffer_blk.size) {
+		size_t read = fd->pread(reinterpret_cast<char*>(elf_buffer_blk.ptr) + total_read, elf_buffer_blk.size - total_read, total_read);
+		if(fd->error != 0) {
+			deallocate(elf_buffer_blk);
+			return fd->error;
+		}
+		if(read == 0) {
+			// EOF
+			deallocate(elf_buffer_blk);
+			return EIO;
+		}
+		total_read += read;
 	}
-	assert(elf_pieces == nullptr);
-	assert(total_size == 0);
 
 	// a null argdata has an argdatalen of 0; however, do allocate a page in this case, just keep
 	// it empty

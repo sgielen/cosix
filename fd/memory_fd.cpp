@@ -54,7 +54,6 @@ size_t memory_fd::read(void *dest, size_t count) {
 	error = 0;
 	if(pos >= file_length) {
 		// EOF, don't change dest
-		error = EAGAIN;
 		return 0;
 	}
 
