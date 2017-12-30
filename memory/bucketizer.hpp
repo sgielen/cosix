@@ -183,7 +183,8 @@ struct Bucketizer {
 		return allocation;
 	}
 
-	void deallocate(Blk &s) {
+	void deallocate(Blk s) {
+		assert(s.ptr != nullptr);
 		auto &bin = get_bin_sized(s.size);
 		bin.deallocate(s);
 	}

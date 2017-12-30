@@ -45,6 +45,7 @@ struct AllocationTracker {
 	{}
 
 	void assert_alloc(char *buf, size_t size) {
+		assert(reinterpret_cast<uintptr_t>(buf) > (sizeof(tracked_allocation) + sizeof(tracked_allocation::alloc_prefix)));
 		char *original_alloc = buf - sizeof(tracked_allocation) - sizeof(tracked_allocation::alloc_prefix);
 		tracked_allocation *info = reinterpret_cast<tracked_allocation*>(original_alloc);
 
@@ -126,6 +127,8 @@ struct AllocationTracker {
 	}
 
 	void deallocate(Blk s) {
+		assert(s.ptr != nullptr);
+
 		char *actual_alloc = reinterpret_cast<char*>(s.ptr);
 		assert_alloc(actual_alloc, s.size);
 
