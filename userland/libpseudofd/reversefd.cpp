@@ -53,9 +53,14 @@ char *cosix::handle_request(reverse_request_t *request, char *buf, reverse_respo
 			h->close(request->pseudofd);
 			response->result = 0;
 			break;
-		case op::is_readable:
-			response->result = h->is_readable(request->pseudofd);
+		case op::is_readable: {
+			size_t nbytes = 0;
+			bool hangup = false;
+			response->result = h->is_readable(request->pseudofd, nbytes, hangup);
+			response->flags = hangup ? CLOUDABI_EVENT_FD_READWRITE_HANGUP : 0;
+			response->recv_length = nbytes;
 			break;
+		}
 		case op::pread:
 			res = reinterpret_cast<char*>(malloc(request->recv_length));
 			response->send_length = h->pread(request->pseudofd, request->offset, res, request->recv_length);

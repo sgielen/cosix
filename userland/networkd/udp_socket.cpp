@@ -139,7 +139,7 @@ size_t udp_socket::sock_recv(pseudofd_t p, char *dest, size_t requested)
 	return res;
 }
 
-bool udp_socket::is_readable(cosix::pseudofd_t p)
+bool udp_socket::is_readable(cosix::pseudofd_t p, size_t&, bool&)
 {
 	(void)p;
 	assert(p == 0);

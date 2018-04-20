@@ -29,7 +29,7 @@ struct pseudo_fd : public seekable_fd_t, public enable_shared_from_this<pseudo_f
 	/* For memory, pipes and files */
 	size_t read(void *dest, size_t count) override;
 	size_t write(const char *str, size_t count) override;
-	bool is_readable();
+	bool is_readable(size_t &nbytes, bool &hangup);
 	cloudabi_errno_t get_read_signaler(thread_condition_signaler **s) override;
 	void became_readable();
 	void datasync() override;

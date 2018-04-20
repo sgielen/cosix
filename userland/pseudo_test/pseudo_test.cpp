@@ -46,7 +46,7 @@ struct pseudotest_handler : public cosix::reverse_handler {
 		return std::min(strlen(message), requested);
 	}
 	
-	bool is_readable(pseudofd_t pseudo) override {
+	bool is_readable(pseudofd_t pseudo, size_t&, bool&) override {
 		if(pseudo != 0) {
 			dprintf(stdout, "Wrong is_readable() call\n");
 			exit(1);

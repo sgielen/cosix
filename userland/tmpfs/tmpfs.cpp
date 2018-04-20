@@ -600,9 +600,12 @@ file_entry_ptr tmpfs::get_file_entry_from_pseudo(pseudofd_t pseudo)
 	}
 }
 
-bool tmpfs::is_readable(pseudofd_t pseudo) {
+bool tmpfs::is_readable(pseudofd_t pseudo, size_t &nbytes, bool &hangup) {
 	auto entry = get_file_entry_from_pseudo(pseudo);
 	if(entry->type == CLOUDABI_FILETYPE_REGULAR_FILE) {
+		// TODO: what is pos of pseudo, so we can see the remaining bytes in this file?
+		nbytes = entry->contents.size();
+		hangup = false;
 		// regular file always returns true
 		return true;
 	}

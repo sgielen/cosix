@@ -9,9 +9,18 @@ static void maybe_deallocate(Blk b) {
 	}
 }
 
-static bool pseudofd_is_readable(void *r, thread_condition*, thread_condition_data**) {
+static bool pseudofd_is_readable(void *r, thread_condition*, thread_condition_data **data) {
 	auto *fd = reinterpret_cast<pseudo_fd*>(r);
-	return fd->is_readable();
+	size_t nbytes;
+	bool hangup;
+	bool readable = fd->is_readable(nbytes, hangup);
+	if(data) {
+		auto *d = allocate<thread_condition_data_fd_readwrite>();
+		d->nbytes = nbytes;
+		d->flags = hangup ? CLOUDABI_EVENT_FD_READWRITE_HANGUP : 0;
+		*data = d;
+	}
+	return readable;
 }
 
 pseudo_fd::pseudo_fd(pseudofd_t id, shared_ptr<reversefd_t> r, cloudabi_filetype_t t, cloudabi_fdflags_t f, const char *n)
@@ -54,7 +63,7 @@ bool pseudo_fd::lookup_inode(const char *path, size_t length, cloudabi_lookupfla
 	return true;
 }
 
-bool pseudo_fd::is_readable()
+bool pseudo_fd::is_readable(size_t &nbytes, bool &hangup)
 {
 	reverse_request_t request;
 	request.pseudofd = pseudo_id;
@@ -70,6 +79,8 @@ bool pseudo_fd::is_readable()
 		return false;
 	} else {
 		error = 0;
+		nbytes = response.recv_length;
+		hangup = response.flags & CLOUDABI_EVENT_FD_READWRITE_HANGUP;
 		return response.result == 1;
 	}
 }

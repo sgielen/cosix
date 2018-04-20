@@ -72,7 +72,7 @@ struct reverse_handler {
 	virtual cloudabi_inode_t create(pseudofd_t pseudo, const char *path, size_t len, cloudabi_filetype_t type);
 	virtual void allocate(pseudofd_t pseudo, off_t offset, off_t length);
 	virtual void close(pseudofd_t pseudo);
-	virtual bool is_readable(pseudofd_t pseudo);
+	virtual bool is_readable(pseudofd_t pseudo, size_t &nbytes, bool &hangup);
 	virtual size_t pread(pseudofd_t pseudo, off_t offset, char *dest, size_t requested);
 	virtual void pwrite(pseudofd_t pseudo, off_t offset, const char *buf, size_t length);
 	virtual void datasync(pseudofd_t pseudo);

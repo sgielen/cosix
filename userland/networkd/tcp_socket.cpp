@@ -335,7 +335,7 @@ size_t tcp_socket::sock_recv(pseudofd_t p, char *dest, size_t requested)
 	return res;
 }
 
-bool tcp_socket::is_readable(cosix::pseudofd_t p)
+bool tcp_socket::is_readable(cosix::pseudofd_t p, size_t&, bool&)
 {
 	(void)p;
 	assert(p == 0);
