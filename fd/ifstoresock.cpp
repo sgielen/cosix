@@ -66,18 +66,14 @@ void ifstoresock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *o
 	}
 
 	size_t fds_set = 0;
-	if(message_fds != nullptr) {
-		auto process = get_scheduler()->get_running_thread()->get_process();
-		while(message_fds != nullptr) {
-			if(fds_set < in->ri_fds_len) {
-				fd_mapping_t &fd_map = message_fds->data;
-				in->ri_fds[fds_set] = process->add_fd(fd_map.fd, fd_map.rights_base, fd_map.rights_inheriting);
-				fds_set++;
-			}
-			auto d = message_fds;
-			message_fds = message_fds->next;
-			deallocate(d);
+	while(message_fds != nullptr) {
+		if(fds_set < in->ri_fds_len) {
+			in->ri_fds[fds_set] = message_fds->data;
+			fds_set++;
 		}
+		auto d = message_fds;
+		message_fds = message_fds->next;
+		deallocate(d);
 	}
 
 	// TODO: what if fds are truncated? move to next message?
@@ -164,20 +160,9 @@ void ifstoresock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *o
 		auto pseudo = make_shared<pseudo_fd>(0, my_reverse, filetype, 0, "pseudo");
 		int pseudo_fd = process->add_fd(pseudo, all_rights, all_rights);
 
-		fd_mapping_t *fd_mapping;
-		error = process->get_fd(&fd_mapping, reverse_fd, 0);
-		if(error != 0) {
-			strncpy(response, "ERROR", sizeof(response));
-			goto send;
-		}
 		assert(message_fds == nullptr);
-		message_fds = allocate<linked_list<fd_mapping_t>>(*fd_mapping);
-		error = process->get_fd(&fd_mapping, pseudo_fd, 0);
-		if(error != 0) {
-			strncpy(response, "ERROR", sizeof(response));
-			goto send;
-		}
-		message_fds->next = allocate<linked_list<fd_mapping_t>>(*fd_mapping);
+		message_fds = allocate<linked_list<int>>(reverse_fd);
+		message_fds->next = allocate<linked_list<int>>(pseudo_fd);
 
 		strncpy(response, "OK", sizeof(response));
 		goto send;
@@ -185,16 +170,10 @@ void ifstoresock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *o
 		// Return a new socket to myself
 		auto process = get_scheduler()->get_running_thread()->get_process();
 		auto ifstore = make_shared<ifstoresock>("ifstoresock");
-		auto ifstorefd = process->add_fd(ifstore, -1, -1);
+		int ifstorefd = process->add_fd(ifstore, -1, -1);
 
-		fd_mapping_t *fd_mapping;
-		error = process->get_fd(&fd_mapping, ifstorefd, 0);
-		if(error != 0) {
-			strncpy(response, "ERROR", sizeof(response));
-			goto send;
-		}
 		assert(message_fds == nullptr);
-		message_fds = allocate<linked_list<fd_mapping_t>>(*fd_mapping);
+		message_fds = allocate<linked_list<int>>(ifstorefd);
 
 		strncpy(response, "OK", sizeof(response));
 		goto send;
@@ -249,17 +228,11 @@ void ifstoresock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *o
 		auto process = get_scheduler()->get_running_thread()->get_process();
 		auto sock = make_shared<rawsock>(iface, 0, "rawsock to ");
 		strlcat(sock->name, iface->get_name(), sizeof(sock->name));
-		auto rawsockfd = process->add_fd(sock, -1, -1);
+		int rawsockfd = process->add_fd(sock, -1, -1);
 		sock->init();
 
-		fd_mapping_t *fd_mapping;
-		error = process->get_fd(&fd_mapping, rawsockfd, 0);
-		if(error != 0) {
-			strncpy(response, "ERROR", sizeof(response));
-			goto send;
-		}
 		assert(message_fds == nullptr);
-		message_fds = allocate<linked_list<fd_mapping_t>>(*fd_mapping);
+		message_fds = allocate<linked_list<int>>(rawsockfd);
 
 		strncpy(response, "OK", sizeof(response));
 		goto send;

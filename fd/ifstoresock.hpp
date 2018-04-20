@@ -16,7 +16,7 @@ struct ifstoresock : public sock_t {
 private:
 	bool has_message = false;
 	Blk message_buf;
-	linked_list<fd_mapping_t> *message_fds = nullptr;
+	linked_list<int> *message_fds = nullptr;
 	cv_t read_cv;
 	cv_t write_cv;
 };
