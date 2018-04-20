@@ -14,6 +14,7 @@
 #include <argdata.hpp>
 #include <cloudabi_syscalls.h>
 #include <thread>
+#include <poll.h>
 
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -161,10 +162,40 @@ void program_main(const argdata_t *ad) {
 
 	// Socket: connected to 127.0.0.1:1234, not bound
 	int connected = cosix::networkd::get_socket(networkd, SOCK_STREAM, "127.0.0.1:1234", "");
+
+	// check poll() on socket without data
+	struct pollfd f;
+	f.fd = connected;
+	f.events = POLLIN | POLLOUT;
+
+	if(poll(&f, 1, 100) != 1) {
+		dprintf(stdout, "Failed to poll() for socket: %s\n", strerror(errno));
+		exit(1);
+	}
+
+	if(f.revents != (POLLOUT | POLLWRNORM)) {
+		dprintf(stdout, "Poll returned other events than just writable: %d\n", f.revents);
+		exit(1);
+	}
+
 	if(write(connected, "Foo bar!", 8) != 8) {
 		dprintf(stdout, "Failed to write data over TCP (%s)\n", strerror(errno));
 		exit(1);
 	}
+
+	// Wait a second for the response to arrive
+	clock_nanosleep(CLOCK_MONOTONIC, 0, &ts);
+
+	if(poll(&f, 1, 100) != 1) {
+		dprintf(stdout, "Failed to poll() for socket: %s\n", strerror(errno));
+		exit(1);
+	}
+
+	if(f.revents != (POLLIN | POLLOUT | POLLWRNORM)) {
+		dprintf(stdout, "Poll returned other events than read-writeable: %d\n", f.revents);
+		exit(1);
+	}
+
 	char buf[32];
 	if(read(connected, buf, sizeof(buf)) != 8) {
 		dprintf(stdout, "Failed to receive data over TCP (%s)\n", strerror(errno));
@@ -176,6 +207,16 @@ void program_main(const argdata_t *ad) {
 		exit(1);
 	}
 
+	if(poll(&f, 1, 100) != 1) {
+		dprintf(stdout, "Failed to poll() for socket: %s\n", strerror(errno));
+		exit(1);
+	}
+
+	if(f.revents != (POLLOUT | POLLWRNORM)) {
+		dprintf(stdout, "Poll returned other events than just writable: %d\n", f.revents);
+		exit(1);
+	}
+
 	if(write(connected, "Mumblebumble", 12) != 12) {
 		dprintf(stdout, "Failed to write data over TCP (%s)\n", strerror(errno));
 		exit(1);
@@ -184,9 +225,12 @@ void program_main(const argdata_t *ad) {
 		dprintf(stdout, "Failed to write additional data over TCP (%s)\n", strerror(errno));
 		exit(1);
 	}
+
 	// wait for a second for the response to arrive
 	clock_nanosleep(CLOCK_MONOTONIC, 0, &ts);
-	if(read(connected, buf, sizeof(buf)) != 20) {
+
+	// Use recv this time
+	if(recv(connected, buf, sizeof(buf), 0) != 20) {
 		dprintf(stdout, "Failed to receive all data over TCP (%s)\n", strerror(errno));
 		exit(1);
 	}
@@ -204,6 +248,19 @@ void program_main(const argdata_t *ad) {
 	// bump the server thread if it's blocked on read()
 	write(connected, "bump", 4);
 	serverthread.join();
+
+	// wait another bit until the tcp connection is closed
+	clock_nanosleep(CLOCK_MONOTONIC, 0, &ts);
+
+	if(poll(&f, 1, 100) != 1) {
+		dprintf(stdout, "Failed to poll() for shutdown socket: %s\n", strerror(errno));
+		exit(1);
+	}
+
+	if(f.revents != (POLLHUP | POLLIN)) {
+		dprintf(stdout, "Poll returned other events than 'socket hung up': %d\n", f.revents);
+		exit(1);
+	}
 
 	dprintf(stdout, "All TCP traffic seems correct!\n");
 	exit(0);
