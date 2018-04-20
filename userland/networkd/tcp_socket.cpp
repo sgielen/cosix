@@ -52,7 +52,7 @@ bool tcp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 			if(htonl(hdr->acknum) != send_seq_num) {
 				dprintf(0, "Got invalid SYN/ACK, dropping\n");
 				send_tcp_frame(false, false, std::string(), false, true /* rst */);
-				status = sockstatus_t::CLOSED;
+				status = sockstatus_t::RESET;
 				becomes_readable();
 				return true;
 			}
@@ -73,7 +73,7 @@ bool tcp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 			becomes_readable();
 		} else if(hdr->flag_rst) {
 			// Connection rejected
-			status = sockstatus_t::CLOSED;
+			status = sockstatus_t::RESET;
 			becomes_readable();
 		} else {
 			dprintf(0, "Got non-SYN/RST packet on CONNECTING socket\n");
@@ -82,14 +82,19 @@ bool tcp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 			if(hdr->flag_rst) dprintf(0, "  (RST is set)\n");
 			if(hdr->flag_fin) dprintf(0, "  (FIN is set)\n");
 			send_tcp_frame(false, false, std::string(), false, true /* rst */);
-			status = sockstatus_t::CLOSED;
+			status = sockstatus_t::RESET;
 			becomes_readable();
 		}
 		return true;
 	}
 
-	assert(status == sockstatus_t::CONNECTED || status == sockstatus_t::THEIRS_CLOSED
-	|| status==sockstatus_t::OURS_CLOSED || status == sockstatus_t::CLOSED);
+	if(status == sockstatus_t::RESET || status == sockstatus_t::CLOSED) {
+		dprintf(0, "Got packet for a reset/closed socket\n");
+		return true;
+	}
+
+	assert(status == sockstatus_t::CONNECTED || status == sockstatus_t::THEIRS_SHUTDOWN
+	|| status == sockstatus_t::SHUTDOWN);
 
 	// this is a connected socket, IPs and ports match, meant for us
 	if(hdr->flag_ack) {
@@ -113,7 +118,7 @@ bool tcp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 
 	if(hdr->flag_rst) {
 		// Break down this connection after handling the last data
-		status = sockstatus_t::CLOSED;
+		status = sockstatus_t::RESET;
 		becomes_readable();
 		return true;
 	}
@@ -121,8 +126,8 @@ bool tcp_socket::handle_packet(std::shared_ptr<interface>, const char *frame, si
 	if(hdr->flag_fin) {
 		// other side is closing their part of the connection
 		if(status == sockstatus_t::CONNECTED) {
-			status = sockstatus_t::THEIRS_CLOSED;
-		} else {
+			status = sockstatus_t::THEIRS_SHUTDOWN;
+		} else if(status == sockstatus_t::SHUTDOWN) {
 			status = sockstatus_t::CLOSED;
 		}
 		send_ack_num += 1;
@@ -144,9 +149,8 @@ void tcp_socket::sock_send(pseudofd_t p, const char *msg, size_t len)
 	(void)p;
 	assert(p == 0);
 
-	if(status != sockstatus_t::CONNECTED && status != sockstatus_t::SHUTDOWN) {
-		bool ours_closed = status == sockstatus_t::CLOSED || status == sockstatus_t::OURS_CLOSED;
-		throw cloudabi_system_error(ours_closed ? ECONNRESET : EINVAL);
+	if(status != sockstatus_t::CONNECTED && status != sockstatus_t::THEIRS_SHUTDOWN) {
+		throw cloudabi_system_error(EPIPE);
 	}
 
 	send_tcp_frame(false /* syn */, true /* ack */, std::string(msg, len));
@@ -161,7 +165,7 @@ cloudabi_errno_t tcp_socket::establish() {
 		// wait for SYN|ACK
 		incoming_cv.wait(lock);
 	}
-	assert(status == sockstatus_t::CONNECTED || status == sockstatus_t::CLOSED);
+	assert(status == sockstatus_t::CONNECTED || status == sockstatus_t::RESET);
 	return status == sockstatus_t::CONNECTED ? 0 : ECONNREFUSED;
 }
 
@@ -319,13 +323,29 @@ size_t tcp_socket::sock_recv(pseudofd_t p, char *dest, size_t requested)
 		throw cloudabi_system_error(EMSGSIZE);
 	}
 
+	if(status == sockstatus_t::RESET) {
+		throw cloudabi_system_error(ECONNRESET);
+	}
+
+	// we have data to recv? send it off
+	{
+		std::unique_lock<std::mutex> lock(wc_mtx);
+		if(!recv_buffer.empty()) {
+			auto res = std::min(recv_buffer.size(), requested);
+			memcpy(dest, recv_buffer.c_str(), res);
+			recv_buffer = recv_buffer.substr(res);
+			return res;
+		}
+	}
+
+	// does it make sense to wait for more data?
 	if(status != sockstatus_t::CONNECTED && status != sockstatus_t::SHUTDOWN) {
-		bool theirs_closed = status == sockstatus_t::CLOSED || status == sockstatus_t::THEIRS_CLOSED;
-		throw cloudabi_system_error(theirs_closed ? ECONNRESET : EINVAL);
+		// EOF
+		return 0;
 	}
 
 	std::unique_lock<std::mutex> lock(wc_mtx);
-	while(recv_buffer.empty() && (status == sockstatus_t::CONNECTED || status == sockstatus_t::OURS_CLOSED)) {
+	while(recv_buffer.empty() && (status == sockstatus_t::CONNECTED || status == sockstatus_t::SHUTDOWN)) {
 		incoming_cv.wait(lock);
 	}
 
@@ -335,13 +355,17 @@ size_t tcp_socket::sock_recv(pseudofd_t p, char *dest, size_t requested)
 	return res;
 }
 
-bool tcp_socket::is_readable(cosix::pseudofd_t p, size_t&, bool&)
+bool tcp_socket::is_readable(cosix::pseudofd_t p, size_t &nbytes, bool &hangup)
 {
 	(void)p;
 	assert(p == 0);
 
 	std::unique_lock<std::mutex> lock(wc_mtx);
-	return !recv_buffer.empty();
+	nbytes = recv_buffer.size();
+	hangup = status == sockstatus_t::THEIRS_SHUTDOWN
+		|| status == sockstatus_t::RESET
+		|| status == sockstatus_t::CLOSED;
+	return hangup || nbytes > 0;
 }
 
 void tcp_socket::timed_out()

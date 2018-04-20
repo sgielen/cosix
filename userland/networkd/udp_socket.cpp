@@ -139,11 +139,16 @@ size_t udp_socket::sock_recv(pseudofd_t p, char *dest, size_t requested)
 	return res;
 }
 
-bool udp_socket::is_readable(cosix::pseudofd_t p, size_t&, bool&)
+bool udp_socket::is_readable(cosix::pseudofd_t p, size_t &nbytes, bool &hangup)
 {
 	(void)p;
 	assert(p == 0);
 
 	std::unique_lock<std::mutex> lock(wm_mtx);
-	return !waiting_messages.empty();
+	bool readable = !waiting_messages.empty();
+	if(readable) {
+		nbytes = waiting_messages.front().payload_length;
+		hangup = false;
+	}
+	return readable;
 }

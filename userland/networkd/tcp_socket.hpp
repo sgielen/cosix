@@ -26,7 +26,7 @@ struct tcp_socket : public ip_socket {
 	~tcp_socket() override;
 
 	enum sockstatus_t {
-		CONNECTING, CONNECTED, SHUTDOWN, OURS_CLOSED, THEIRS_CLOSED, CLOSED
+		CONNECTING, CONNECTED, SHUTDOWN, THEIRS_SHUTDOWN, RESET, CLOSED
 	};
 
 	virtual cloudabi_errno_t establish() override;
