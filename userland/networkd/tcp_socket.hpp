@@ -42,6 +42,7 @@ private:
 	size_t sock_recv(cosix::pseudofd_t, char*, size_t) override;
 	bool is_readable(cosix::pseudofd_t, size_t&, bool&) override;
 	void becomes_readable();
+	void close(cosix::pseudofd_t) override;
 
 	// only call these functions if you already have the wc_mtx:
 	void send_tcp_frame(bool syn, bool ack, std::string data = std::string(), bool fin = false, bool rst = false);

@@ -152,3 +152,17 @@ bool udp_socket::is_readable(cosix::pseudofd_t p, size_t &nbytes, bool &hangup)
 	}
 	return readable;
 }
+
+void udp_socket::close(cosix::pseudofd_t p)
+{
+	(void)p;
+	assert(p == 0);
+	std::unique_lock<std::mutex> lock(wm_mtx);
+	{
+		decltype(waiting_messages) empty_queue;
+		std::swap(waiting_messages, empty_queue);
+	}
+	assert(waiting_messages.empty());
+	get_ip().get_udp_impl().unregister_socket(std::dynamic_pointer_cast<udp_socket>(shared_from_this()));
+	stop();
+}

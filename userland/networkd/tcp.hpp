@@ -53,6 +53,9 @@ struct tcp {
 	// Register a socket for incoming packets
 	cloudabi_errno_t register_socket(std::shared_ptr<tcp_socket> socket);
 
+	// Unregister a socket
+	void unregister_socket(std::shared_ptr<tcp_socket> socket);
+
 	// Handle an incoming TCP packet
 	void handle_packet(std::shared_ptr<interface> iface, const char *frame, size_t framelen, size_t ip_offset, size_t tcp_offset, size_t tcp_length);
 

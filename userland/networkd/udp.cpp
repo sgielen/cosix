@@ -49,3 +49,15 @@ cloudabi_errno_t udp::register_socket(std::shared_ptr<udp_socket> socket)
 	sockets[socket->get_local_port()] = socket;
 	return 0;
 }
+
+void udp::unregister_socket(std::shared_ptr<udp_socket> socket)
+{
+	std::lock_guard<std::mutex> lock(sockets_mtx);
+	for(auto it = sockets.begin(); it != sockets.end();) {
+		if(it->second == socket) {
+			it = sockets.erase(it);
+		} else {
+			++it;
+		}
+	}
+}

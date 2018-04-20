@@ -384,3 +384,31 @@ void tcp_socket::becomes_readable()
 	ip_socket::becomes_readable();
 	incoming_cv.notify_all();
 }
+
+void tcp_socket::close(cosix::pseudofd_t p)
+{
+	(void)p;
+	assert(p == 0);
+
+	std::unique_lock<std::mutex> lock(wc_mtx);
+	bool had_something_to_send_or_receive = !(recv_buffer.empty() && outgoing_segments.empty());
+	recv_buffer.clear();
+	outgoing_segments.clear();
+	if(status == sockstatus_t::RESET || status == sockstatus_t::CLOSED || status == sockstatus_t::SHUTDOWN) {
+		// all already done
+	} else if(had_something_to_send_or_receive &&
+	(status == sockstatus_t::CONNECTED || status == sockstatus_t::THEIRS_SHUTDOWN)) {
+		// Nothing to send and nothing to receive, so this is an orderly shutdown;
+		// send FIN and wait for FIN|ACK.
+		send_tcp_frame(false, false, "", true, false);
+		status = sockstatus_t::SHUTDOWN;
+	} else {
+		// we have something to send or receive, or we are still connecting, so
+		// the connection isn't properly closed, send RST
+		send_tcp_frame(false, false, "", false, true);
+		status = sockstatus_t::RESET;
+	}
+
+	get_ip().get_tcp_impl().unregister_socket(std::dynamic_pointer_cast<tcp_socket>(shared_from_this()));
+	stop();
+}

@@ -153,6 +153,18 @@ cloudabi_errno_t tcp::locked_register_socket(std::shared_ptr<tcp_socket> socket)
 	return 0;
 }
 
+void tcp::unregister_socket(std::shared_ptr<tcp_socket> socket)
+{
+	std::lock_guard<std::mutex> lock(sockets_mtx);
+	for(auto it = sockets.begin(); it != sockets.end();) {
+		if(it->second == socket) {
+			it = sockets.erase(it);
+		} else {
+			++it;
+		}
+	}
+}
+
 bool tcp_connection::operator<(tcp_connection const &o) const {
 	if(peer_port != o.peer_port) {
 		return peer_port < o.peer_port;

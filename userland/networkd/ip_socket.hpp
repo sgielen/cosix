@@ -40,6 +40,7 @@ protected:
 	void stat_fget(cosix::pseudofd_t pseudo, cloudabi_filestat_t *statbuf) override;
 
 	void becomes_readable();
+	void stop();
 
 private:
 	void run();
@@ -54,6 +55,7 @@ private:
 
 	std::mutex reverse_mtx;
 	std::thread::id reverse_thread;
+	std::atomic<bool> running;
 	int reversefd;
 };
 

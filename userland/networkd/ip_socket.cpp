@@ -11,6 +11,7 @@ ip_socket::ip_socket(transport_proto p, std::string l_ip, uint16_t l_port, std::
 , local_port(l_port)
 , peer_ip(p_ip)
 , peer_port(p_port)
+, running(false)
 , reversefd(f)
 {
 }
@@ -21,11 +22,17 @@ ip_socket::~ip_socket()
 
 void ip_socket::start()
 {
+	running = true;
 	auto that = shared_from_this();
 	std::thread thr([that](){
 		that->run();
 	});
 	thr.detach();
+}
+
+void ip_socket::stop()
+{
+	running = false;
 }
 
 void ip_socket::run()
@@ -34,7 +41,7 @@ void ip_socket::run()
 	const cloudabi_timestamp_t max_offset_from_now = 60ull * 1000 * 1000 * 1000; /* 60 seconds */
 	(void)max_offset_from_now;
 	try {
-		while(true) {
+		while(running.load()) {
 			assert(reverse_thread == std::this_thread::get_id());
 			auto next_ts = next_timeout();
 			assert(next_ts > 0);
@@ -43,6 +50,9 @@ void ip_socket::run()
 			assert(now < max_offset_from_now || (now - max_offset_from_now) < next_ts);
 #endif
 			auto res = cosix::handle_request(reversefd, this, reverse_mtx, next_ts);
+			if(!running.load()) {
+				break;
+			}
 			if(res != 0 && res != EAGAIN /* timeout passed */) {
 				throw cosix::cloudabi_system_error(res);
 			}
@@ -60,6 +70,8 @@ void ip_socket::run()
 		dprintf(0, "*** remote bind: %s:%d\n", ipd.c_str(), peer_port);
 		dprintf(0, "*** reverse: %d\n", reversefd);
 	}
+
+	::close(reversefd);
 }
 
 void ip_socket::stat_fget(cosix::pseudofd_t, cloudabi_filestat_t *buf)

@@ -26,6 +26,7 @@ private:
 	void sock_send(cosix::pseudofd_t, const char*, size_t) override;
 	size_t sock_recv(cosix::pseudofd_t, char*, size_t) override;
 	bool is_readable(cosix::pseudofd_t, size_t&, bool&) override;
+	void close(cosix::pseudofd_t) override;
 
 	std::mutex wm_mtx;
 	std::condition_variable wm_cv;
