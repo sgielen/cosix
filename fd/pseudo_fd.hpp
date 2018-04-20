@@ -22,6 +22,7 @@ using reverse_proto::pseudofd_t;
  */
 struct pseudo_fd : public seekable_fd_t, public enable_shared_from_this<pseudo_fd> {
 	pseudo_fd(pseudofd_t id, shared_ptr<reversefd_t> reverse_fd, cloudabi_filetype_t t, cloudabi_fdflags_t f, const char *n);
+	~pseudo_fd() override;
 
 	inline pseudofd_t get_pseudo_id() { return pseudo_id; }
 	inline shared_ptr<reversefd_t> get_reverse_fd() { return reverse_fd; }

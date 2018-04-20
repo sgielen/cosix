@@ -31,6 +31,19 @@ pseudo_fd::pseudo_fd(pseudofd_t id, shared_ptr<reversefd_t> r, cloudabi_filetype
 	recv_signaler.set_already_satisfied_function(pseudofd_is_readable, this);
 }
 
+pseudo_fd::~pseudo_fd()
+{
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::close;
+	request.inode = 0;
+	request.flags = 0;
+	request.send_length = 0;
+	request.recv_length = 0;
+	reverse_response_t response;
+	maybe_deallocate(send_request(&request, nullptr, &response));
+}
+
 Blk pseudo_fd::send_request(reverse_request_t *request, const char *buffer, reverse_response_t *response) {
 	return reverse_fd->send_request(request, buffer, response);
 }
