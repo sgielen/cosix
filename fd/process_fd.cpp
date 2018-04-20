@@ -964,6 +964,16 @@ void process_fd::exit(cloudabi_exitcode_t c, cloudabi_signal_t s)
 		get_vga_stream() << "init exited with signal " << s << ", exit code " << c << "\n";
 		kernel_panic("init exited");
 	}
+
+	// close all FDs
+	for(size_t i = 0; i < fd_capacity; ++i) {
+		close_fd(i);
+	}
+
+	// unschedule all threads
+	exit_all_threads();
+
+	// mark myself exited
 	running = false;
 	exitsignal = s;
 	if(exitsignal == 0) {
@@ -972,18 +982,9 @@ void process_fd::exit(cloudabi_exitcode_t c, cloudabi_signal_t s)
 		exitcode = 0;
 	}
 
+	// inform others
 	get_vga_stream() << "Process \"" << name << "\" exited with signal " << exitsignal << ", code " << exitcode << ".\n";
-
 	termination_signaler.condition_broadcast([this]() { return allocate_current_condition_data(); });
-
-	for(size_t i = 0; i < fd_capacity; ++i) {
-		close_fd(i);
-	}
-
-	// deallocation will happen in the destructor
-
-	// unschedule all threads
-	exit_all_threads();
 }
 
 void process_fd::signal(cloudabi_signal_t s)
