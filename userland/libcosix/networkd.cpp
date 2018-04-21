@@ -84,8 +84,10 @@ int cosix::networkd::get_socket(int networkd, int type, std::string connect, std
 	// TODO: for a generic implementation, MSG_PEEK to find the number
 	// of file descriptors
 	uint8_t buf[1500];
+	memset(buf, 0, sizeof(buf));
 	struct iovec iov = {.iov_base = buf, .iov_len = sizeof(buf)};
 	alignas(struct cmsghdr) char control[CMSG_SPACE(sizeof(int))];
+	memset(control, 0, sizeof(control));
 	struct msghdr msg = {
 		.msg_iov = &iov, .msg_iovlen = 1,
 		.msg_control = control, .msg_controllen = sizeof(control),
@@ -104,9 +106,11 @@ int cosix::networkd::get_socket(int networkd, int type, std::string connect, std
 			fdnum = *i.second->get_fd();
 		}
 	}
-	if(fdnum != 0) {
-		throw std::runtime_error("Ifstore TCP socket not received");
-	}
+	// TODO: a bug somewhere (in the argdata library?) sometimes causes
+	// this fd not to be set, but we can assume it is 0 and retrieve it from the CMSG_DATA
+	//if(fdnum != 0) {
+	//	throw std::runtime_error("Ifstore TCP socket not received");
+	//}
 	struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
 	if(cmsg == nullptr || cmsg->cmsg_level != SOL_SOCKET || cmsg->cmsg_len != CMSG_LEN(sizeof(int))) {
 		throw std::runtime_error("Ifstore socket requested, but not given\n");
