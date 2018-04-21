@@ -125,13 +125,12 @@ def run_unittests():
   dirfd = os.open("unittests", os.O_RDONLY, dir_fd=sys.argdata['tmpdir'])
 
   binfd = os.open("unittests", os.O_RDONLY, dir_fd=sys.argdata['bootfs'])
-  procfd = os.program_spawn(binfd,
+  procdesc = os.program_spawn(binfd,
     {'logfile': sys.argdata['terminal'],
      'tmpdir': FDWrapper(dirfd),
      'nthreads': 1,
     })
-  res = os.pdwait(procfd, 0)
-  os.close(procfd)
+  res = os.program_wait(procdesc)
   os.close(binfd)
   return res
 
@@ -178,13 +177,12 @@ def run_leak_analysis():
 
 def run_binary(binary):
   binfd = os.open(binary, os.O_RDONLY, dir_fd=sys.argdata['bootfs'])
-  procfd = os.program_spawn(binfd,
+  procdesc = os.program_spawn(binfd,
     {'stdout': sys.argdata['terminal'],
      'tmpdir': FDWrapper(sys.argdata['tmpdir']),
      'networkd': sys.argdata['networkd'],
     })
-  res = os.pdwait(procfd, 0)
-  os.close(procfd)
+  res = os.program_wait(procdesc)
   os.close(binfd)
   return res
 
