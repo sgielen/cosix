@@ -7,6 +7,6 @@ cloudos::global_state *global_state_;
 }
 
 int main(int argc, char *argv[]) {
-	cloudos::global_state_ = 0;
+	cloudos::global_state_ = nullptr;
 	return Catch::Session().run(argc, argv);
 }

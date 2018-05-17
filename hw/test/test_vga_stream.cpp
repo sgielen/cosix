@@ -66,7 +66,7 @@ TEST_CASE( "hw/vga_stream" ) {
 	}
 
 	SECTION( "streaming NULL const char* into vga_buffer" ) {
-		const char *str = NULL;
+		const char *str = nullptr;
 		s << str;
 		memcpy(&first_line[0], "\x28\x07\x6e\x07\x75\x07\x6c\x07\x6c\x07\x29\x07", 12);
 

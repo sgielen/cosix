@@ -28,7 +28,7 @@ struct Mallocator {
 	}
 
 	void deallocate(Blk &s) {
-		if(s.ptr == 0) {
+		if(s.ptr == nullptr) {
 			abort();
 		}
 		free(s.ptr);

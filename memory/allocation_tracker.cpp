@@ -38,7 +38,7 @@ tracked_allocation::tracked_allocation() {
 	time = cloudos::track_detail::get_time();
 #else
 	for(size_t i = 0; i < NUM_ELEMENTS(caller); ++i) {
-		caller[i] = 0;
+		caller[i] = nullptr;
 	}
 	for(size_t i = 0; i < sizeof(alloc_prefix); ++i) {
 		alloc_prefix[i] = rand() % 256;
