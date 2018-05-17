@@ -8,6 +8,7 @@
 #include <net/interface_store.hpp>
 #include <oslibc/numeric.h>
 #include <oslibc/string.h>
+#include <oslibc/iovec.hpp>
 
 using namespace cloudos;
 
@@ -41,27 +42,8 @@ void ifstoresock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *o
 		read_cv.wait();
 	}
 
-	// TODO: a generic function to copy iovecs/linked-list-of-buffers over
-	// iovecs
-	char *buffer = reinterpret_cast<char*>(message_buf.ptr);
-	size_t datalen = 0;
-	size_t buffer_size_remaining = message_buf.size;
-	for(size_t i = 0; i < in->ri_data_len; ++i) {
-		auto &iovec = in->ri_data[i];
-		if(iovec.buf_len < buffer_size_remaining) {
-			memcpy(iovec.buf, buffer, iovec.buf_len);
-			datalen += iovec.buf_len;
-			buffer += iovec.buf_len;
-			buffer_size_remaining -= iovec.buf_len;
-		} else {
-			memcpy(iovec.buf, buffer, buffer_size_remaining);
-			datalen += buffer_size_remaining;
-			buffer_size_remaining = 0;
-			break;
-		}
-	}
-
-	if(buffer_size_remaining > 0) {
+	size_t bytes_copied = veccpy(in->ri_data, in->ri_data_len, message_buf, 0);
+	if(bytes_copied < message_buf.size) {
 		// TODO: message is truncated
 	}
 
@@ -77,7 +59,7 @@ void ifstoresock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *o
 	}
 
 	// TODO: what if fds are truncated? move to next message?
-	out->ro_datalen = datalen;
+	out->ro_datalen = bytes_copied;
 	out->ro_fdslen = fds_set;
 	out->ro_flags = 0;
 

@@ -10,9 +10,10 @@ add_library(oslibc
 	bitmap.cpp bitmap.hpp
 	crc32.c checksum.h
 	ctype.cpp ctype.h
+	iovec.cpp iovec.hpp
 )
 target_link_libraries(oslibc hw)
-list(APPEND oslibc_tests test/test_string.cpp test/test_numeric.cpp test/test_list.cpp)
+list(APPEND oslibc_tests test/test_string.cpp test/test_numeric.cpp test/test_list.cpp test/test_iovec.cpp)
 
 if(BAREMETAL_ENABLED)
 	target_link_libraries(oslibc compiler_rt_builtins)

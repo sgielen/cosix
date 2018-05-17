@@ -1,5 +1,6 @@
 #include <fd/rawsock.hpp>
 #include <net/interface.hpp>
+#include <oslibc/iovec.hpp>
 
 using namespace cloudos;
 
@@ -55,31 +56,12 @@ void rawsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 	Blk message_buf = message->data;
 	deallocate(message);
 
-	// TODO: a generic function to copy iovecs/linked-list-of-buffers over
-	// iovecs
-	char *buffer = reinterpret_cast<char*>(message_buf.ptr);
-	size_t datalen = 0;
-	size_t buffer_size_remaining = message_buf.size;
-	for(size_t i = 0; i < in->ri_data_len; ++i) {
-		auto &iovec = in->ri_data[i];
-		if(iovec.buf_len < buffer_size_remaining) {
-			memcpy(iovec.buf, buffer, iovec.buf_len);
-			datalen += iovec.buf_len;
-			buffer += iovec.buf_len;
-			buffer_size_remaining -= iovec.buf_len;
-		} else {
-			memcpy(iovec.buf, buffer, buffer_size_remaining);
-			datalen += buffer_size_remaining;
-			buffer_size_remaining = 0;
-			break;
-		}
-	}
-
-	if(buffer_size_remaining > 0) {
+	size_t bytes_copied = veccpy(in->ri_data, in->ri_data_len, message_buf, 0);
+	if(bytes_copied < message_buf.size) {
 		// TODO: message is truncated
 	}
 
-	out->ro_datalen = datalen;
+	out->ro_datalen = bytes_copied;
 	out->ro_fdslen = 0;
 	out->ro_flags = 0;
 
@@ -106,17 +88,10 @@ void rawsock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *out)
 	}
 
 	Blk message_blk = allocate(size);
-	uint8_t *message = reinterpret_cast<uint8_t*>(message_blk.ptr);
+	size_t bytes_copied = veccpy(message_blk, in->si_data, in->si_data_len, 0);
+	assert(bytes_copied == size);
 
-	size_t read = 0;
-	for(size_t i = 0; i < in->si_data_len; ++i) {
-		size_t buf_len = in->si_data[i].buf_len;
-		memcpy(message + read, in->si_data[i].buf, buf_len);
-		read += buf_len;
-	}
-
-	assert(read == size);
-	error = iface->send_frame(message, size);
+	error = iface->send_frame(reinterpret_cast<uint8_t*>(message_blk.ptr), size);
 	out->so_datalen = size;
 	deallocate(message_blk);
 }

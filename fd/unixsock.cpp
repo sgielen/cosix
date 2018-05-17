@@ -1,5 +1,6 @@
 #include <fd/unixsock.hpp>
 #include <fd/scheduler.hpp>
+#include <oslibc/iovec.hpp>
 
 using namespace cloudos;
 
@@ -246,25 +247,8 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 			deallocate(item);
 		}
 
-		char *buffer = reinterpret_cast<char*>(message->buf.ptr);
-		size_t datalen = 0;
-		size_t buffer_size_remaining = message->buf.size;
-		for(size_t i = 0; i < in->ri_data_len; ++i) {
-			auto &iovec = in->ri_data[i];
-			if(iovec.buf_len < buffer_size_remaining) {
-				memcpy(iovec.buf, buffer, iovec.buf_len);
-				datalen += iovec.buf_len;
-				buffer += iovec.buf_len;
-				buffer_size_remaining -= iovec.buf_len;
-			} else {
-				memcpy(iovec.buf, buffer, buffer_size_remaining);
-				datalen += buffer_size_remaining;
-				buffer_size_remaining = 0;
-				break;
-			}
-		}
-
-		out->ro_flags = buffer_size_remaining > 0 ? CLOUDABI_SOCK_RECV_DATA_TRUNCATED : 0;
+		size_t bytes_copied = veccpy(in->ri_data, in->ri_data_len, message->buf, 0);
+		out->ro_flags = bytes_copied < message->buf.size ? CLOUDABI_SOCK_RECV_DATA_TRUNCATED : 0;
 
 		auto *fd_item = message->fd_list;
 		size_t fds_set = 0;
@@ -285,8 +269,8 @@ void unixsock::sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out)
 			}
 		}
 
-		num_recv_bytes -= datalen;
-		out->ro_datalen = datalen;
+		num_recv_bytes -= bytes_copied;
+		out->ro_datalen = bytes_copied;
 		out->ro_fdslen = fds_set;
 		error = 0;
 
@@ -436,20 +420,11 @@ void unixsock::sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *out)
 		// limit the number of bytes written
 		total_message_size = MAX_SIZE_BUFFERS - other->num_recv_bytes;
 	}
+
 	auto *message = allocate<unixsock_message>();
 	message->buf = allocate(total_message_size);
-	size_t bytes_remaining = total_message_size;
-
-	char *buffer = reinterpret_cast<char*>(message->buf.ptr);
-	for(size_t i = 0; i < in->si_data_len && bytes_remaining > 0; ++i) {
-		const cloudabi_ciovec_t &data = in->si_data[i];
-		size_t copy = data.buf_len < bytes_remaining ? data.buf_len : bytes_remaining;
-		memcpy(buffer, data.buf, copy);
-		buffer += copy;
-		bytes_remaining -= copy;
-	}
-	assert(buffer == reinterpret_cast<char*>(message->buf.ptr) + message->buf.size);
-	assert(bytes_remaining == 0);
+	size_t bytes_copied = veccpy(message->buf, in->si_data, in->si_data_len, 0);
+	assert(bytes_copied == total_message_size);
 
 	auto process = get_scheduler()->get_running_thread()->get_process();
 	for(size_t i = 0; i < in->si_fds_len; ++i) {

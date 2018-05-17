@@ -65,4 +65,16 @@ pair<T1, T2> make_pair(T1 t1, T2 t2) {
 	return pair<T1, T2>(t1, t2);
 }
 
+template <typename T>
+constexpr const T& min(const T& a, const T& b)
+{
+	return a < b ? a : b;
+}
+
+template <typename T>
+constexpr const T& max(const T& a, const T& b)
+{
+	return a > b ? a : b;
+}
+
 }
