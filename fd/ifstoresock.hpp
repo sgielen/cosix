@@ -1,24 +1,13 @@
 #pragma once
-#include <fd/sock.hpp>
-#include <oslibc/list.hpp>
-#include <fd/process_fd.hpp>
+#include <fd/userlandsock.hpp>
 
 namespace cloudos {
 
-struct ifstoresock : public sock_t {
+struct ifstoresock : public userlandsock {
 	ifstoresock(const char *n);
-	~ifstoresock() override;
-
-	void sock_shutdown(cloudabi_sdflags_t how) override;
-	void sock_recv(const cloudabi_recv_in_t* in, cloudabi_recv_out_t *out) override;
-	void sock_send(const cloudabi_send_in_t* in, cloudabi_send_out_t *out) override;
 
 private:
-	bool has_message = false;
-	Blk message_buf;
-	linked_list<int> *message_fds = nullptr;
-	cv_t read_cv;
-	cv_t write_cv;
+	void handle_command(const char *cmd, const char *arg) override;
 };
 
 }

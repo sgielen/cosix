@@ -12,6 +12,7 @@ if(BAREMETAL_ENABLED)
 		pseudo_fd.cpp pseudo_fd.hpp
 		sock.cpp sock.hpp
 		unixsock.cpp unixsock.hpp
+		userlandsock.cpp userlandsock.hpp
 		ifstoresock.cpp ifstoresock.hpp
 		rawsock.cpp rawsock.hpp
 		reverse_fd.cpp reverse_fd.hpp
