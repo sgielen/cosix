@@ -32,8 +32,8 @@ void ifstoresock::handle_command(const char *command, const char *arg)
 		resp[0] = 0;
 
 		iterate(ifaces, [&](interface_list *item) {
-			strlcat(resp, item->data->get_name(), sizeof(response));
-			strlcat(resp, "\n", sizeof(response));
+			strlcat(resp, item->data->get_name(), response.size);
+			strlcat(resp, "\n", response.size);
 		});
 		set_response(resp);
 		deallocate(response);
@@ -90,6 +90,7 @@ void ifstoresock::handle_command(const char *command, const char *arg)
 	if(strcmp(command, "MAC") == 0) {
 		// Return MAC address of this interface
 		char response[18];
+		response[0] = 0;
 		size_t mac_size = 0;
 		auto const *mac = iface->get_mac(&mac_size);
 		for(uint8_t i = 0; i < mac_size; ++i) {
