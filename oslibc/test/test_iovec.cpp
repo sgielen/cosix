@@ -1,4 +1,5 @@
 #include <oslibc/iovec.hpp>
+#include <oslibc/string.h>
 #include <memory/allocation.hpp>
 #include <catch.hpp>
 
