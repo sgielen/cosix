@@ -6,7 +6,7 @@ addons:
     sources:
     - llvm-toolchain-trusty-4.0
     - sourceline: 'deb http://nuxi.nl/distfiles/cloudabi-ports/debian/ cloudabi cloudabi'
-      key_url: 'https://pgp.mit.edu/pks/lookup?op=get&search=0x0DA51B8531344B15'
+      key_url: 'https://pgp.surfnet.nl/pks/lookup?op=get&search=0x0DA51B8531344B15'
     packages:
     - clang-4.0
     - lld-4.0
