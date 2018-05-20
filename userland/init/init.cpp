@@ -37,6 +37,7 @@ int reversefd;
 int pseudofd;
 int ifstore;
 int termstore;
+int blockdevstore;
 std::shared_ptr<FileDescriptor> flower_switchboard;
 
 long uptime() {
@@ -97,28 +98,52 @@ void start_tmpfs() {
 	}
 }
 
-int copy_ifstorefd() {
-	// Copy the ifstorefd for the networkd
-	write(ifstore, "COPY", 10);
-	char buf[20];
-	buf[0] = 0;
-	struct iovec iov = {.iov_base = buf, .iov_len = sizeof(buf)};
+ssize_t read_response_and_fd(int sock, char *buf, size_t bufsize, int &fd) {
+	struct iovec iov = {.iov_base = buf, .iov_len = bufsize};
 	alignas(struct cmsghdr) char control[CMSG_SPACE(sizeof(int))];
 	struct msghdr msg = {
 		.msg_iov = &iov, .msg_iovlen = 1,
 		.msg_control = control, .msg_controllen = sizeof(control),
 	};
-	if(recvmsg(ifstore, &msg, 0) < 0 || strncmp(buf, "OK", 2) != 0) {
-		perror("Failed to retrieve ifstore-copy from ifstore");
-		exit(1);
+	ssize_t size = recvmsg(sock, &msg, 0);
+	if(size < 0) {
+		fd = -1;
+		return size;
 	}
 	struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
 	if(cmsg == nullptr || cmsg->cmsg_level != SOL_SOCKET || cmsg->cmsg_len != CMSG_LEN(sizeof(int))) {
-		dprintf(stdout, "Ifstore socket requested, but not given\n");
-		exit(1);
+		fd = -1;
+		return size;
 	}
 	int *fdbuf = reinterpret_cast<int*>(CMSG_DATA(cmsg));
-	return fdbuf[0];
+	fd = fdbuf[0];
+	return size;
+}
+
+int get_ata_blockdev(std::string blockdev) {
+	std::string command = "FD " + blockdev;
+	write(blockdevstore, command.c_str(), command.size());
+	char buf[20];
+	int fdnum;
+	if(read_response_and_fd(blockdevstore, buf, sizeof(buf), fdnum) != 2
+	|| strncmp(buf, "OK", 2) != 0) {
+		perror("Failed to retrieve blockdev device from blockdevstore");
+		return -1;
+	}
+	return fdnum;
+}
+
+int copy_ifstorefd() {
+	// Copy the ifstorefd for the networkd
+	write(ifstore, "COPY", 4);
+	char buf[20];
+	int fdnum;
+	if(read_response_and_fd(ifstore, buf, sizeof(buf), fdnum) != 2
+	|| strncmp(buf, "OK", 2) != 0) {
+		perror("Failed to retrieve ifstore-copy from ifstore");
+		exit(1);
+	}
+	return fdnum;
 }
 
 std::shared_ptr<FileDescriptor> copy_switchboard() {
@@ -397,6 +422,7 @@ void program_main(const argdata_t *) {
 	initrd = 4;
 	ifstore = 5;
 	termstore = 6;
+	blockdevstore = 7;
 
 	dprintf(stdout, "Init starting up.\n");
 
@@ -404,6 +430,52 @@ void program_main(const argdata_t *) {
 	FILE *out = fdopen(stdout, "w");
 	setvbuf(out, nullptr, _IONBF, BUFSIZ);
 	fswap(stderr, out);
+
+	dprintf(stdout, "INIT: Asking for disk devices...\n");
+	if(write(blockdevstore, "LIST", 4) != 4) {
+		dprintf(stdout, "INIT: Failed to send ATA list command: %s\n", strerror(errno));
+		exit(1);
+	}
+
+	{
+		char buf[128];
+		ssize_t res = read(blockdevstore, buf, sizeof(buf) - 1);
+		if(res < 0) {
+			dprintf(stdout, "INIT: Failed to receive ATA list result: %s\n", strerror(errno));
+			exit(1);
+		}
+		buf[res] = 0;
+
+		dprintf(stdout, "INIT: Scan result:\n%s\n", buf);
+	}
+
+	dprintf(stdout, "INIT: Opening ata0...\n");
+	int ata0 = get_ata_blockdev("ata0");
+	if(ata0 > 0) {
+		dprintf(stdout, "INIT: Opened ata0! Reading first block...\n");
+		char buf[512];
+		memset(buf, 0xdc, sizeof(buf));
+		ssize_t res = pread(ata0, buf, sizeof(buf), 0);
+		if(res < 0) {
+			dprintf(stdout, "INIT: Failed to pread first block: %s\n", strerror(errno));
+			exit(1);
+		}
+
+		dprintf(stdout, "Read %zd bytes\n", res);
+		for(ssize_t i = 0; i < res; ++i) {
+			dprintf(stdout, "%02x ", buf[i] & 0xff);
+			if(i > 0 && i % 16 == 15) {
+				dprintf(stdout, "\n");
+			}
+		}
+	}
+
+	dprintf(stdout, "\n");
+
+	{
+		struct timespec ts = {.tv_sec = 20, .tv_nsec = 0};
+		clock_nanosleep(CLOCK_MONOTONIC, 0, &ts);
+	}
 
 	open_tmpfs_pseudo();
 	start_tmpfs();

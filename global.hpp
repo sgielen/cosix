@@ -25,6 +25,7 @@ struct clock_store;
 struct initrdfs;
 struct terminal_store;
 struct shmfs;
+struct blockdev_store;
 
 extern global_state *global_state_;
 
@@ -47,6 +48,7 @@ struct global_state {
 	cloudos::initrdfs *initrdfs;
 	cloudos::terminal_store *terminal_store;
 	cloudos::shmfs *shmfs;
+	cloudos::blockdev_store *blockdev_store;
 };
 
 __attribute__((noreturn)) inline void kernel_panic(const char *message) {
@@ -82,6 +84,7 @@ GET_GLOBAL(clock_store, clock_store, clock_store);
 GET_GLOBAL(initrdfs, initrdfs, initrdfs);
 GET_GLOBAL(terminal_store, terminal_store, terminal_store);
 GET_GLOBAL(shmfs, shmfs, shmfs);
+GET_GLOBAL(blockdev_store, blockdev_store, blockdev_store);
 
 inline vga_stream &get_vga_stream() {
 	assert(global_state_ && global_state_->vga);

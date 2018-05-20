@@ -2,6 +2,7 @@
 #include <elf.h>
 #include <fd/bootfs.hpp>
 #include <fd/ifstoresock.hpp>
+#include <fd/blockdevstoresock.hpp>
 #include <fd/initrdfs.hpp>
 #include <fd/memory_fd.hpp>
 #include <fd/process_fd.hpp>
@@ -160,6 +161,9 @@ void process_fd::add_initial_fds() {
 		CLOUDABI_RIGHT_FD_SEEK |
 		CLOUDABI_RIGHT_FD_WRITE
 	);
+
+	auto blockdevstore = make_shared<blockdevstoresock>("blockdevstoresock");
+	add_fd(blockdevstore, -1, -1);
 }
 
 cloudabi_fd_t process_fd::add_fd(shared_ptr<fd_t> fd, cloudabi_rights_t rights_base, cloudabi_rights_t rights_inheriting) {

@@ -31,6 +31,7 @@
 #include <fd/unixsock.hpp>
 #include <term/terminal_store.hpp>
 #include <term/console_terminal.hpp>
+#include <blockdev/blockdev_store.hpp>
 
 using namespace cloudos;
 
@@ -190,6 +191,7 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 
 	global.clock_store = allocate<clock_store>();
 	global.driver_store = allocate<driver_store>();
+	global.blockdev_store = allocate<blockdev_store>();
 
 #define REGISTER_DRIVER(TYPE) \
 	do { \

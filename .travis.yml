@@ -11,12 +11,14 @@ addons:
     - clang-4.0
     - lld-4.0
     - qemu-system-x86
+    - qemu-utils
     - i686-unknown-cloudabi-cxx-runtime
     - i686-unknown-cloudabi-libircclient
     - i686-unknown-cloudabi-mstd
     - i686-unknown-cloudabi-python
     - i686-unknown-cloudabi-flower
     - python3-pip
+    - genext2fs
 notifications:
   irc:
     channels:

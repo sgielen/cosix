@@ -32,6 +32,7 @@ dependencies:
   `objcopy` but does not check early if it has x86 support. If you get
   objcopy-related errors, build binutils with `--target i686` and use
   `-DCMAKE_OBJCOPY=i686-elf-objcopy`.
+- Tools to build a disk image: sfdisk or fdisk, qemu-img, genext2fs and dd.
 - The CloudABI toolchain, see instructions at https://nuxi.nl/. The toolchain
   is based on Clang/LLVM and is available for many operating systems. After
   installation, you'll have Clang in your path as i686-unknown-cloudabi-cc.

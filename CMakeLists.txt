@@ -54,33 +54,41 @@ add_subdirectory(rng)
 add_subdirectory(time)
 add_subdirectory(proc)
 add_subdirectory(term)
+add_subdirectory(blockdev)
 add_subdirectory(userland)
 
 if(BAREMETAL_ENABLED)
 	include_directories(${CMAKE_BINARY_DIR})
 	set_source_files_properties(boot.s PROPERTIES COMPILE_FLAGS "-x assembler-with-cpp")
 	add_executable(cloudkernel boot.s kernel_main.cpp)
-	target_link_libraries(cloudkernel compiler_rt_builtins cxxabi_rtti oslibc hw fd memory net vdso_support external_binaries_support concur rng time proc fd term)
+	target_link_libraries(cloudkernel compiler_rt_builtins cxxabi_rtti oslibc hw fd memory net vdso_support external_binaries_support concur rng time proc fd term blockdev)
 	set_target_properties(cloudkernel PROPERTIES LINK_DEPENDS "${CMAKE_SOURCE_DIR}/linker.ld")
 	set_target_properties(cloudkernel PROPERTIES LINK_FLAGS "-T ${CMAKE_SOURCE_DIR}/linker.ld")
+
+	add_custom_command(OUTPUT disk.img
+		COMMAND ${CMAKE_SOURCE_DIR}/misc/disk/make_rootdisk.sh
+		WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+	)
 
 	set(QEMU_ARGS -m 1024
 		-net nic,model=e1000 -net dump,file=dump.pcap -net user
 		-no-reboot -no-shutdown -d int -d cpu_reset -d guest_errors
 		-redir tcp:2626::26 -redir tcp:8080::80
-		-serial file:kernel.log)
+		-serial file:kernel.log
+		-drive file=disk.img,index=0,format=raw,media=disk)
 
 	add_custom_target(boot
 		COMMAND qemu-system-i386 -kernel cloudkernel -initrd initrd ${QEMU_ARGS}
-		DEPENDS cloudkernel initrd
+		DEPENDS cloudkernel initrd disk.img
 	)
 	add_custom_target(gdbboot
 		COMMAND qemu-system-i386 -kernel cloudkernel -initrd initrd ${QEMU_ARGS} -watchdog-action debug -S -s
-		DEPENDS cloudkernel initrd
+		DEPENDS cloudkernel initrd disk.img
 	)
 
 	add_custom_target(fastboot
 		COMMAND qemu-system-i386 -kernel cloudkernel -initrd initrd ${QEMU_ARGS}
+		DEPENDS disk.img
 	)
 endif()
 
