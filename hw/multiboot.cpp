@@ -56,6 +56,7 @@ struct boot_info {
 }
 
 #define FLAG_MEMORY 1
+#define FLAG_CMDLINE 4
 #define FLAG_MODULE 8
 #define FLAG_MMAP 64
 
@@ -67,6 +68,14 @@ multiboot_info::multiboot_info(void *a, uint32_t magic)
 
 bool multiboot_info::is_valid() const {
 	return valid;
+}
+
+char *multiboot_info::cmdline() const {
+	if(bi->flags & FLAG_CMDLINE) {
+		return reinterpret_cast<char*>(bi->cmdline + _kernel_virtual_base);
+	} else {
+		return nullptr;
+	}
 }
 
 bool multiboot_info::mem_amount(uint32_t *mem_lower, uint32_t *mem_upper) const {

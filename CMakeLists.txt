@@ -75,7 +75,9 @@ if(BAREMETAL_ENABLED)
 		-no-reboot -no-shutdown -d int -d cpu_reset -d guest_errors
 		-redir tcp:2626::26 -redir tcp:8080::80
 		-serial file:kernel.log
-		-drive file=disk.img,index=0,format=raw,media=disk)
+		-drive file=disk.img,index=0,format=raw,media=disk
+		-append "cosix.config=ext2@ata0p0"
+	)
 
 	add_custom_target(boot
 		COMMAND qemu-system-i386 -kernel cloudkernel -initrd initrd ${QEMU_ARGS}

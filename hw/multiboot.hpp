@@ -27,6 +27,7 @@ struct multiboot_info {
 
 	bool is_valid() const;
 	bool mem_amount(uint32_t *mem_lower, uint32_t *mem_upper) const;
+	char *cmdline() const;
 	size_t memory_map(memory_map_entry **first) const;
 
 	// Returns the virtual address pointing at a list of multiboot_modules

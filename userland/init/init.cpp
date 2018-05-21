@@ -57,6 +57,28 @@ long uptime() {
 	return atol(buf);
 }
 
+std::string read_cmdline() {
+	std::string res;
+	int cmdlinefd = openat(procfs, "kernel/cmdline", O_RDONLY);
+	if(cmdlinefd < 0) {
+		return res;
+	}
+	while(true) {
+		char buf[64];
+		ssize_t r = read(cmdlinefd, buf, sizeof(buf));
+		if(r < 0) {
+			res.clear();
+			return res;
+		} else if(r == 0) {
+			return res;
+		}
+		res += std::string(buf, r);
+	}
+
+	close(cmdlinefd);
+	return res;
+}
+
 argdata_t *argdata_create_string(const char *value) {
 	return argdata_create_str(value, strlen(value));
 }
@@ -465,6 +487,9 @@ void program_main(const argdata_t *) {
 	FILE *out = fdopen(stdout, "w");
 	setvbuf(out, nullptr, _IONBF, BUFSIZ);
 	fswap(stderr, out);
+
+	std::string cmdline = read_cmdline();
+	dprintf(stdout, "INIT: cmdline: %s\n", cmdline.c_str());
 
 	create_partitions_on_all_block_devices();
 

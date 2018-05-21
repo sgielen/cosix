@@ -36,6 +36,12 @@ struct procfs_alloctrack_fd : public fd_t {
 	size_t write(const char *buf, size_t count) override;
 };
 
+struct procfs_cmdline_fd : public memory_fd {
+	procfs_cmdline_fd(const char *n) : memory_fd(n) {}
+
+	size_t read(void *dest, size_t count) override;
+};
+
 }
 
 procfs_directory_fd::procfs_directory_fd(const char (*p)[PROCFS_FILE_MAX], const char *n)
@@ -126,6 +132,14 @@ shared_ptr<fd_t> procfs_directory_fd::openat(const char *pathname, size_t pathle
 			error = 0;
 			return make_shared<procfs_alloctrack_fd>(pathbuf);
 		}
+	} else if(strcmp(pathbuf, "kernel/cmdline") == 0) {
+		if(must_be_directory) {
+			error = ENOTDIR;
+			return nullptr;
+		} else {
+			error = 0;
+			return make_shared<procfs_cmdline_fd>(pathbuf);
+		}
 	} else if(strcmp(pathbuf, "kernel") == 0 || strcmp(pathbuf, "kernel/") == 0) {
 		error = 0;
 		char pb[2][PROCFS_FILE_MAX];
@@ -147,6 +161,18 @@ size_t procfs_uptime_fd::read(void *dest, size_t count) {
 	auto res = memory_fd::read(dest, count);
 	reset();
 	return res;
+}
+
+size_t procfs_cmdline_fd::read(void *dest, size_t count) {
+	if(global_state_ && global_state_->cmdline) {
+		reset(global_state_->cmdline, strlen(global_state_->cmdline));
+		auto res = memory_fd::read(dest, count);
+		reset();
+		return res;
+	} else {
+		reset();
+		return memory_fd::read(dest, count);
+	}
 }
 
 size_t procfs_alloctrack_fd::write(const char *buf, size_t count) {

@@ -56,6 +56,14 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 		return;
 	}
 
+	// Copy the cmdline to a buffer that will definitely remain valid
+	char *orig_cmdline = boot_info.cmdline();
+	auto cmdline_size = strlen(orig_cmdline) + 1;
+	char cmdline_copy[cmdline_size];
+	memcpy(cmdline_copy, orig_cmdline, cmdline_size);
+	global.cmdline = cmdline_copy;
+	stream << "Command line: " << global.cmdline << "\n";
+
 	uint32_t mem_lower, mem_upper;
 	if(boot_info.mem_amount(&mem_lower, &mem_upper)) {
 		stream << "Amount of lower memory (kilobytes): " << mem_lower << "\n";

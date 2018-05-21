@@ -32,6 +32,7 @@ extern global_state *global_state_;
 struct global_state {
 	global_state();
 
+	char *cmdline;
 	cloudos::allocator *alloc;
 	cloudos::page_allocator *page_allocator;
 	cloudos::map_virtual *map_virtual;
