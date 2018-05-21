@@ -98,34 +98,12 @@ void start_tmpfs() {
 	}
 }
 
-ssize_t read_response_and_fd(int sock, char *buf, size_t bufsize, int &fd) {
-	struct iovec iov = {.iov_base = buf, .iov_len = bufsize};
-	alignas(struct cmsghdr) char control[CMSG_SPACE(sizeof(int))];
-	struct msghdr msg = {
-		.msg_iov = &iov, .msg_iovlen = 1,
-		.msg_control = control, .msg_controllen = sizeof(control),
-	};
-	ssize_t size = recvmsg(sock, &msg, 0);
-	if(size < 0) {
-		fd = -1;
-		return size;
-	}
-	struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
-	if(cmsg == nullptr || cmsg->cmsg_level != SOL_SOCKET || cmsg->cmsg_len != CMSG_LEN(sizeof(int))) {
-		fd = -1;
-		return size;
-	}
-	int *fdbuf = reinterpret_cast<int*>(CMSG_DATA(cmsg));
-	fd = fdbuf[0];
-	return size;
-}
-
 int get_ata_blockdev(std::string blockdev) {
 	std::string command = "FD " + blockdev;
 	write(blockdevstore, command.c_str(), command.size());
 	char buf[20];
 	int fdnum;
-	if(read_response_and_fd(blockdevstore, buf, sizeof(buf), fdnum) != 2
+	if(cosix::read_response_and_fd(blockdevstore, buf, sizeof(buf), fdnum) != 2
 	|| strncmp(buf, "OK", 2) != 0) {
 		perror("Failed to retrieve blockdev device from blockdevstore");
 		return -1;
@@ -133,17 +111,24 @@ int get_ata_blockdev(std::string blockdev) {
 	return fdnum;
 }
 
-int copy_ifstorefd() {
-	// Copy the ifstorefd for the networkd
-	write(ifstore, "COPY", 4);
+static int copy_userlandsock(int fd) {
+	write(fd, "COPY", 4);
 	char buf[20];
 	int fdnum;
-	if(read_response_and_fd(ifstore, buf, sizeof(buf), fdnum) != 2
+	if(cosix::read_response_and_fd(fd, buf, sizeof(buf), fdnum) != 2
 	|| strncmp(buf, "OK", 2) != 0) {
-		perror("Failed to retrieve ifstore-copy from ifstore");
+		perror("Failed to retrieve copy from userlandsock");
 		exit(1);
 	}
 	return fdnum;
+}
+
+static int copy_ifstorefd() {
+	return copy_userlandsock(ifstore);
+}
+
+static int copy_blockdevstore() {
+	return copy_userlandsock(blockdevstore);
 }
 
 std::shared_ptr<FileDescriptor> copy_switchboard() {
@@ -415,6 +400,56 @@ void run_pythonshell(int consolefd) {
 	close(networkd);
 }
 
+static void create_partitions_on_block_device(std::string blockdev) {
+	int bfd = openat(bootfs, "partition", O_RDONLY);
+	if(bfd < 0) {
+		fprintf(stderr, "INIT: Can't create partitions, because the partition tool failed to open: %s\n", strerror(errno));
+		exit(1);
+	}
+
+	int new_bdevfd = copy_blockdevstore();
+	argdata_t *keys[] = {argdata_create_string("stdout"),
+		argdata_create_string("blockdevstore"),
+		argdata_create_string("blockdev")};
+	argdata_t *values[] = {argdata_create_fd(stdout),
+		argdata_create_fd(new_bdevfd),
+		argdata_create_string(blockdev.c_str())};
+	argdata_t *ad = argdata_create_map(keys, values, sizeof(keys) / sizeof(keys[0]));
+	program_run("partition", bfd, ad);
+	close(new_bdevfd);
+}
+
+static void create_partitions_on_all_block_devices() {
+	dprintf(stdout, "INIT: Creating partitions on all block devices...\n");
+
+	if(write(blockdevstore, "LIST", 4) != 4) {
+		dprintf(stdout, "INIT: Failed to send ATA list command: %s\n", strerror(errno));
+		exit(1);
+	}
+
+	char buf[1024];
+	ssize_t res = read(blockdevstore, buf, sizeof(buf) - 1);
+	if(res < 0) {
+		dprintf(stdout, "INIT: Failed to receive ATA list result: %s\n", strerror(errno));
+		exit(1);
+	}
+	buf[res] = 0;
+
+	char *line_ptr = buf;
+	while(line_ptr && line_ptr[0] != 0) {
+		char *next_line = strchr(line_ptr, '\n');
+		if(next_line) {
+			*next_line = 0;
+			create_partitions_on_block_device(line_ptr);
+			*next_line = '\n';
+			line_ptr = next_line + 1;
+		} else {
+			create_partitions_on_block_device(line_ptr);
+			line_ptr = nullptr;
+		}
+	}
+}
+
 void program_main(const argdata_t *) {
 	stdout = 0;
 	procfs = 2;
@@ -424,53 +459,15 @@ void program_main(const argdata_t *) {
 	termstore = 6;
 	blockdevstore = 7;
 
-	dprintf(stdout, "Init starting up.\n");
+	dprintf(stdout, "INIT: Starting up.\n");
 
 	// reconfigure stderr
 	FILE *out = fdopen(stdout, "w");
 	setvbuf(out, nullptr, _IONBF, BUFSIZ);
 	fswap(stderr, out);
 
-	dprintf(stdout, "INIT: Asking for disk devices...\n");
-	if(write(blockdevstore, "LIST", 4) != 4) {
-		dprintf(stdout, "INIT: Failed to send ATA list command: %s\n", strerror(errno));
-		exit(1);
-	}
+	create_partitions_on_all_block_devices();
 
-	{
-		char buf[128];
-		ssize_t res = read(blockdevstore, buf, sizeof(buf) - 1);
-		if(res < 0) {
-			dprintf(stdout, "INIT: Failed to receive ATA list result: %s\n", strerror(errno));
-			exit(1);
-		}
-		buf[res] = 0;
-
-		dprintf(stdout, "INIT: Scan result:\n%s\n", buf);
-	}
-
-	dprintf(stdout, "INIT: Opening ata0...\n");
-	int ata0 = get_ata_blockdev("ata0");
-	if(ata0 > 0) {
-		dprintf(stdout, "INIT: Opened ata0! Reading first block...\n");
-		char buf[512];
-		memset(buf, 0xdc, sizeof(buf));
-		ssize_t res = pread(ata0, buf, sizeof(buf), 0);
-		if(res < 0) {
-			dprintf(stdout, "INIT: Failed to pread first block: %s\n", strerror(errno));
-			exit(1);
-		}
-
-		dprintf(stdout, "Read %zd bytes\n", res);
-		for(ssize_t i = 0; i < res; ++i) {
-			dprintf(stdout, "%02x ", buf[i] & 0xff);
-			if(i > 0 && i % 16 == 15) {
-				dprintf(stdout, "\n");
-			}
-		}
-	}
-
-	dprintf(stdout, "\n");
 
 	{
 		struct timespec ts = {.tv_sec = 20, .tv_nsec = 0};

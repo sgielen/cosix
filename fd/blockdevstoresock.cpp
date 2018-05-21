@@ -1,5 +1,6 @@
 #include <blockdev/blockdev_store.hpp>
 #include <blockdev/blockdev.hpp>
+#include <blockdev/partition.hpp>
 #include <fd/blockdevstoresock.hpp>
 #include <fd/pseudo_fd.hpp>
 #include <fd/rawsock.hpp>
@@ -55,9 +56,15 @@ void blockdevstoresock::handle_command(const char *command, const char *arg)
 		return;
 	}
 
-	auto bdev = get_blockdev_store()->get_blockdev(arg);
+	Blk arg_alloc = allocate(strlen(arg) + 1);
+	memcpy(arg_alloc.ptr, arg, arg_alloc.size);
+	auto *bdevname = reinterpret_cast<char*>(arg_alloc.ptr);
+	auto *arg1 = strsplit(bdevname, ' ');
+
+	auto bdev = get_blockdev_store()->get_blockdev(bdevname);
 	if(!bdev) {
 		set_response("NODEV");
+		deallocate(arg_alloc);
 		return;
 	}
 
@@ -67,7 +74,53 @@ void blockdevstoresock::handle_command(const char *command, const char *arg)
 
 		set_response("OK");
 		add_fd_to_response(fd);
+		deallocate(arg_alloc);
+		return;
+	} else if(strcmp(command, "PARTITION") == 0) {
+		auto *lba_offset_str = arg1;
+		auto *sector_count_str = strsplit(lba_offset_str, ' ');
+
+		if(sector_count_str == nullptr) {
+			// strsplit returns nullptr if its input str is nullptr, so this
+			// means any of the arguments is missing
+			set_response("ERROR");
+			deallocate(arg_alloc);
+			return;
+		}
+
+		int64_t lba_offset, sector_count;
+		if(!atoi64_s(lba_offset_str, &lba_offset, 10)
+		|| !atoi64_s(sector_count_str, &sector_count, 10)) {
+			set_response("ERROR");
+			deallocate(arg_alloc);
+			return;
+		}
+
+		// TODO: check if lba_offset + sectorcount even falls within this bdev
+		char name[64];
+		size_t namelen = strlen(bdev->name);
+		assert(namelen <= 62);
+		memcpy(name, bdev->name, namelen);
+		name[namelen] = 'p';
+		name[namelen+1] = 0;
+
+		auto part = make_shared<partition>(bdev, lba_offset, sector_count);
+
+		if(get_blockdev_store()->register_blockdev(part, name) != 0) {
+			set_response("ERROR");
+			deallocate(arg_alloc);
+			return;
+		}
+
+		auto process = get_scheduler()->get_running_thread()->get_process();
+		int fd = process->add_fd(part, -1, -1);
+
+		set_response(part->name);
+		add_fd_to_response(fd);
+		deallocate(arg_alloc);
 		return;
 	}
+
+	deallocate(arg_alloc);
 	set_response("ERROR");
 }

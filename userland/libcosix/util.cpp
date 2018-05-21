@@ -1,8 +1,10 @@
 #include <cosix/util.hpp>
+
 #include <assert.h>
 #include <errno.h>
 #include <program.h>
 #include <signal.h>
+#include <sys/socket.h>
 
 static void spawned(uv_process_t *handle, int64_t exit_status, int term_signal) {
 	auto *pd2 = static_cast<cosix::procdesc2*>(handle->data);
@@ -56,4 +58,44 @@ void cosix::program_wait2(procdesc2 *pd2, int64_t *exit_status, int *term_signal
 	if(term_signal) *term_signal = pd2->term_signal;
 
 	delete pd2;
+}
+
+ssize_t cosix::read_response_and_fd(int sock, char *buf, size_t bufsize, int &fd)
+{
+	int ignore;
+	return read_response_and_fd2(sock, buf, bufsize, fd, ignore);
+}
+
+ssize_t cosix::read_response_and_fd2(int sock, char *buf, size_t bufsize, int &fd1, int &fd2)
+{
+	struct iovec iov = {.iov_base = buf, .iov_len = bufsize};
+	alignas(struct cmsghdr) char control[CMSG_SPACE(sizeof(int))];
+	struct msghdr msg = {
+		.msg_iov = &iov, .msg_iovlen = 1,
+		.msg_control = control, .msg_controllen = sizeof(control),
+	};
+	ssize_t size = recvmsg(sock, &msg, 0);
+	if(size < 0) {
+		fd1 = -1;
+		fd2 = -1;
+		return size;
+	}
+	struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+	if(cmsg == nullptr || cmsg->cmsg_level != SOL_SOCKET) {
+		fd1 = -1;
+		fd2 = -1;
+		return size;
+	}
+	int *fdbuf = reinterpret_cast<int*>(CMSG_DATA(cmsg));
+	if(cmsg->cmsg_len == CMSG_LEN(sizeof(int))) {
+		fd1 = fdbuf[0];
+		fd2 = -1;
+	} else if(cmsg->cmsg_len == CMSG_LEN(sizeof(int) * 2)) {
+		fd1 = fdbuf[0];
+		fd2 = fdbuf[1];
+	} else {
+		fd1 = -1;
+		fd2 = -1;
+	}
+	return size;
 }
