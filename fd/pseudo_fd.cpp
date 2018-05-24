@@ -602,15 +602,18 @@ void pseudo_fd::file_allocate(cloudabi_filesize_t offset, cloudabi_filesize_t le
 
 size_t pseudo_fd::readdir(char *buf, size_t nbyte, cloudabi_dircookie_t cookie)
 {
-	// TODO: the RPC protocol allows requesting a single readdir buffer. We
-	// will keep requesting such buffers until our own buffer is full, or
-	// until there are no left.
+	// readdir is allowed to return either a full buffer of nbyte bytes, or
+	// any smaller amount of dir entries. It's only allowed to return 0
+	// bytes if the directory has no (more) entries, in which case cookie
+	// must also be 0. We'll re-request extra entries until our own buffer
+	// is full or there are no more entries.
 	size_t written = 0;
 	while(written < nbyte) {
 		reverse_request_t request;
 		request.pseudofd = pseudo_id;
 		request.op = reverse_request_t::operation::readdir;
 		request.flags = cookie;
+		request.recv_length = nbyte - written;
 
 		reverse_response_t response;
 		Blk b = send_request(&request, nullptr, &response);
@@ -618,31 +621,24 @@ size_t pseudo_fd::readdir(char *buf, size_t nbyte, cloudabi_dircookie_t cookie)
 			error = -response.result;
 			maybe_deallocate(b);
 			return 0;
-		} else if(response.result == 0) {
-			// there were no more entries
+		} else if(b.size > request.recv_length) {
+			// more data returned than expected
+			error = EIO;
+			maybe_deallocate(b);
+			return 0;
+		}
+
+		// assume that consistent, correct data was returned: a number of full directory entries, and
+		// possibly a truncated one at the end of the buffer if b.size == request.recv_length
+		cookie = response.result;
+		memcpy(buf + written, b.ptr, b.size);
+		written += b.size;
+		maybe_deallocate(b);
+
+		if(cookie == 0) {
+			// no more entries
 			break;
 		}
-		if(b.size < sizeof(cloudabi_dirent_t)) {
-			// too little data returned
-			error = EIO;
-			maybe_deallocate(b);
-			return 0;
-		}
-		cookie = response.result;
-		// check the entry, add it to buf
-		cloudabi_dirent_t *dirent = reinterpret_cast<cloudabi_dirent_t*>(b.ptr);
-		if(b.size != sizeof(cloudabi_dirent_t) + dirent->d_namlen) {
-			// filesystem did not provide enough data, maybe the filename didn't fit?
-			error = EIO;
-			maybe_deallocate(b);
-			return 0;
-		}
-		// append this buf to the given buffer
-		size_t remaining = nbyte - written;
-		size_t write = remaining < b.size ? remaining : b.size;
-		memcpy(buf + written, b.ptr, write);
-		written += write;
-		maybe_deallocate(b);
 	}
 	error = 0;
 	return written;

@@ -88,9 +88,8 @@ char *cosix::handle_request(reverse_request_t *request, char *buf, reverse_respo
 			break;
 		case op::readdir: {
 			cloudabi_dircookie_t cookie = request->flags;
-			size_t const res_size = 512;
-			res = reinterpret_cast<char*>(malloc(res_size));
-			response->send_length = h->readdir(request->pseudofd, res, res_size, cookie);
+			res = reinterpret_cast<char*>(malloc(request->recv_length));
+			response->send_length = h->readdir(request->pseudofd, res, request->recv_length, cookie);
 			response->result = cookie;
 			break;
 		}
