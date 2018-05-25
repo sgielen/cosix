@@ -3,7 +3,7 @@
 #include <map>
 #include <string>
 #include <stdexcept>
-#include <cosix/reverse.hpp>
+#include <cosix/reverse_filesystem.hpp>
 #include <memory>
 #include <vector>
 
@@ -28,11 +28,13 @@ typedef std::shared_ptr<pseudo_fd_entry> pseudo_fd_ptr;
 
 /** A temporary filesystem implementation.
  */
-struct tmpfs : public cosix::reverse_handler {
+struct tmpfs : public cosix::reverse_filesystem {
 	tmpfs(cloudabi_device_t);
 
-	typedef cosix::file_entry file_entry;
-	typedef cosix::pseudofd_t pseudofd_t;
+	// Look up the file entry corresponding to the inode (if filename is empty), or the file entry
+	// corresponding to the file pointed to by filename in the directory pointed to by inode.
+	file_entry &lookup_nonrecursive(cloudabi_inode_t inode, std::string const &filename) override;
+	std::string readlink(cloudabi_inode_t inode) override;
 
 	file_entry lookup(pseudofd_t pseudo, const char *path, size_t len, cloudabi_lookupflags_t lookupflags) override;
 	pseudofd_t open(cloudabi_inode_t inode, cloudabi_oflags_t flags) override;
@@ -60,15 +62,8 @@ private:
 	std::map<cloudabi_inode_t, file_entry_ptr> inodes;
 	std::map<pseudofd_t, pseudo_fd_ptr> pseudo_fds;
 
-	/** Normalizes the given path. When it returns normally, directory
-	 * points at the innermost directory pointed to by path. It returns the
-	 * filename that is to be opened, created or unlinked.
-	 *
-	 * It returns an error if the given file_entry ptr is not a directory,
-	 * if any of the path components don't reference a directory, or if the
-	 * path eventually points outside of the given file_entry.
-	 */
-	std::string normalize_path(file_entry_ptr &directory, const char *path, size_t len, cloudabi_lookupflags_t lookupflags);
+	using reverse_filesystem::dereference_path; // don't hide the base version
+	std::string dereference_path(file_entry_ptr &directory, std::string path, cloudabi_lookupflags_t lookupflags);
 
 	file_entry_ptr get_file_entry_from_inode(cloudabi_inode_t inode);
 	file_entry_ptr get_file_entry_from_pseudo(pseudofd_t pseudo);

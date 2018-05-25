@@ -9,5 +9,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 include(../../wubwubcmake/warning_settings.cmake)
 add_sane_warning_flags()
 
-add_library(pseudofd reversefd.cpp reverse.cpp cosix/reverse.hpp)
+add_library(pseudofd
+	reversefd.cpp
+	reverse.cpp
+	cosix/reverse.hpp
+	reversefs.cpp cosix/reverse_filesystem.hpp
+)
 target_include_directories(pseudofd PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
