@@ -28,6 +28,6 @@ else
 EOF
 fi
 
-${GENEXT2FS} -b 95000 -z fs.img
+${GENEXT2FS} -N 10000 -b 95000 -z fs.img
 ${DD} if=fs.img of=disk.img seek=1
 rm fs.img

@@ -17,8 +17,8 @@ reverse_filesystem::reverse_filesystem(cloudabi_device_t d)
  */
 std::pair<cloudabi_inode_t, std::string> reverse_filesystem::dereference_path(cloudabi_inode_t orig_dir_inode, std::string path, cloudabi_lookupflags_t lookupflags)
 {
-	auto const *directory = &lookup_nonrecursive(orig_dir_inode, "");
-	if(directory->type != CLOUDABI_FILETYPE_DIRECTORY) {
+	file_entry directory = lookup_nonrecursive(orig_dir_inode, "");
+	if(directory.type != CLOUDABI_FILETYPE_DIRECTORY) {
 		throw cloudabi_system_error(ENOTDIR);
 	}
 
@@ -47,7 +47,7 @@ std::pair<cloudabi_inode_t, std::string> reverse_filesystem::dereference_path(cl
 			}
 			if(lookupflags & CLOUDABI_LOOKUP_SYMLINK_FOLLOW) {
 				try {
-					auto const &entry = lookup_nonrecursive(directory->inode, path);
+					auto const entry = lookup_nonrecursive(directory.inode, path);
 					if(entry.type == CLOUDABI_FILETYPE_SYMBOLIC_LINK) {
 						// follow symlink
 						if(++symlinks_followed >= max_symlinks_followed) {
@@ -67,7 +67,7 @@ std::pair<cloudabi_inode_t, std::string> reverse_filesystem::dereference_path(cl
 				}
 			}
 			// done with lookup
-			return std::make_pair(directory->inode, path);
+			return std::make_pair(directory.inode, path);
 		}
 
 		// path component; it must exist
@@ -77,7 +77,7 @@ std::pair<cloudabi_inode_t, std::string> reverse_filesystem::dereference_path(cl
 			// no-op path component, just continue
 			continue;
 		}
-		auto const &entry = lookup_nonrecursive(directory->inode, component);
+		auto const entry = lookup_nonrecursive(directory.inode, component);
 		if(entry.type == CLOUDABI_FILETYPE_SYMBOLIC_LINK) {
 			if(++symlinks_followed >= max_symlinks_followed) {
 				throw cloudabi_system_error(ELOOP);
@@ -100,9 +100,9 @@ std::pair<cloudabi_inode_t, std::string> reverse_filesystem::dereference_path(cl
 		}
 		if(path.empty()) {
 			// this is actually the last component, don't enter it
-			return std::make_pair(directory->inode, component);
+			return std::make_pair(directory.inode, component);
 		}
-		directory = &entry;
+		directory = entry;
 	} while(!path.empty());
 
 	/* unreachable code */

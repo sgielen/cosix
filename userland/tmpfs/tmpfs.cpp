@@ -36,7 +36,7 @@ tmpfs::tmpfs(cloudabi_device_t d)
 	pseudo_fds[0] = root_pseudo;
 }
 
-file_entry &tmpfs::lookup_nonrecursive(cloudabi_inode_t inode, std::string const &filename)
+file_entry tmpfs::lookup_nonrecursive(cloudabi_inode_t inode, std::string const &filename)
 {
 	file_entry_ptr entry = get_file_entry_from_inode(inode);
 	if(filename.empty()) {

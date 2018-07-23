@@ -16,7 +16,7 @@ struct reverse_filesystem : reverse_handler {
 
 	// Look up the file entry corresponding to the inode (if filename is empty), or the file entry
 	// corresponding to the file pointed to by filename in the directory pointed to by inode.
-	virtual file_entry &lookup_nonrecursive(cloudabi_inode_t inode, std::string const &filename) = 0;
+	virtual file_entry lookup_nonrecursive(cloudabi_inode_t inode, std::string const &filename) = 0;
 
 	// Read the contents of the symlink pointed to by inode.
 	virtual std::string readlink(cloudabi_inode_t inode) = 0;
