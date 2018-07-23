@@ -21,6 +21,7 @@ struct x86_ata_device : public device, public blockdev {
 	cloudabi_errno_t init() override;
 
 	cloudabi_errno_t read_sectors(void *str, uint64_t lba, uint64_t sectorcount) override;
+	cloudabi_errno_t write_sectors(const void *str, uint64_t lba, uint64_t sectorcount) override;
 
 private:
 	x86_ata *controller;
@@ -42,6 +43,7 @@ struct x86_ata : public device, public irq_handler {
 	void handle_irq(uint8_t irq) override;
 
 	cloudabi_errno_t read_sectors(int io_port, bool master, uint64_t lba, uint64_t sectorcount, void *str);
+	cloudabi_errno_t write_sectors(int io_port, bool master, uint64_t lba, uint64_t sectorcount, const void *str);
 
 private:
 	void select_bus_device(int port, bool lba, bool master);

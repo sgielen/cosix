@@ -20,6 +20,8 @@ using namespace cloudos;
 #define REG_IO_CMDSTAT 0x7
 
 #define CMD_READ_SECTORS_EXT 0x24
+#define CMD_WRITE_SECTORS_EXT 0x34
+#define CMD_CACHE_FLUSH_EXT 0xEA
 #define CMD_IDENTIFY 0xEC
 
 #define STATUS_ERR 0x01
@@ -36,9 +38,51 @@ using namespace cloudos;
 #define ATA_IO_LBA    0x40 /* command is LBA28 / LBA48 */
 #define ATA_IO_SLAVE  0x10 /* command is meant for slave drive */
 
+static void print_device_status(uint8_t value) {
+	get_vga_stream() << hex << value << dec << ": ";
+#define S(x) if(value & STATUS_##x) get_vga_stream() << " " #x
+	S(ERR);
+	S(DRQ);
+	S(SRV);
+	S(DF);
+	S(RDY);
+	S(BSY);
+}
+
 static void wait_until_ready(int port) {
+	size_t attempt = 0;
+	uint8_t initial_value;
 	while(1) {
 		auto value = inb(port + REG_IO_CMDSTAT);
+		if(++attempt == 1) {
+			initial_value = value;
+		}
+		if(value & STATUS_BSY) {
+			// wait for BSY to clear
+			continue;
+		}
+		if(value & (STATUS_RDY | STATUS_ERR | STATUS_DF)) {
+			// drive is done
+			return;
+		}
+		if(attempt == 1000) {
+			get_vga_stream() << "Still waiting for RDY. Initially: [";
+			print_device_status(initial_value);
+			get_vga_stream() << "] Now: [";
+			print_device_status(value);
+			get_vga_stream() << "]\n";
+		}
+	}
+}
+
+static void wait_until_drq(int port) {
+	size_t attempt = 0;
+	uint8_t initial_value;
+	while(1) {
+		auto value = inb(port + REG_IO_CMDSTAT);
+		if(++attempt == 1) {
+			initial_value = value;
+		}
 		if(value & STATUS_BSY) {
 			// wait for BSY to clear
 			continue;
@@ -46,6 +90,13 @@ static void wait_until_ready(int port) {
 		if(value & (STATUS_DRQ | STATUS_ERR | STATUS_DF)) {
 			// drive is done
 			return;
+		}
+		if(attempt == 1000) {
+			get_vga_stream() << "Still waiting for DRQ. Initially: [";
+			print_device_status(initial_value);
+			get_vga_stream() << "] Now: [";
+			print_device_status(value);
+			get_vga_stream() << "]\n";
 		}
 	}
 }
@@ -180,8 +231,8 @@ cloudabi_errno_t x86_ata::init() {
 }
 
 void x86_ata::handle_irq(uint8_t i) {
-	get_vga_stream() << "Got IRQ " << i << " from ATA controller\n";
-	// TODO: acknowledge it
+	//get_vga_stream() << "Got IRQ " << i << " from ATA controller\n";
+	// TODO: handle it
 }
 
 cloudabi_errno_t x86_ata::read_sectors(int io_port, bool master, uint64_t lba, uint64_t sectorcount, void *buf)
@@ -209,6 +260,7 @@ cloudabi_errno_t x86_ata::read_sectors(int io_port, bool master, uint64_t lba, u
 	locked = true;
 
 	select_bus_device(io_port, true, master);
+	wait_until_ready(io_port);
 	outb(io_port + REG_IO_SECTORS, sectorcount >> 16);
 	outb(io_port + REG_IO_LBALO,   (lba >> 24) & 0xff);
 	outb(io_port + REG_IO_LBAMID,  (lba >> 32) & 0xff);
@@ -239,6 +291,73 @@ cloudabi_errno_t x86_ata::read_sectors(int io_port, bool master, uint64_t lba, u
 	return 0;
 }
 
+cloudabi_errno_t x86_ata::write_sectors(int io_port, bool master, uint64_t lba, uint64_t sectorcount, const void *buf)
+{
+	//get_vga_stream() << "write_sectors of " << sectorcount << " sectors\n";
+	if(sectorcount == 65536) {
+		// special value
+		sectorcount = 0;
+	} else if(sectorcount > 65536) {
+		// can't read this many sectors in one go
+		return EINVAL;
+	}
+
+	if(lba >= (1LL << 48)) {
+		// can't address this sector
+		return EINVAL;
+	}
+
+	assert(lba <= 0xffffffffffff);
+	assert(sectorcount <= 0xffff);
+
+	// TODO: this works until we are multi-processor
+	while(locked) {
+		unlocked_cv.wait();
+	}
+	locked = true;
+
+	select_bus_device(io_port, true, master);
+	wait_until_ready(io_port);
+	outb(io_port + REG_IO_SECTORS, sectorcount >> 16);
+	outb(io_port + REG_IO_LBALO,   (lba >> 24) & 0xff);
+	outb(io_port + REG_IO_LBAMID,  (lba >> 32) & 0xff);
+	outb(io_port + REG_IO_LBAHI,   (lba >> 40) & 0xff);
+	outb(io_port + REG_IO_SECTORS, sectorcount & 0xff);
+	outb(io_port + REG_IO_LBALO,   (lba      ) & 0xff);
+	outb(io_port + REG_IO_LBAMID,  (lba >> 8 ) & 0xff);
+	outb(io_port + REG_IO_LBAHI,   (lba >> 16) & 0xff);
+
+	outb(io_port + REG_IO_CMDSTAT, CMD_WRITE_SECTORS_EXT);
+
+	auto *str = reinterpret_cast<const uint8_t*>(buf);
+	for(size_t i = 0; i < sectorcount; ++i) {
+		//get_vga_stream() << "write sector " << i << "/" << sectorcount << ": B";
+		// TODO: block until interrupt here
+		wait_until_drq(io_port);
+
+		//get_vga_stream() << "C";
+		for(int c = 0; c < 256; ++c) {
+			uint16_t v = uint16_t(str[0]) + (str[1] << 8);
+			outw(io_port + REG_IO_DATA, v);
+			str += 2;
+		}
+
+		//get_vga_stream() << "W";
+		wait_for_device_update(io_port);
+		//get_vga_stream() << "\n";
+	}
+
+	// TODO: we should FLUSH CACHE here, but in Qemu, that command never succeeds,
+	// BSY is never cleared
+	//outb(io_port + REG_IO_CMDSTAT, CMD_CACHE_FLUSH_EXT);
+	//wait_for_device_update(io_port);
+	//wait_until_ready(io_port);
+
+	locked = false;
+	unlocked_cv.notify();
+	return 0;
+}
+
 x86_ata_device::x86_ata_device(x86_ata *c, int p, bool m, uint16_t *d)
 : ::device(c)
 , controller(c)
@@ -262,4 +381,8 @@ cloudabi_errno_t x86_ata_device::init() {
 
 cloudabi_errno_t x86_ata_device::read_sectors(void *str, uint64_t lba, uint64_t sectorcount) {
 	return controller->read_sectors(io_port, master, lba, sectorcount, str);
+}
+
+cloudabi_errno_t x86_ata_device::write_sectors(const void *str, uint64_t lba, uint64_t sectorcount) {
+	return controller->write_sectors(io_port, master, lba, sectorcount, str);
 }

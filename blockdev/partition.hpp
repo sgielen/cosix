@@ -8,6 +8,7 @@ struct partition : public blockdev {
 	~partition() override;
 
 	cloudabi_errno_t read_sectors(void *str, uint64_t lba, uint64_t sectorcount) override;
+	cloudabi_errno_t write_sectors(const void *str, uint64_t lba, uint64_t sectorcount) override;
 
 private:
 	shared_ptr<blockdev> bdev;

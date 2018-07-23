@@ -21,3 +21,14 @@ cloudabi_errno_t partition::read_sectors(void *str, uint64_t lba, uint64_t sc)
 	// relative -> absolute addressing
 	return bdev->read_sectors(str, lba + lba_offset, sc);
 }
+
+cloudabi_errno_t partition::write_sectors(const void *str, uint64_t lba, uint64_t sc)
+{
+	if((lba + sc) > sectorcount) {
+		// partition is not this big
+		return EINVAL;
+	}
+
+	// relative -> absolute addressing
+	return bdev->write_sectors(str, lba + lba_offset, sc);
+}

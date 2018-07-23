@@ -25,8 +25,11 @@ struct blockdev : public fd_t {
 	size_t pwrite(const char *str, size_t count, size_t offset) final override;
 
 	virtual cloudabi_errno_t read_sectors(void *str, uint64_t lba, uint64_t sectorcount) = 0;
+	virtual cloudabi_errno_t write_sectors(const void *str, uint64_t lba, uint64_t sectorcount) = 0;
 
 private:
+	bool convert_count_offset(uint64_t &count, uint64_t &offset);
+
 	void set_name(const char *name);
 	// TODO: make this configurable
 	static const int sector_size = 512;
