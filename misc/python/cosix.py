@@ -139,7 +139,7 @@ def run_unittests_count(count):
   num_failures = 0
   while count == 0 or (num_success + num_failures) < count:
     res = run_unittests()
-    if res.si_status == 0:
+    if res[0] == 0:
       success="succeeded"
       num_success += 1
     else:
