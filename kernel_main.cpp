@@ -37,6 +37,8 @@ using namespace cloudos;
 
 cloudos::global_state *cloudos::global_state_;
 
+uintptr_t __stack_chk_guard = 0;
+
 extern "C"
 void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	global_state global;
@@ -162,8 +164,16 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	global.scheduler = &sched;
 
 	rng rng;
+	// TODO: seed this properly, e.g. from the configfs, using the Intel
+	// RDRAND instruction or by using the time in the hardware clock, and
+	// only allow reading from it after it's been seeded
 	rng.seed(98764);
 	global.random = &rng;
+	{
+		uintptr_t stack_guard;
+		rng.get(reinterpret_cast<char*>(&stack_guard), sizeof(stack_guard));
+		__stack_chk_guard = stack_guard;
+	}
 
 	terminal_store term_store;
 	global.terminal_store = &term_store;
