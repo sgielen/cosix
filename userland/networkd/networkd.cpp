@@ -33,7 +33,6 @@ using namespace flower::protocol::switchboard;
 
 int stdout;
 int bootfs;
-int rootfs;
 int ifstore;
 int switchboard;
 std::mutex ifstore_mtx;
@@ -324,8 +323,6 @@ void program_main(const argdata_t *ad) {
 			argdata_get_fd(value, &stdout);
 		} else if(strcmp(keystr, "bootfs") == 0) {
 			argdata_get_fd(value, &bootfs);
-		} else if(strcmp(keystr, "rootfs") == 0) {
-			argdata_get_fd(value, &rootfs);
 		} else if(strcmp(keystr, "ifstore") == 0) {
 			argdata_get_fd(value, &ifstore);
 		} else if(strcmp(keystr, "switchboard_socket") == 0) {
