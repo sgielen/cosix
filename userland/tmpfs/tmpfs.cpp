@@ -89,6 +89,9 @@ pseudofd_t tmpfs::open(cloudabi_inode_t inode, cloudabi_oflags_t oflags)
 	entry->access_time = timestamp();
 
 	if(oflags & CLOUDABI_O_TRUNC) {
+		if(entry->type != CLOUDABI_FILETYPE_REGULAR_FILE) {
+			throw cloudabi_system_error(EINVAL);
+		}
 		entry->contents.clear();
 		entry->content_time = entry->metadata_time = timestamp();
 	}
@@ -195,7 +198,7 @@ void tmpfs::rename(pseudofd_t pseudo1, const char *path1, size_t path1len, pseud
 		return;
 	}
 
-	// destination is directory? -> move directory
+	// destination is directory? -> must be empty, overwrite it
 	if(it2->second->type == CLOUDABI_FILETYPE_DIRECTORY) {
 		if(entry->type != CLOUDABI_FILETYPE_DIRECTORY) {
 			throw cloudabi_system_error(EISDIR);
