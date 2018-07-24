@@ -51,7 +51,7 @@ static void print_device_status(uint8_t value) {
 
 static void wait_until_ready(int port) {
 	size_t attempt = 0;
-	uint8_t initial_value;
+	uint8_t initial_value = 0;
 	while(1) {
 		auto value = inb(port + REG_IO_CMDSTAT);
 		if(++attempt == 1) {
@@ -77,7 +77,7 @@ static void wait_until_ready(int port) {
 
 static void wait_until_drq(int port) {
 	size_t attempt = 0;
-	uint8_t initial_value;
+	uint8_t initial_value = 0;
 	while(1) {
 		auto value = inb(port + REG_IO_CMDSTAT);
 		if(++attempt == 1) {
