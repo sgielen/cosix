@@ -432,8 +432,9 @@ thread_condition_signaler *thread::wait_userspace_cv_signaler(_Atomic(cloudabi_l
 {
 	userland_condvar_waiters_t *condvar_cv = process->get_or_create_userland_condvar_cv(condvar, lock);
 	if(condvar_cv->lock != lock) {
-		get_vga_stream() << "*** Bug: condvar lock mismatch from userland, refusing to wait ***\n";
-		return nullptr;
+		// TODO: ASAN triggers this --- why? Try to continue
+		get_vga_stream() << "*** Bug: condvar lock mismatch from userland ***\n";
+		condvar_cv->lock = lock;
 	}
 
 	drop_userspace_lock(lock);
@@ -511,7 +512,12 @@ void thread::cancel_userspace_cv(_Atomic(cloudabi_lock_t) *lock, _Atomic(cloudab
 	userland_condvar_waiters_t *condvar_cv = process->get_userland_condvar_cv(condvar);
 	assert(condvar_cv);
 
-	assert(condvar_cv->lock == lock);
+	if(condvar_cv->lock != lock) {
+		// TODO: ASAN triggers this --- why? Try to continue
+		get_vga_stream() << "*** Bug: condvar lock mismatch from userland ***\n";
+		condvar_cv->lock = lock;
+	}
+
 	size_t num_removed = remove_all(&condvar_cv->waiting_threads, [&](thread_wakelist *item) {
 		return item->data.first == thread_id;
 	});
