@@ -112,8 +112,8 @@ void pseudo_fd::became_readable()
 
 size_t pseudo_fd::read(void *dest, size_t count)
 {
-	if(count > UINT8_MAX) {
-		count = UINT8_MAX;
+	if(count > UINT16_MAX) {
+		count = UINT16_MAX;
 	}
 	reverse_request_t request;
 	request.pseudofd = pseudo_id;
