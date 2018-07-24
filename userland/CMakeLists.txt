@@ -19,6 +19,12 @@ if(BAREMETAL_ENABLED)
 	set_target_properties(vdso_support PROPERTIES LINKER_LANGUAGE CXX)
 endif()
 
+option(USE_ASAN_USERLAND "Enable Address Sanitizer in userland" OFF)
+unset(CMAKE_FLAGS_USERLAND)
+if(USE_ASAN_USERLAND)
+	set(CMAKE_FLAGS_USERLAND "-DUSE_ASAN=ON")
+endif()
+
 include(ExternalProject)
 set(EXTERNAL_BINARY_LIST "")
 macro(add_external_binary BINARY_NAME)
@@ -26,7 +32,7 @@ macro(add_external_binary BINARY_NAME)
 	ExternalProject_Add(${BINARY_NAME}
 		SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/${BINARY_NAME}"
 		PREFIX "${BINARY_NAME}"
-		CMAKE_ARGS "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_SOURCE_DIR}/cmake/Toolchain-i686-cloudabi.cmake" "-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}" "-DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>"
+		CMAKE_ARGS "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_SOURCE_DIR}/cmake/Toolchain-i686-cloudabi.cmake" "-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}" "-DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>" ${CMAKE_FLAGS_USERLAND}
 		STEP_TARGETS install
 	)
 	# By default, changes in ExternalProjects do not force a rebuild, so we
