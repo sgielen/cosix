@@ -71,9 +71,8 @@ if(BAREMETAL_ENABLED)
 	)
 
 	set(QEMU_ARGS -m 1024
-		-net nic,model=e1000 -net user
+		-nic user,model=e1000,hostfwd=tcp::2626-:26,hostfwd=tcp::8080-:80
 		-no-reboot -no-shutdown -d int -d cpu_reset -d guest_errors
-		-redir tcp:2626::26 -redir tcp:8080::80
 		-serial file:kernel.log
 		-drive file=disk.img,index=0,format=raw,media=disk
 		-append "cosix.config=ext2@ata0p0"
