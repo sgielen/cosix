@@ -304,6 +304,12 @@ interrupt_handler::interrupt_handler() {
 
 void interrupt_handler::register_irq_handler(uint8_t irq, irq_handler *handler) {
 	assert(irq < NUM_ELEMENTS(irq_handlers));
+	// TODO: if this assertion is triggered, it means multiple devices are
+	// trying to use the same IRQ. But, the interrupt handler can only
+	// invoke one IRQ handler currently, i.e. it can service only one
+	// device. The fix is to either make sure all devices use unique IRQs,
+	// or to use a 'demux' IRQ handler for multiple devices that can
+	// forward the IRQ to the correct handler.
 	assert(irq_handlers[irq] == nullptr);
 
 	irq_handlers[irq] = handler;
