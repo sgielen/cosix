@@ -338,16 +338,11 @@ struct extfs_file_entry : public cosix::file_entry {
 	extfs_file_entry(extfs *fs, cloudabi_inode_t i, cloudabi_device_t d, ext2_inode &id) : e(fs), inode_data(id) {
 		inode = i;
 		device = d;
-		inode_data.nlink++;
-		e->write_inode(inode, inode_data);
 	}
 
 	~extfs_file_entry() {
-		inode_data.nlink--;
 		if(inode_data.nlink == 0) {
 			e->deallocate_inode(inode, type, inode_data);
-		} else {
-			e->write_inode(inode, inode_data);
 		}
 	}
 
@@ -1390,6 +1385,11 @@ file_entry_ptr extfs::get_file_entry_from_inode(cloudabi_inode_t inode)
 		entry->type = CLOUDABI_FILETYPE_UNKNOWN;
 	}
 
+	// TODO: assert that open_inodes doesn't contain this inode yet, i.e.
+	// assert that an inode can only be open once. If this fails, two
+	// extfs_file_entry objects may point at the same file entry; this
+	// allows a number of failure modes such as a double deallocation of
+	// the inode from the filesystem
 	open_inodes[inode] = entry;
 	return entry;
 }
