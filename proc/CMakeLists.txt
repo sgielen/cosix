@@ -3,6 +3,8 @@ if(BAREMETAL_ENABLED)
 	add_library(proc
 		syscall_context.hpp
 		syscalls.hpp
+		process_store.hpp
+		process_store.cpp
 		syscall/clock_syscalls.cpp
 		syscall/concur_syscalls.cpp
 		syscall/fd_syscalls.cpp

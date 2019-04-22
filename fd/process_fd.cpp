@@ -94,6 +94,12 @@ process_fd::~process_fd()
 	deallocate({page_tables, 0x300 * sizeof(uint32_t*)});
 }
 
+void process_fd::get_pid(uint8_t *out, size_t size) {
+	assert(size >= sizeof(pid));
+	memcpy(out, pid, sizeof(pid));
+	memset(out + sizeof(pid), 0, size - sizeof(pid));
+}
+
 void process_fd::add_initial_fds() {
 	auto vga = make_shared<vga_fd>("vga_fd");
 	add_fd(vga, CLOUDABI_RIGHT_FD_WRITE | CLOUDABI_RIGHT_FILE_STAT_FGET);

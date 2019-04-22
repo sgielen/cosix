@@ -32,6 +32,7 @@
 #include <term/terminal_store.hpp>
 #include <term/console_terminal.hpp>
 #include <blockdev/blockdev_store.hpp>
+#include <proc/process_store.hpp>
 
 using namespace cloudos;
 
@@ -180,7 +181,8 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 	auto console = make_shared<console_terminal>();
 	term_store.register_terminal(console);
 
-	global.init = allocate<process_fd>("init");
+	auto init = make_shared<process_fd>("init");
+	global.init = init.get();
 	stream << "Init process created\n";
 
 	global.init->install_page_directory();
@@ -206,6 +208,9 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 		}
 		global.init->add_initial_fds();
 	}
+
+	global.process_store = allocate<process_store>();
+	global.process_store->register_process(init);
 
 	global.clock_store = allocate<clock_store>();
 	global.driver_store = allocate<driver_store>();

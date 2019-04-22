@@ -2,6 +2,7 @@
 #include <global.hpp>
 #include <fd/process_fd.hpp>
 #include <fd/scheduler.hpp>
+#include <proc/process_store.hpp>
 
 using namespace cloudos;
 
@@ -71,6 +72,8 @@ cloudabi_errno_t cloudos::syscall_proc_fork(syscall_context &c)
 	newprocess->fork(c.thread->shared_from_this());
 
 	c.process()->install_page_directory();
+
+	get_process_store()->register_process(newprocess);
 
 	// set return values for parent
 	auto fdnum = c.process()->add_fd(newprocess, CLOUDABI_RIGHT_POLL_PROC_TERMINATE | CLOUDABI_RIGHT_FILE_STAT_FGET, 0);
