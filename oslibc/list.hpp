@@ -154,3 +154,40 @@ inline size_t remove_all(linked_list<T> **list, Functor f, Deallocator d = {}) {
 
 	return removed;
 }
+
+template <typename T>
+struct linked_iterator {
+	linked_list<T> *item;
+};
+
+template <typename T>
+inline linked_iterator<T> begin(linked_list<T> *list) {
+	return {list};
+}
+
+template <typename T>
+inline linked_iterator<T> end(linked_list<T> *) {
+	return {nullptr};
+}
+
+template <typename T>
+inline T &operator*(linked_iterator<T> &it) {
+	assert(it.item != nullptr);
+	return it.item->data;
+}
+
+template <typename T>
+inline void operator++(linked_iterator<T> &it) {
+	assert(it.item != nullptr);
+	it.item = it.item->next;
+}
+
+template <typename T>
+inline bool operator!=(linked_iterator<T> const &lh, linked_iterator<T> const &rh) {
+	return lh.item != rh.item;
+}
+
+template <typename T>
+inline bool operator==(linked_iterator<T> const &lh, linked_iterator<T> const &rh) {
+	return lh.item == rh.item;
+}
