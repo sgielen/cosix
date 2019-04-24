@@ -15,7 +15,7 @@
 #include <hw/vga_stream.hpp>
 #include <memory/map_virtual.hpp>
 #include <oslibc/string.h>
-#include <rng/rng.hpp>
+#include <oslibc/uuid.hpp>
 #include <term/terminal_store.hpp>
 #include <userland/vdso_support.h>
 
@@ -820,9 +820,7 @@ cloudabi_errno_t process_fd::exec(uint8_t *buffer, size_t buffer_size, uint8_t *
 	memcpy(vdso_address, vdso_blob, vdso_size);
 
 	// choose a pid
-	get_random()->get(reinterpret_cast<char*>(pid), sizeof(pid));
-	pid[6] = (pid[6] & 0x0f) | 0x40;
-	pid[8] = (pid[8] & 0x3f) | 0x80;
+	generate_random_uuid(pid, sizeof(pid));
 
 	// initialize auxv
 	size_t auxv_entries = 9; // including CLOUDABI_AT_NULL
