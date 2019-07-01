@@ -221,7 +221,7 @@ Blk map_virtual::map_pages_only(void *physaddr, size_t bytes) {
 	size_t num_pages = bytes / PAGE_SIZE;
 	size_t bit;
 	if(!vmem_bitmap.get_contiguous_free(num_pages, bit)) {
-		get_vga_stream() << "allocate() called, but there is no virtual address space left\n";
+		get_vga_stream() << "map_pages_only() called, but there is no virtual address space left\n";
 		return {};
 	}
 
