@@ -21,10 +21,11 @@ struct initrdfs_directory_fd : fd_t {
 		strncpy(subpath, s, sizeof(subpath));
 	}
 
-	shared_ptr<fd_t> openat(const char * /*path */, size_t /*pathlen*/, cloudabi_lookupflags_t /*lookupflags*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) override;
+	void lookup(const char *file, size_t filelen, cloudabi_oflags_t oflags, cloudabi_filestat_t *filestat) override;
+	shared_ptr<fd_t> inode_open(cloudabi_device_t, cloudabi_inode_t, const cloudabi_fdstat_t*) override;
 	size_t readdir(char * /*buf*/, size_t /*nbyte*/, cloudabi_dircookie_t /*cookie*/) override;
 	void file_stat_fget(cloudabi_filestat_t *buf) override;
-	cloudabi_inode_t file_create(const char * /*path*/, size_t /*pathlen*/, cloudabi_filetype_t /*type*/) override;
+	cloudabi_inode_t file_create(const char * /*file*/, size_t /*filelen*/, cloudabi_filetype_t /*type*/) override;
 
 private:
 	char subpath[INITRDFS_PATH_MAX];
@@ -144,83 +145,119 @@ shared_ptr<fd_t> initrdfs::get_root_fd() {
 	return make_shared<initrdfs_directory_fd>(initrd_start, initrd_size, "", 0, "initrdfs_root");
 }
 
-shared_ptr<fd_t> initrdfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi_lookupflags_t, cloudabi_oflags_t, const cloudabi_fdstat_t *) {
-	if(pathname == nullptr || pathname[0] == 0 || pathname[0] == '/') {
-		error = EINVAL;
-		return nullptr;
+void initrdfs_directory_fd::lookup(const char *file, size_t filelen, cloudabi_oflags_t, cloudabi_filestat_t *filestat) {
+	filestat->st_dev = device;
+	filestat->st_nlink = 1;
+	filestat->st_atim = 0;
+	filestat->st_mtim = 0;
+	filestat->st_ctim = 0;
+
+	if (strncmp(file, ".", filelen) == 0) {
+		filestat->st_ino = 0;
+		filestat->st_filetype = CLOUDABI_FILETYPE_DIRECTORY;
+		filestat->st_size = 0;
+		error = 0;
+		return;
 	}
 
 	if(initrd_start == nullptr) {
 		error = ENOENT;
-		return nullptr;
+		return;
 	}
 
 	char fullpath[INITRDFS_PATH_MAX];
-	if(strlen(subpath) + pathlen + 1 /* slash */ + 1 /* terminator */ > sizeof(fullpath)) {
+	if(strlen(subpath) + filelen + 1 /* slash */ + 1 /* terminator */ > sizeof(fullpath)) {
 		// path doesn't fit
 		error = ENAMETOOLONG;
-		return nullptr;
+		return;
 	}
 
 	if(subpath[0] == 0) {
-		strncpy(fullpath, pathname, pathlen);
-		fullpath[pathlen] = 0;
+		strncpy(fullpath, file, filelen);
+		fullpath[filelen] = 0;
 	} else {
 		size_t subpathlen = strlen(subpath);
 		strncpy(fullpath, subpath, sizeof(fullpath));
 		strlcat(fullpath, "/", sizeof(fullpath));
-		strncpy(fullpath + subpathlen + 1, pathname, pathlen);
-		fullpath[subpathlen + pathlen + 1] = 0;
+		strncpy(fullpath + subpathlen + 1, file, filelen);
+		fullpath[subpathlen + filelen + 1] = 0;
 	}
 
-	pathlen = strlen(fullpath);
+	auto pathlen = strlen(fullpath);
 	while(pathlen > 0 && fullpath[pathlen-1] == '/') {
 		// remove slashes at the end
 		fullpath[--pathlen] = 0;
 	}
 
-	// TODO: check oflags and fdstat_t
-
 	// Walk through the initrd and find a file with this path
 	size_t filenum = 1;
-	shared_ptr<fd_t> fd;
+	bool found = false;
 	error = for_every_initrd_file(initrd_start, initrd_size, [&](header_posix_ustar *header, size_t filesize) {
 		++filenum;
 		bool is_file = header->typeflag[0] == 0 || header->typeflag[0] == '0';
 		bool is_directory = header->name[strlen(header->name)-1] == '/' || header->typeflag[0] == '5';
 		bool is_exact_match = strncmp(header->name, fullpath, sizeof(header->name)) == 0;
 
-		if(is_directory && is_exact_match) {
-			fd = make_shared<initrdfs_directory_fd>(initrd_start, initrd_size, fullpath, filenum, "initrd_directory");
-			return true;
-		}
-
-		if(is_file && is_exact_match) {
-			fd = make_shared<initrdfs_file_fd>(reinterpret_cast<uint8_t*>(header + 1), filesize, filenum, "initrd/");
-			strlcat(fd->name, fullpath, sizeof(fd->name));
-			return true;
-		}
-
-		// check if this is a file within the directory being opened, i.e. the header->name
-		// contains the fullpath and the character after it is '/'
-		if(pathlen < sizeof(header->name) && memcmp(header->name, fullpath, pathlen) == 0 && header->name[pathlen] == '/') {
-			fd = make_shared<initrdfs_directory_fd>(initrd_start, initrd_size, fullpath, filenum, "initrd_directory");
+		if (is_exact_match && (is_file || is_directory)) {
+			filestat->st_ino = filenum;
+			filestat->st_filetype = is_directory ? CLOUDABI_FILETYPE_DIRECTORY : CLOUDABI_FILETYPE_REGULAR_FILE;
+			filestat->st_size = filesize;
+			found = true;
 			return true;
 		}
 
 		return false;
 	});
-	if(error != 0) {
-		return nullptr;
-	}
-	if(fd) {
-		return fd;
+
+	if (!found) {
+		error = ENOENT;
 	}
 
-	error = ENOENT;
-	return nullptr;
+	error = 0;
+	return;
 }
 
+shared_ptr<fd_t> initrdfs_directory_fd::inode_open(cloudabi_device_t dev, cloudabi_inode_t ino, const cloudabi_fdstat_t*) {
+	if (dev != device) {
+		error = EINVAL;
+		return nullptr;
+	}
+
+	size_t filenum = 1;
+	shared_ptr<fd_t> fd;
+	error = for_every_initrd_file(initrd_start, initrd_size, [&](header_posix_ustar *header, size_t filesize) {
+		++filenum;
+
+		if (filenum != ino) {
+			return false;
+		}
+
+		bool is_file = header->typeflag[0] == 0 || header->typeflag[0] == '0';
+		bool is_directory = header->name[strlen(header->name)-1] == '/' || header->typeflag[0] == '5';
+
+		if(is_directory) {
+			fd = make_shared<initrdfs_directory_fd>(initrd_start, initrd_size, header->name, filenum, "initrd_directory");
+			return true;
+		}
+
+		if(is_file) {
+			fd = make_shared<initrdfs_file_fd>(reinterpret_cast<uint8_t*>(header + 1), filesize, filenum, "initrd/");
+			strlcat(fd->name, header->name, sizeof(fd->name));
+			return true;
+		}
+
+
+		return false;
+	});
+
+	if (!fd) {
+		error = ENOENT;
+		return nullptr;
+	}
+
+	error = 0;
+	return fd;
+}
 
 size_t initrdfs_directory_fd::readdir(char *buf, size_t nbyte, cloudabi_dircookie_t cookie) {
 	size_t subpathlen = strlen(subpath);
@@ -303,7 +340,7 @@ void initrdfs_directory_fd::file_stat_fget(cloudabi_filestat_t *buf) {
 	error = 0;
 }
 
-cloudabi_inode_t initrdfs_directory_fd::file_create(const char * /*path*/, size_t /*pathlen*/, cloudabi_filetype_t /*type*/) {
+cloudabi_inode_t initrdfs_directory_fd::file_create(const char * /*file*/, size_t /*filelen*/, cloudabi_filetype_t /*type*/) {
 	error = EROFS;
 	return 0;
 }

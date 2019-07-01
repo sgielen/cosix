@@ -22,6 +22,7 @@
 #include "fd/bootfs.hpp"
 #include "fd/initrdfs.hpp"
 #include "fd/shmfs.hpp"
+#include "fd/vfs.hpp"
 #include "memory/allocator.hpp"
 #include "memory/page_allocator.hpp"
 #include "memory/map_virtual.hpp"
@@ -197,8 +198,10 @@ void kernel_main(uint32_t multiboot_magic, void *bi_ptr, void *end_of_kernel) {
 		if(!bootfs_fd) {
 			kernel_panic("Failed to get bootfs fd");
 		}
-		auto init_exec_fd = bootfs_fd->openat("init", 4, 0, 0, nullptr);
-		if(!init_exec_fd) {
+		shared_ptr<fd_t> init_exec_fd;
+		cloudabi_fdstat_t stat;
+		auto error = openat(bootfs_fd, "init", 4, CLOUDABI_LOOKUP_SYMLINK_FOLLOW, 0, &stat, init_exec_fd);
+		if (error != 0 || !init_exec_fd) {
 			kernel_panic("Failed to open init");
 		}
 		char argdata[] = {0x06 /* empty ADT_MAP */};

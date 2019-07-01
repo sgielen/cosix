@@ -1,6 +1,7 @@
 #include <proc/syscalls.hpp>
 #include <global.hpp>
 #include <fd/process_fd.hpp>
+#include <fd/vfs.hpp>
 
 using namespace cloudos;
 
@@ -64,8 +65,7 @@ cloudabi_errno_t cloudos::syscall_file_create(syscall_context &c)
 	auto path = args.second();
 	auto pathlen = args.third();
 
-	mapping->fd->file_create(path, pathlen, type);
-	return mapping->fd->error;
+	return file_create(mapping->fd, path, pathlen, type, nullptr);
 }
 
 cloudabi_errno_t cloudos::syscall_file_link(syscall_context &c)
@@ -85,14 +85,13 @@ cloudabi_errno_t cloudos::syscall_file_link(syscall_context &c)
 		return res;
 	}
 
-	auto path1 = args.second();
-	auto path1_len = args.third();
+	auto source = args.second();
+	auto sourcelen = args.third();
 
-	auto path2 = args.fifth();
-	auto path2_len = args.sixth();
+	auto destination = args.fifth();
+	auto destinationlen = args.sixth();
 
-	mapping1->fd->file_link(path1, path1_len, args.first().flags, mapping2->fd, path2, path2_len);
-	return mapping1->fd->error;
+	return file_link(mapping1->fd, source, sourcelen, args.first().flags, mapping2->fd, destination, destinationlen);
 }
 
 cloudabi_errno_t cloudos::syscall_file_open(syscall_context &c)
@@ -107,9 +106,9 @@ cloudabi_errno_t cloudos::syscall_file_open(syscall_context &c)
 	}
 
 	// check if fd can be created with such rights
-	auto fds = args.fifth();
-	if((mapping->rights_inheriting & fds->fs_rights_base) != fds->fs_rights_base
-	|| (mapping->rights_inheriting & fds->fs_rights_inheriting) != fds->fs_rights_inheriting) {
+	cloudabi_fdstat_t fds = *args.fifth();
+	if((mapping->rights_inheriting & fds.fs_rights_base) != fds.fs_rights_base
+	|| (mapping->rights_inheriting & fds.fs_rights_inheriting) != fds.fs_rights_inheriting) {
 		get_vga_stream() << "userspace wants too many permissions\n";
 		return ENOTCAPABLE;
 	}
@@ -119,64 +118,13 @@ cloudabi_errno_t cloudos::syscall_file_open(syscall_context &c)
 	auto pathlen = args.third();
 	auto oflags = args.fourth();
 
-	if((oflags & ~(CLOUDABI_O_CREAT | CLOUDABI_O_DIRECTORY | CLOUDABI_O_EXCL | CLOUDABI_O_TRUNC)) != 0) {
-		return EINVAL;
+	shared_ptr<fd_t> result;
+	auto error = openat(mapping->fd, path, pathlen, lookupflags, oflags, &fds, result);
+	if (error != 0) {
+		return error;
 	}
 
-	auto new_fd = mapping->fd->openat(path, pathlen, lookupflags, oflags, fds);
-	if(!new_fd || mapping->fd->error != 0) {
-		if(mapping->fd->error == 0) {
-			mapping->fd->error = EIO;
-		}
-		return mapping->fd->error;
-	}
-
-	// A directory may not be opened read-write
-	// (TODO: this should probably be done directly in openat, but openat doesn't know
-	// whether the file should be opened rdonly/wronly/rdwr)
-	if(new_fd->type == CLOUDABI_FILETYPE_DIRECTORY && fds->fs_rights_base & CLOUDABI_RIGHT_FD_WRITE) {
-		// because the fd isn't added to the process, it will be destructed again
-		return EISDIR;
-	}
-
-	// Depending on filetype, drop some rights if they don't make sense
-	auto base = fds->fs_rights_base;
-	auto inheriting = fds->fs_rights_inheriting;
-	if(new_fd->type != CLOUDABI_FILETYPE_DIRECTORY) {
-		inheriting = 0;
-	}
-	if(new_fd->type != CLOUDABI_FILETYPE_REGULAR_FILE) {
-		base &= ~(CLOUDABI_RIGHT_PROC_EXEC);
-	}
-	if(new_fd->type != CLOUDABI_FILETYPE_DIRECTORY) {
-		// remove all rights that only make sense on directories
-		base &= ~(0
-			| CLOUDABI_RIGHT_FILE_CREATE_DIRECTORY
-			| CLOUDABI_RIGHT_FILE_CREATE_FILE
-			| CLOUDABI_RIGHT_FILE_LINK_SOURCE
-			| CLOUDABI_RIGHT_FILE_LINK_TARGET
-			| CLOUDABI_RIGHT_FILE_OPEN
-			| CLOUDABI_RIGHT_FILE_READDIR
-			| CLOUDABI_RIGHT_FILE_READLINK
-			| CLOUDABI_RIGHT_FILE_RENAME_SOURCE
-			| CLOUDABI_RIGHT_FILE_RENAME_TARGET
-			| CLOUDABI_RIGHT_FILE_STAT_GET
-			| CLOUDABI_RIGHT_FILE_STAT_PUT_TIMES
-			| CLOUDABI_RIGHT_FILE_SYMLINK
-			| CLOUDABI_RIGHT_FILE_UNLINK
-		);
-	} else {
-		// remove all rights that don't make sense on directories
-		base &= ~(0
-			| CLOUDABI_RIGHT_FD_READ
-			| CLOUDABI_RIGHT_FD_SEEK
-			| CLOUDABI_RIGHT_FD_TELL
-			| CLOUDABI_RIGHT_MEM_MAP
-			| CLOUDABI_RIGHT_MEM_MAP_EXEC
-		);
-	}
-
-	c.result = c.process()->add_fd(new_fd, base, inheriting);
+	c.result = c.process()->add_fd(result, fds.fs_rights_base, fds.fs_rights_inheriting);
 	return 0;
 }
 
@@ -212,8 +160,11 @@ cloudabi_errno_t cloudos::syscall_file_readlink(syscall_context &c)
 	auto *buf = args.fourth();
 	auto buf_len = args.fifth();
 
-	c.result = mapping->fd->file_readlink(path, path_len, buf, buf_len);
-	return mapping->fd->error;
+	res = file_readlink(mapping->fd, path, path_len, buf, &buf_len);
+	if (res == 0) {
+		c.result = buf_len;
+	}
+	return res;
 }
 
 cloudabi_errno_t cloudos::syscall_file_rename(syscall_context &c)
@@ -235,14 +186,13 @@ cloudabi_errno_t cloudos::syscall_file_rename(syscall_context &c)
 		return res;
 	}
 
-	auto path1 = args.second();
-	auto path1_len = args.third();
+	auto source = args.second();
+	auto sourcelen = args.third();
 
-	auto path2 = args.fifth();
-	auto path2_len = args.sixth();
+	auto destination = args.fifth();
+	auto destinationlen = args.sixth();
 
-	mapping1->fd->file_rename(path1, path1_len, mapping2->fd, path2, path2_len);
-	return mapping1->fd->error;
+	return file_rename(mapping1->fd, source, sourcelen, mapping2->fd, destination, destinationlen);
 }
 
 cloudabi_errno_t cloudos::syscall_file_stat_fget(syscall_context &c)
@@ -315,11 +265,8 @@ cloudabi_errno_t cloudos::syscall_file_stat_get(syscall_context &c)
 		return res;
 	}
 
-	mapping->fd->file_stat_get(dirfd.flags, path, pathlen, statbuf);
-	if(mapping->fd->error == 0) {
-		assert(statbuf->st_dev == mapping->fd->device);
-	}
-	return mapping->fd->error;
+	cloudabi_fdstat_t fds;
+	return file_stat_get(mapping->fd, path, pathlen, dirfd.flags, &fds, statbuf);
 }
 
 cloudabi_errno_t cloudos::syscall_file_stat_put(syscall_context &c)
@@ -357,8 +304,8 @@ cloudabi_errno_t cloudos::syscall_file_stat_put(syscall_context &c)
 		return res;
 	}
 
-	mapping->fd->file_stat_put(dirfd.flags, path, pathlen, statbuf, flags);
-	return mapping->fd->error;
+	cloudabi_fdstat_t fds;
+	return file_stat_put(mapping->fd, path, pathlen, dirfd.flags, &fds, statbuf, flags);
 }
 
 cloudabi_errno_t cloudos::syscall_file_symlink(syscall_context &c)
@@ -372,12 +319,12 @@ cloudabi_errno_t cloudos::syscall_file_symlink(syscall_context &c)
 		return res;
 	}
 
-	auto *path1 = args.first();
-	auto path1_len = args.second();
-	auto *path2 = args.fourth();
-	auto path2_len = args.fifth();
-	mapping->fd->file_symlink(path1, path1_len, path2, path2_len);
-	return mapping->fd->error;
+	auto *target = args.first();
+	auto targetlen = args.second();
+	auto *path = args.fourth();
+	auto pathlen = args.fifth();
+
+	return file_symlink(mapping->fd, path, pathlen, target, targetlen);
 }
 
 cloudabi_errno_t cloudos::syscall_file_unlink(syscall_context &c)
@@ -394,7 +341,5 @@ cloudabi_errno_t cloudos::syscall_file_unlink(syscall_context &c)
 	auto pathlen = args.third();
 	auto flags = args.fourth();
 
-	mapping->fd->file_unlink(path, pathlen, flags);
-	return mapping->fd->error;
+	return file_unlink(mapping->fd, path, pathlen, flags);
 }
-

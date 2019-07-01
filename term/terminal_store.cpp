@@ -12,29 +12,61 @@ struct termfs_directory_fd : fd_t, enable_shared_from_this<termfs_directory_fd> 
 	: fd_t(CLOUDABI_FILETYPE_DIRECTORY, 0, n)
 	{}
 
-	shared_ptr<fd_t> openat(const char *path, size_t pathlen, cloudabi_lookupflags_t, cloudabi_oflags_t, const cloudabi_fdstat_t *stat) override
+	void lookup(const char *file, size_t filelen, cloudabi_oflags_t, cloudabi_filestat_t *filestat) override
 	{
-		if(pathlen == 0 || (pathlen == 1 && path[0] == '.')) {
+		filestat->st_dev = device;
+		filestat->st_nlink = 1;
+		filestat->st_atim = 0;
+		filestat->st_mtim = 0;
+		filestat->st_ctim = 0;
+		filestat->st_size = 0;
+
+		if (strncmp(file, ".", filelen) == 0) {
+			filestat->st_ino = 0;
+			filestat->st_filetype = CLOUDABI_FILETYPE_DIRECTORY;
 			error = 0;
-			return shared_from_this();
+			return;
 		}
 
-		// check correctness of string
-		char c_path[pathlen + 1];
-		memcpy(c_path, path, pathlen);
-		c_path[pathlen] = 0;
-		if(strlen(c_path) != pathlen) {
+		auto terminals = get_terminal_store()->get_terminals();
+		size_t i = 1;
+		bool found = false;
+		iterate(terminals, [&](terminal_list *item) {
+			++i;
+			if (strncmp(item->data->get_name(), file, filelen) == 0) {
+				filestat->st_ino = i;
+				filestat->st_filetype = CLOUDABI_FILETYPE_CHARACTER_DEVICE;
+				found = true;
+			}
+		});
+		if (found) {
+			error = 0;
+		} else {
 			error = ENOENT;
+		}
+	}
+
+	shared_ptr<fd_t> inode_open(cloudabi_device_t st_dev, cloudabi_inode_t st_ino, const cloudabi_fdstat_t *stat) override
+	{
+		if (st_dev != device) {
+			error = EINVAL;
 			return nullptr;
 		}
-		auto term = get_terminal_store()->get_terminal(c_path);
-		if(!term) {
+
+		auto terminals = get_terminal_store()->get_terminals();
+		size_t i = 1;
+		shared_ptr<fd_t> res;
+		iterate(terminals, [&](terminal_list *item) {
+			if (++i == st_ino) {
+				res = make_shared<terminal_fd>(item->data, stat->fs_flags);
+			}
+		});
+		if (res) {
+			error = 0;
+		} else {
 			error = ENOENT;
-			return nullptr;
 		}
-		auto fd = make_shared<terminal_fd>(term, stat->fs_flags);
-		error = 0;
-		return fd;
+		return res;
 	}
 
 	size_t readdir(char *buf, size_t nbyte, cloudabi_dircookie_t cookie) override {

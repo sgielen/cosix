@@ -85,6 +85,15 @@ inline void append(linked_list<T> **list, linked_list<T> *entry) {
 	}
 }
 
+template <typename T>
+inline void prepend(linked_list<T> **list, linked_list<T> *entry) {
+	linked_list<T> *tail = entry;
+	for(; tail->next; tail = tail->next) {}
+
+	tail->next = *list;
+	*list = entry;
+}
+
 /**
  * NOTE: Only use the default_list_deallocator if all linked_list<T> items are
  * allocated with allocate()! It will only deallocate the outer item, not the
@@ -151,6 +160,25 @@ inline size_t remove_all(linked_list<T> **list, Functor f, Deallocator d = {}) {
 			i = i->next;
 		}
 	}
+
+	return removed;
+}
+
+template <typename T, typename Deallocator = default_list_deallocator<T>>
+inline size_t clear(linked_list<T> **list, Deallocator d = {}) {
+	if(*list == nullptr) {
+		return 0;
+	}
+
+	size_t removed = 0;
+	for(linked_list<T> *i = *list; i;) {
+		linked_list<T> *next = i->next;
+		d(i);
+		i = next;
+		++removed;
+	}
+
+	*list = nullptr;
 
 	return removed;
 }

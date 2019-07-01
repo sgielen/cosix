@@ -178,6 +178,42 @@ TEST_CASE("append") {
 	delete entry;
 }
 
+TEST_CASE("prepend") {
+	linked_list<body*> *list = nullptr;
+	REQUIRE(empty(list) == true);
+	REQUIRE(size(list) == 0);
+
+	linked_list<body*> *entry = new linked_list<body*>();
+	entry->data = nullptr;
+	entry->next = nullptr;
+
+	prepend(&list, entry);
+	REQUIRE(list == entry);
+	REQUIRE(entry->data == nullptr);
+	REQUIRE(entry->next == nullptr);
+	REQUIRE(empty(list) == false);
+	REQUIRE(size(list) == 1);
+
+	linked_list<body*> *entry2 = new linked_list<body*>();
+	linked_list<body*> *entry3 = new linked_list<body*>();
+	entry2->data = nullptr;
+	entry2->next = entry3;
+	entry3->data = nullptr;
+	entry3->next = nullptr;
+
+	prepend(&list, entry2);
+	REQUIRE(list == entry2);
+	REQUIRE(list->next == entry3);
+	REQUIRE(list->next->next == entry);
+	REQUIRE(list->next->next->next == nullptr);
+	REQUIRE(empty(list) == false);
+	REQUIRE(size(list) == 3);
+
+	delete entry;
+	delete entry3;
+	delete entry2;
+}
+
 TEST_CASE("remove_one_first") {
 	linked_list<body*> *list = nullptr;
 	REQUIRE(remove_one(&list, [](linked_list<body*>*){
@@ -335,6 +371,45 @@ TEST_CASE("remove_all") {
 	delete b3;
 	delete b2;
 	delete b1;
+
+	delete l5;
+	delete l4;
+	delete l3;
+	delete l2;
+	delete l1;
+}
+
+TEST_CASE("clear") {
+	linked_list<body*> *l1 = new linked_list<body*>();
+	linked_list<body*> *l2 = new linked_list<body*>();
+	linked_list<body*> *l3 = new linked_list<body*>();
+	linked_list<body*> *l4 = new linked_list<body*>();
+	linked_list<body*> *l5 = new linked_list<body*>();
+
+	linked_list<body*> *list = l1;
+	list->next = l2;
+	list->next->next = l3;
+	list->next->next->next = l4;
+	list->next->next->next->next = l5;
+	list->next->next->next->next->next = nullptr;
+
+	REQUIRE(size(list) == 5);
+	REQUIRE(empty(list) == false);
+
+	std::vector<void*> items_destructed;
+
+	REQUIRE(clear(&list, [&items_destructed](linked_list<body*> *item) {
+		items_destructed.push_back(item);
+	}) == 5);
+
+	// Order doesn't matter, but we test with a known-good order
+	REQUIRE(items_destructed.size() == 5);
+	REQUIRE(items_destructed[0] == l1);
+	REQUIRE(items_destructed[1] == l2);
+	REQUIRE(items_destructed[2] == l3);
+	REQUIRE(items_destructed[3] == l4);
+	REQUIRE(items_destructed[4] == l5);
+	REQUIRE(list == nullptr);
 
 	delete l5;
 	delete l4;

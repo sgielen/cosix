@@ -18,6 +18,7 @@ if(BAREMETAL_ENABLED)
 		reverse_fd.cpp reverse_fd.hpp
 		shmfs.cpp shmfs.hpp
 		blockdevstoresock.cpp blockdevstoresock.hpp
+		vfs.cpp vfs.hpp
 	)
 
 	# for elf.h:

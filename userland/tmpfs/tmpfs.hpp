@@ -3,7 +3,7 @@
 #include <map>
 #include <string>
 #include <stdexcept>
-#include <cosix/reverse_filesystem.hpp>
+#include <cosix/reverse.hpp>
 #include <memory>
 #include <vector>
 
@@ -28,16 +28,16 @@ typedef std::shared_ptr<pseudo_fd_entry> pseudo_fd_ptr;
 
 /** A temporary filesystem implementation.
  */
-struct tmpfs : public cosix::reverse_filesystem {
+struct tmpfs : public cosix::reverse_handler {
 	tmpfs(cloudabi_device_t);
+
+	typedef cosix::file_entry file_entry;
+	typedef cosix::pseudofd_t pseudofd_t;
 
 	// Look up the file entry corresponding to the inode (if filename is empty), or the file entry
 	// corresponding to the file pointed to by filename in the directory pointed to by inode.
-	file_entry lookup_nonrecursive(cloudabi_inode_t inode, std::string const &filename) override;
-	std::string readlink(cloudabi_inode_t inode) override;
-
-	file_entry lookup(pseudofd_t pseudo, const char *path, size_t len, cloudabi_lookupflags_t lookupflags) override;
-	pseudofd_t open(cloudabi_inode_t inode, cloudabi_oflags_t flags) override;
+	file_entry lookup(pseudofd_t pseudo, const char *file, size_t len, cloudabi_oflags_t oflags, cloudabi_filestat_t *filestat) override;
+	std::pair<pseudofd_t, cloudabi_filetype_t> open(cloudabi_inode_t inode) override;
 	void allocate(pseudofd_t pseudo, off_t offset, off_t length) override;
 	size_t readlink(pseudofd_t pseudo, const char *path, size_t pathlen, char *buf, size_t buflen) override;
 	void rename(pseudofd_t pseudo1, const char *path1, size_t path1len, pseudofd_t pseudo2, const char *path2, size_t path2len) override;
@@ -52,18 +52,16 @@ struct tmpfs : public cosix::reverse_filesystem {
 	void sync(pseudofd_t pseudo) override;
 
 	size_t readdir(pseudofd_t pseudo, char *buffer, size_t buflen, cloudabi_dircookie_t &cookie) override;
-	void stat_get(pseudofd_t pseudo, cloudabi_lookupflags_t flags, char *path, size_t len, cloudabi_filestat_t *statbuf) override;
 	void stat_fget(pseudofd_t pseudo, cloudabi_filestat_t *statbuf) override;
 	void stat_fput(pseudofd_t pseudo, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags) override;
 	void stat_put(pseudofd_t pseudo, cloudabi_lookupflags_t lookupflags, const char *path, size_t pathlen, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags) override;
 	bool is_readable(pseudofd_t pseudo, size_t &nbytes, bool &hangup) override;
 
 private:
+	const cloudabi_device_t device;
+
 	std::map<cloudabi_inode_t, file_entry_ptr> inodes;
 	std::map<pseudofd_t, pseudo_fd_ptr> pseudo_fds;
-
-	using reverse_filesystem::dereference_path; // don't hide the base version
-	std::string dereference_path(file_entry_ptr &directory, std::string path, cloudabi_lookupflags_t lookupflags);
 
 	file_entry_ptr get_file_entry_from_inode(cloudabi_inode_t inode);
 	file_entry_ptr get_file_entry_from_pseudo(pseudofd_t pseudo);

@@ -102,14 +102,24 @@ struct fd_t {
 	}
 
 	/* For directories */
-	/** Open a path. In the cloudabi_fdstat_t, rights_base and rights_inheriting specify the
+	/** Look up the given component in this directory. Non-recursive and does not follow symlinks.
+	 * If oflags has O_CREAT set, create the file if it doesn't exist, then return its new inode.
+	 * If oflags has O_CREAT and O_EXCL set, fail if the file already exists. Other flags in oflags
+	 * should be ignored.
+	 */
+	virtual void lookup(const char* /*file*/, size_t /*filelen*/, cloudabi_oflags_t /*oflags*/, cloudabi_filestat_t * /*filestat*/) {
+		error = EINVAL;
+	}
+
+	/** Open the file indicated with the given device and inode number.
+	 * In the cloudabi_fdstat_t, rights_base and rights_inheriting specify the
 	 * initial rights of the newly created file descriptor. The rights that do not apply to
 	 * the filetype that will be opened (e.g. RIGHT_FD_SEEK on a socket) must be removed without
 	 * error; rights that do apply to it but are unobtainable (e.g. RIGHT_FD_WRITE on a read-only
 	 * filesystem) must generate ENOTCAPABLE. fs_flags specifies the initial flags of the fd; the
 	 * filetype is ignored.
 	 */
-	virtual shared_ptr<fd_t> openat(const char * /*path */, size_t /*pathlen*/, cloudabi_lookupflags_t /*lookupflags*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) {
+	virtual shared_ptr<fd_t> inode_open(cloudabi_device_t /* st_dev */, cloudabi_inode_t /* st_ino */, const cloudabi_fdstat_t * /* fdstat */) {
 		error = EINVAL;
 		return nullptr;
 	}
@@ -132,9 +142,9 @@ struct fd_t {
 		error = EINVAL;
 	}
 
-	/** Create a path of given type. Returns the inode if no error is set.
+	/** Create a file in this directory of given type. Returns the inode if no error is set.
 	 */
-	virtual cloudabi_inode_t file_create(const char * /*path*/, size_t /*pathlen*/, cloudabi_filetype_t /*type*/)
+	virtual cloudabi_inode_t file_create(const char * /*filename*/, size_t /*filelen*/, cloudabi_filetype_t /*type*/)
 	{
 		error = EINVAL;
 		return 0;
@@ -143,14 +153,14 @@ struct fd_t {
 	/** Create a hardlink. Is only possible if the given fd is on the same device as this fd, and
 	 * the device supports hardlinks.
 	 */
-	virtual void file_link(const char * /*path1*/, size_t /*path1len*/, cloudabi_lookupflags_t /* lookupflags */, shared_ptr<fd_t> /*fd2*/, const char * /*path2*/, size_t /*path2len*/)
+	virtual void file_link(const char * /*sourcefilename*/, size_t /*sourcefilelen*/, shared_ptr<fd_t> /*dir2*/, const char * /*destfilename*/, size_t /*destfilelen*/)
 	{
 		error = EINVAL;
 	}
 
 	/** Read a symlink. Returns the number of bytes used in the output buffer.
 	 */
-	virtual size_t file_readlink(const char * /*path*/, size_t /*pathlen*/, char * /*buf*/, size_t /*buflen*/)
+	virtual size_t file_readlink(const char * /*file*/, size_t /*filelen*/, char * /*buf*/, size_t /*buflen*/)
 	{
 		error = EINVAL;
 		return 0;
@@ -158,39 +168,23 @@ struct fd_t {
 
 	/** Rename a file. Is only possible if the given fd is on the same device as this fd.
 	 */
-	virtual void file_rename(const char * /*path1*/, size_t /*path1len*/, shared_ptr<fd_t> /*fd2*/, const char * /*path2*/, size_t /*path2len*/)
+	virtual void file_rename(const char * /*sourcefilename*/, size_t /*sourcefilelen*/, shared_ptr<fd_t> /*dir2*/, const char * /*destfilename*/, size_t /*destfilelen*/)
 	{
 		error = EINVAL;
 	}
 
-	/** Create a symlink. Is only possible if the device supports symlinks.
+	/** Create a symlink in the current directory. Is only possible if the device supports symlinks.
 	 */
-	virtual void file_symlink(const char * /*path1*/, size_t /*path1len*/, const char * /*path2*/, size_t /*path2len*/)
+	virtual void file_symlink(const char * /*target*/, size_t /*targetlen*/, const char * /*file*/, size_t /*filelen*/)
 	{
 		error = EINVAL;
 	}
 
-	/** Unlinks a path of given type.
+	/** Unlinks a file in this current directory if its type matches with the given ulflags.
 	 */
-	virtual void file_unlink(const char * /*path*/, size_t /*pathlen*/, cloudabi_ulflags_t /*flags*/)
+	virtual void file_unlink(const char * /*file*/, size_t /*filelen*/, cloudabi_ulflags_t /*ulflags*/)
 	{
 		error = EINVAL;
-	}
-
-	/** Get attributes of a file by path.
-	 */
-	virtual void file_stat_get(cloudabi_lookupflags_t lookupflags, const char* path, size_t pathlen, cloudabi_filestat_t* buf)
-	{
-		// If file_stat_get is unimplemented, use openat() + file_stat_fget
-		cloudabi_fdstat_t stat;
-		auto fd = openat(path, pathlen, lookupflags, 0, &stat);
-		if(error) {
-			return;
-		}
-		fd->file_stat_fget(buf);
-		if(fd->error) {
-			error = fd->error;
-		}
 	}
 
 	/** Get attributes of the open file.
@@ -209,20 +203,11 @@ struct fd_t {
 		error = 0;
 	}
 
-	/** Set attributes of a file by path.
-	 */
-	virtual void file_stat_put(cloudabi_lookupflags_t lookupflags, const char *path, size_t pathlen, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags)
+	/** Set attributes of a file in the current directory. Never follow symlinks.
+	*/
+	virtual void file_stat_put(const char * /*file*/, size_t /*filelen*/, const cloudabi_filestat_t * /*buf*/, cloudabi_fsflags_t /*fsflags*/)
 	{
-		// If file_stat_put is unimplemented, use openat() + file_stat_fput
-		cloudabi_fdstat_t stat;
-		auto fd = openat(path, pathlen, lookupflags, 0, &stat);
-		if(error) {
-			return;
-		}
-		fd->file_stat_fput(buf, fsflags);
-		if(fd->error) {
-			error = fd->error;
-		}
+		error = EINVAL;
 	}
 
 	/** Set attributes of the open file.

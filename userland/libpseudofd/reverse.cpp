@@ -25,11 +25,11 @@ reverse_handler::reverse_handler()
 
 reverse_handler::~reverse_handler() {}
 
-file_entry reverse_handler::lookup(pseudofd_t, const char*, size_t, cloudabi_lookupflags_t) {
+file_entry reverse_handler::lookup(pseudofd_t, const char*, size_t, cloudabi_oflags_t, cloudabi_filestat_t*) {
 	throw cloudabi_system_error(EINVAL);
 }
 
-pseudofd_t reverse_handler::open(cloudabi_inode_t, cloudabi_oflags_t) {
+std::pair<pseudofd_t, cloudabi_filetype_t> reverse_handler::open(cloudabi_inode_t) {
 	throw cloudabi_system_error(EINVAL);
 }
 
@@ -86,10 +86,6 @@ void reverse_handler::sock_send(pseudofd_t, const char*, size_t) {
 }
 
 size_t reverse_handler::readdir(pseudofd_t, char*, size_t, cloudabi_dircookie_t&) {
-	throw cloudabi_system_error(EINVAL);
-}
-
-void reverse_handler::stat_get(pseudofd_t, cloudabi_lookupflags_t, char*, size_t, cloudabi_filestat_t*) {
 	throw cloudabi_system_error(EINVAL);
 }
 

@@ -13,6 +13,5 @@ add_library(pseudofd
 	reversefd.cpp
 	reverse.cpp
 	cosix/reverse.hpp
-	reversefs.cpp cosix/reverse_filesystem.hpp
 )
 target_include_directories(pseudofd PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

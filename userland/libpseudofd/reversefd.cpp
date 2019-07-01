@@ -38,13 +38,15 @@ char *cosix::handle_request(reverse_request_t *request, char *buf, reverse_respo
 			break;
 		}
 		case op::lookup: {
-			auto file_entry = h->lookup(request->pseudofd, buf, request->send_length, request->flags);
+			response->send_length = sizeof(cloudabi_filestat_t);
+			res = reinterpret_cast<char*>(malloc(response->send_length));
+			auto statbuf = reinterpret_cast<cloudabi_filestat_t*>(res);
+			auto file_entry = h->lookup(request->pseudofd, buf, request->send_length, request->flags, statbuf);
 			response->result = file_entry.inode;
-			response->flags = file_entry.type;
 			break;
 		}
 		case op::open:
-			response->result = h->open(request->inode, request->flags);
+			std::tie(response->result, response->flags) = h->open(request->inode);
 			break;
 		case op::create:
 			response->result = h->create(request->pseudofd, buf, request->send_length, request->flags);
@@ -93,14 +95,6 @@ char *cosix::handle_request(reverse_request_t *request, char *buf, reverse_respo
 			response->result = cookie;
 			break;
 		}
-		case op::stat_get: {
-			response->send_length = sizeof(cloudabi_filestat_t);
-			res = reinterpret_cast<char*>(malloc(response->send_length));
-			auto statbuf = reinterpret_cast<cloudabi_filestat_t*>(res);
-			h->stat_get(request->pseudofd, request->flags, buf, request->send_length, statbuf);
-			response->result = 0;
-			break;
-		}
 		case op::stat_fput: {
 			if(request->send_length != sizeof(cloudabi_filestat_t)) {
 				throw cloudabi_system_error(EIO);
@@ -113,9 +107,9 @@ char *cosix::handle_request(reverse_request_t *request, char *buf, reverse_respo
 			if(request->send_length < sizeof(cloudabi_filestat_t)) {
 				throw cloudabi_system_error(EIO);
 			}
-			auto *path = reinterpret_cast<const char*>(buf + sizeof(cloudabi_filestat_t));
-			size_t pathlen = request->send_length - sizeof(cloudabi_filestat_t);
-			h->stat_put(request->pseudofd, request->flags, path, pathlen, reinterpret_cast<const cloudabi_filestat_t*>(buf), request->inode);
+			auto *filename = reinterpret_cast<const char*>(buf + sizeof(cloudabi_filestat_t));
+			size_t len = request->send_length - sizeof(cloudabi_filestat_t);
+			h->stat_put(request->pseudofd, request->flags, filename, len, reinterpret_cast<const cloudabi_filestat_t*>(buf), request->inode);
 			response->result = 0;
 			break;
 		}
@@ -134,18 +128,18 @@ char *cosix::handle_request(reverse_request_t *request, char *buf, reverse_respo
 		}
 		case op::rename: {
 			pseudofd_t pseudo2 = request->flags;
-			char *path1 = buf;
-			size_t path1len = 0;
-			while(path1len < request->send_length && path1[path1len] != 0) {
-				path1len++;
+			char *filename1 = buf;
+			size_t filename1len = 0;
+			while(filename1len < request->send_length && filename1[filename1len] != 0) {
+				filename1len++;
 			}
-			if(path1len == request->send_length) {
+			if(filename1len == request->send_length) {
 				// no delimiter found, fail
 				throw cloudabi_system_error(EIO);
 			}
-			char *path2 = path1 + path1len + 1;
-			size_t path2len = request->send_length - path1len - 1;
-			h->rename(request->pseudofd, path1, path1len, pseudo2, path2, path2len);
+			char *filename2 = filename1 + filename1len + 1;
+			size_t filename2len = request->send_length - filename1len - 1;
+			h->rename(request->pseudofd, filename1, filename1len, pseudo2, filename2, filename2len);
 			response->result = 0;
 			break;
 		}
@@ -155,18 +149,18 @@ char *cosix::handle_request(reverse_request_t *request, char *buf, reverse_respo
 			response->result = 0;
 			break;
 		case op::symlink: {
-			char *path1 = buf;
-			size_t path1len = 0;
-			while(path1len < request->send_length && path1[path1len] != 0) {
-				path1len++;
+			char *target = buf;
+			size_t targetlen = 0;
+			while(targetlen < request->send_length && target[targetlen] != 0) {
+				targetlen++;
 			}
-			if(path1len == request->send_length) {
+			if(targetlen == request->send_length) {
 				// no delimiter found, fail
 				throw cloudabi_system_error(EIO);
 			}
-			char *path2 = path1 + path1len + 1;
-			size_t path2len = request->send_length - path1len - 1;
-			h->symlink(request->pseudofd, path1, path1len, path2, path2len);
+			char *filename = target + targetlen + 1;
+			size_t len = request->send_length - targetlen - 1;
+			h->symlink(request->pseudofd, target, targetlen, filename, len);
 			response->result = 0;
 			break;
 		}
@@ -175,18 +169,18 @@ char *cosix::handle_request(reverse_request_t *request, char *buf, reverse_respo
 			break;
 		case op::link: {
 			pseudofd_t pseudo2 = request->flags;
-			char *path1 = buf;
-			size_t path1len = 0;
-			while(path1len < request->send_length && path1[path1len] != 0) {
-				path1len++;
+			char *filename1 = buf;
+			size_t filename1len = 0;
+			while(filename1len < request->send_length && filename1[filename1len] != 0) {
+				filename1len++;
 			}
-			if(path1len == request->send_length) {
+			if(filename1len == request->send_length) {
 				// no delimiter found, fail
 				throw cloudabi_system_error(EIO);
 			}
-			char *path2 = path1 + path1len + 1;
-			size_t path2len = request->send_length - path1len - 1;
-			h->link(request->pseudofd, path1, path1len, request->offset, pseudo2, path2, path2len);
+			char *filename2 = filename1 + filename1len + 1;
+			size_t filename2len = request->send_length - filename1len - 1;
+			h->link(request->pseudofd, filename1, filename1len, request->offset, pseudo2, filename2, filename2len);
 			response->result = 0;
 			break;
 		}

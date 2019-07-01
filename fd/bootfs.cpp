@@ -12,7 +12,8 @@ struct bootfs_directory_fd : fd_t {
 	bootfs_directory_fd(const char *n)
 	: fd_t(CLOUDABI_FILETYPE_DIRECTORY, 0, n) {}
 
-	shared_ptr<fd_t> openat(const char * /*path */, size_t /*pathlen*/, cloudabi_lookupflags_t /*lookupflags*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) override;
+	void lookup(const char *file, size_t filelen, cloudabi_oflags_t oflags, cloudabi_filestat_t *filestat) override;
+	shared_ptr<fd_t> inode_open(cloudabi_device_t, cloudabi_inode_t, const cloudabi_fdstat_t *) override;
 };
 
 struct bootfs_file_fd : public memory_fd {
@@ -23,20 +24,46 @@ struct bootfs_file_fd : public memory_fd {
 
 }
 
-shared_ptr<fd_t> bootfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi_lookupflags_t, cloudabi_oflags_t, const cloudabi_fdstat_t *) {
-	if(pathname == nullptr || pathname[0] == 0 || pathname[0] == '/') {
+void bootfs_directory_fd::lookup(const char *file, size_t filelen, cloudabi_oflags_t, cloudabi_filestat_t *filestat) {
+	filestat->st_dev = device;
+	filestat->st_nlink = 1;
+	filestat->st_atim = 0;
+	filestat->st_mtim = 0;
+	filestat->st_ctim = 0;
+
+	if (strncmp(file, ".", filelen) == 0) {
+		filestat->st_ino = 0;
+		filestat->st_filetype = CLOUDABI_FILETYPE_DIRECTORY;
+		filestat->st_size = 0;
+		error = 0;
+		return;
+	}
+
+	for(size_t i = 0; external_binaries_table[i].name; ++i) {
+		auto &binary = external_binaries_table[i];
+		if(strncmp(file, binary.name, filelen) == 0) {
+			filestat->st_ino = i + 1;
+			filestat->st_filetype = CLOUDABI_FILETYPE_REGULAR_FILE;
+			filestat->st_size = binary.end - binary.start;
+			error = 0;
+			return;
+		}
+	}
+
+	error = ENOENT;
+	return;
+}
+
+shared_ptr<fd_t> bootfs_directory_fd::inode_open(cloudabi_device_t st_dev, cloudabi_inode_t st_ino, const cloudabi_fdstat_t *) {
+	if (st_dev != device) {
 		error = EINVAL;
 		return nullptr;
 	}
 
-	char buf[pathlen + 1];
-	memcpy(buf, pathname, pathlen);
-	buf[pathlen] = 0;
-
-	// TODO: check oflags and fdstat_t
+	// TODO: check fdstat_t
 
 	for(size_t i = 0; external_binaries_table[i].name; ++i) {
-		if(strcmp(buf, external_binaries_table[i].name) == 0) {
+		if (st_ino == i + 1) {
 			char name[64];
 			strncpy(name, "bootfs/", sizeof(name));
 			strncat(name, external_binaries_table[i].name, sizeof(name) - strlen(name) - 1);
@@ -44,7 +71,7 @@ shared_ptr<fd_t> bootfs_directory_fd::openat(const char *pathname, size_t pathle
 		}
 	}
 
-	error = ENOENT;
+	error = EINVAL;
 	return nullptr;
 }
 

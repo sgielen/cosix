@@ -391,7 +391,8 @@ static void pwrite_partial(int fd, const void *object, const void *changed_ptr, 
 }
 
 extfs::extfs(int b, cloudabi_device_t d)
-: cosix::reverse_filesystem(d)
+: cosix::reverse_handler()
+, device(d)
 , blockdev(b)
 {
 	superblock = reinterpret_cast<ext2_superblock*>(malloc(sizeof(ext2_superblock)));
@@ -457,63 +458,76 @@ extfs::~extfs()
 	free(superblock);
 }
 
-file_entry extfs::lookup_nonrecursive(cloudabi_inode_t inode, std::string const &filename)
-{
-	file_entry_ptr entry = get_file_entry_from_inode(inode);
-	assert(entry->inode == inode);
-	if(filename.empty()) {
-		return *entry;
+static void file_entry_to_filestat(file_entry_ptr const &entry, cloudabi_filestat_t *buf) {
+	buf->st_dev = entry->device;
+	buf->st_ino = entry->inode;
+	buf->st_filetype = entry->type;
+	buf->st_nlink = entry->inode_data.nlink;
+	buf->st_size = entry->inode_data.size1;
+	if(entry->type == CLOUDABI_FILETYPE_REGULAR_FILE) {
+		buf->st_size += (uint64_t(entry->inode_data.size2_or_dir_acl_blockptr) & 0xffffffff) << 32;
 	}
-	if(entry->type != CLOUDABI_FILETYPE_DIRECTORY) {
-		throw cloudabi_system_error(ENOTDIR);
-	}
-
-	bool entry_found = false;
-	cloudabi_dirent_t dirent;
-	readdir(entry, false, [&](cloudabi_dirent_t d, std::string n, file_entry_ptr) -> bool {
-		assert(!entry_found);
-		if(n == filename) {
-			entry_found = true;
-			dirent = d;
-			return false;
-		}
-		return true;
-	});
-
-	if(!entry_found) {
-		throw cloudabi_system_error(ENOENT);
-	} else {
-		return *get_file_entry_from_inode(dirent.d_ino);
-	}
+	buf->st_atim = uint64_t(entry->inode_data.atime) * 1'000'000'000LLU;
+	buf->st_mtim = uint64_t(entry->inode_data.ctime) * 1'000'000'000LLU;
+	buf->st_ctim = uint64_t(entry->inode_data.mtime) * 1'000'000'000LLU;
 }
 
-std::string extfs::readlink(cloudabi_inode_t inode)
-{
-	file_entry_ptr entry = get_file_entry_from_inode(inode);
-	if(entry->type != CLOUDABI_FILETYPE_SYMBOLIC_LINK) {
-		throw cloudabi_system_error(EINVAL);
-	}
-	// TODO: currently we only copy the direct block ptrs, and assume
-	// the indirect ones aren't set
-	// this approach allows links of max 12*4=48 bytes in length though
-	// with singly_blockptr support, we allow 1024 + 48 bytes, should be plenty
-	char buf[sizeof(entry->inode_data.blockptr)];
-	memcpy(buf, entry->inode_data.blockptr, sizeof(entry->inode_data.blockptr));
-	assert(entry->inode_data.singly_blockptr == 0);
-	return std::string(buf, strnlen(buf, sizeof(buf)));
-}
-
-file_entry extfs::lookup(pseudofd_t pseudo, const char *path, size_t len, cloudabi_lookupflags_t lookupflags)
+file_entry extfs::lookup(pseudofd_t pseudo, const char *file, size_t len, cloudabi_oflags_t oflags, cloudabi_filestat_t *filestat)
 {
 	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
 
-	std::string filename = dereference_path(directory, std::string(path, len), lookupflags);
+	std::string filename(file, len);
 	directory->inode_data.atime = time(nullptr);
 	write_inode(directory->inode, directory->inode_data);
-	return lookup_nonrecursive(directory->inode, filename);
+	file_entry entry;
+	try {
+		file_entry_ptr entry_ptr = get_file_entry_from_inode(directory->inode);
+		assert(entry_ptr->inode == directory->inode);
+		if(filename.empty()) {
+			entry = *entry_ptr;
+		} else {
+			if(entry_ptr->type != CLOUDABI_FILETYPE_DIRECTORY) {
+				throw cloudabi_system_error(ENOTDIR);
+			}
+
+			bool entry_found = false;
+			cloudabi_dirent_t dirent;
+			readdir(entry_ptr, false, [&](cloudabi_dirent_t d, std::string n, file_entry_ptr) -> bool {
+				assert(!entry_found);
+				if(n == filename) {
+					entry_found = true;
+					dirent = d;
+					return false;
+				}
+				return true;
+			});
+
+			if(!entry_found) {
+				throw cloudabi_system_error(ENOENT);
+			} else {
+				entry = *get_file_entry_from_inode(dirent.d_ino);
+			}
+		}
+
+		if (oflags & CLOUDABI_O_EXCL) {
+			// file shouldn't exist, but it does
+			throw cloudabi_system_error(EEXIST);
+		}
+	} catch(cloudabi_system_error &e) {
+		if (e.error == ENOENT && (oflags & CLOUDABI_O_CREAT)) {
+			auto ino = create(pseudo, file, len, CLOUDABI_FILETYPE_REGULAR_FILE);
+			entry = *get_file_entry_from_inode(ino);
+		} else {
+			throw cloudabi_system_error(e.error);
+		}
+	}
+	if (filestat) {
+		file_entry_to_filestat(get_file_entry_from_inode(entry.inode), filestat);
+	}
+	return entry;
 }
 
-pseudofd_t extfs::open(cloudabi_inode_t inode, cloudabi_oflags_t oflags)
+std::pair<pseudofd_t, cloudabi_filetype_t> extfs::open(cloudabi_inode_t inode)
 {
 	file_entry_ptr entry = get_file_entry_from_inode(inode);
 
@@ -524,62 +538,25 @@ pseudofd_t extfs::open(cloudabi_inode_t inode, cloudabi_oflags_t oflags)
 		throw cloudabi_system_error(EINVAL);
 	}
 
-	if(oflags & CLOUDABI_O_DIRECTORY && entry->type != CLOUDABI_FILETYPE_DIRECTORY) {
-		throw cloudabi_system_error(ENOTDIR);
-	}
-
 	auto &idata = entry->inode_data;
 	idata.atime = time(nullptr);
-
-	if(oflags & CLOUDABI_O_TRUNC) {
-		if(entry->type != CLOUDABI_FILETYPE_REGULAR_FILE) {
-			throw cloudabi_system_error(EINVAL);
-		}
-		ext2_block_iterator it(blockdev, block_size, idata);
-		for(; it != ext2_block_iterator(); ++it) {
-			deallocate_block(*it);
-		}
-		memset(idata.blockptr, 0, sizeof(idata.blockptr));
-		if(idata.singly_blockptr) {
-			deallocate_block(idata.singly_blockptr);
-			idata.singly_blockptr = 0;
-		}
-		if(idata.doubly_blockptr) {
-			assert(!"TODO");
-			idata.doubly_blockptr = 0;
-		}
-		if(idata.triply_blockptr) {
-			assert(!"TODO");
-			idata.triply_blockptr = 0;
-		}
-
-		idata.size1 = 0;
-		idata.size2_or_dir_acl_blockptr = 0;
-		idata.sectorcount = 0;
-		idata.ctime = idata.mtime = time(nullptr);
-	}
-
 	write_inode(entry->inode, idata);
 
 	pseudo_fd_ptr pseudo(new pseudo_fd_entry);
 	pseudo->file = entry;
 	pseudofd_t fd = reinterpret_cast<pseudofd_t>(pseudo.get());
 	pseudo_fds[fd] = pseudo;
-	return fd;
+	return std::make_pair(fd, entry->type);
 }
 
-void extfs::link(pseudofd_t pseudo1, const char *path1, size_t path1len, cloudabi_lookupflags_t lookupflags, pseudofd_t pseudo2, const char *path2, size_t path2len) {
-	file_entry_ptr dir1 = get_file_entry_from_pseudo(pseudo1);
-	std::string filename1 = dereference_path(dir1, std::string(path1, path1len), lookupflags);
-	assert(dir1->type == CLOUDABI_FILETYPE_DIRECTORY);
-
-	auto entry1 = lookup_nonrecursive(dir1->inode, filename1);
+void extfs::link(pseudofd_t pseudo1, const char *file1, size_t file1len, cloudabi_lookupflags_t lookupflags, pseudofd_t pseudo2, const char *file2, size_t file2len) {
+	auto entry1 = lookup(pseudo1, file1, file1len, 0, NULL);
 	if(entry1.type == CLOUDABI_FILETYPE_DIRECTORY) {
 		throw cloudabi_system_error(EPERM);
 	}
 
 	file_entry_ptr dir2 = get_file_entry_from_pseudo(pseudo2);
-	std::string filename2 = dereference_path(dir2, std::string(path2, path2len), 0);
+	std::string filename2(file2, file2len);
 	assert(dir2->type == CLOUDABI_FILETYPE_DIRECTORY);
 
 	bool entry_found = false;
@@ -625,21 +602,30 @@ void extfs::allocate(pseudofd_t pseudo, off_t offset, off_t length) {
 	}
 }
 
-size_t extfs::readlink(pseudofd_t pseudo, const char *path, size_t pathlen, char *buf, size_t buflen) {
-	auto entry = lookup(pseudo, path, pathlen, 0);
-	std::string contents = readlink(entry.inode);
-	size_t copy = std::min(buflen, contents.size());
-	memcpy(buf, contents.c_str(), copy);
-	return copy;
+size_t extfs::readlink(pseudofd_t pseudo, const char *file, size_t filelen, char *buf, size_t buflen) {
+	auto entrynum = lookup(pseudo, file, filelen, 0, nullptr);
+
+	file_entry_ptr entry = get_file_entry_from_inode(entrynum.inode);
+	if(entry->type != CLOUDABI_FILETYPE_SYMBOLIC_LINK) {
+		throw cloudabi_system_error(EINVAL);
+	}
+	// TODO: currently we only copy the direct block ptrs, and assume
+	// the indirect ones aren't set
+	// this approach allows links of max 12*4=48 bytes in length though
+	// with singly_blockptr support, we allow 1024 + 48 bytes, should be plenty
+	size_t size = std::min(buflen, sizeof(entry->inode_data.blockptr));
+	memcpy(buf, entry->inode_data.blockptr, size);
+	assert(entry->inode_data.singly_blockptr == 0);
+	return strnlen(buf, size);
 }
 
-void extfs::rename(pseudofd_t pseudo1, const char *path1, size_t path1len, pseudofd_t pseudo2, const char *path2, size_t path2len)
+void extfs::rename(pseudofd_t pseudo1, const char *file1, size_t file1len, pseudofd_t pseudo2, const char *file2, size_t file2len)
 {
 	file_entry_ptr dir1 = get_file_entry_from_pseudo(pseudo1);
 	file_entry_ptr dir2 = get_file_entry_from_pseudo(pseudo2);
 
-	std::string filename1 = dereference_path(dir1, std::string(path1, path1len), 0);
-	std::string filename2 = dereference_path(dir2, std::string(path2, path2len), 0);
+	std::string filename1(file1, file1len);
+	std::string filename2(file2, file2len);
 
 	assert(dir1->type == CLOUDABI_FILETYPE_DIRECTORY);
 	assert(dir2->type == CLOUDABI_FILETYPE_DIRECTORY);
@@ -651,7 +637,7 @@ void extfs::rename(pseudofd_t pseudo1, const char *path1, size_t path1len, pseud
 	}
 
 	// source file exists?
-	file_entry entry = lookup_nonrecursive(dir1->inode, filename1);
+	file_entry entry = lookup(pseudo1, file1, file1len, 0, NULL);
 
 	// destination doesn't exist? -> rename file
 	file_entry_ptr newentry;
@@ -740,8 +726,8 @@ void extfs::rename(pseudofd_t pseudo1, const char *path1, size_t path1len, pseud
 	write_inode(entryp->inode, entryp->inode_data);
 }
 
-void extfs::symlink(pseudofd_t pseudo ,const char *path1, size_t path1len, const char *path2, size_t path2len) {
-	auto inode = create(pseudo, path2, path2len, CLOUDABI_FILETYPE_SYMBOLIC_LINK);
+void extfs::symlink(pseudofd_t pseudo, const char *file1, size_t file1len, const char *file2, size_t file2len) {
+	auto inode = create(pseudo, file2, file2len, CLOUDABI_FILETYPE_SYMBOLIC_LINK);
 	file_entry_ptr entry = get_file_entry_from_inode(inode);
 
 	// entry has no blocks yet
@@ -750,23 +736,23 @@ void extfs::symlink(pseudofd_t pseudo ,const char *path1, size_t path1len, const
 
 	// TODO: currently we copy only to the direct block ptrs, and set the
 	// rest to 0. Not sure if that's correct.
-	size_t to_copy = std::min(sizeof(entry->inode_data.blockptr), path1len);
-	memcpy(entry->inode_data.blockptr, path1, to_copy);
+	size_t to_copy = std::min(sizeof(entry->inode_data.blockptr), file1len);
+	memcpy(entry->inode_data.blockptr, file1, to_copy);
 	memset(reinterpret_cast<char*>(entry->inode_data.blockptr) + to_copy,
 		0, sizeof(entry->inode_data.blockptr) - to_copy);
 	entry->inode_data.singly_blockptr = 0;
+	entry->inode_data.size1 = to_copy;
 
 	entry->inode_data.atime = entry->inode_data.ctime = entry->inode_data.mtime = time(nullptr);
 	write_inode(entry->inode, entry->inode_data);
 }
 
-void extfs::unlink(pseudofd_t pseudo, const char *path, size_t len, cloudabi_ulflags_t unlinkflags)
+void extfs::unlink(pseudofd_t pseudo, const char *file, size_t len, cloudabi_ulflags_t unlinkflags)
 {
 	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
+	std::string filename(file, len);
 
-	std::string filename = dereference_path(directory, std::string(path, len), 0);
-
-	auto entry = lookup_nonrecursive(directory->inode, filename);
+	auto entry = lookup(pseudo, file, len, 0, NULL);
 	auto entry_ptr = get_file_entry_from_inode(entry.inode);
 
 	bool removedir = unlinkflags & CLOUDABI_UNLINK_REMOVEDIR;
@@ -803,11 +789,11 @@ void extfs::unlink(pseudofd_t pseudo, const char *path, size_t len, cloudabi_ulf
 	write_inode(entry_ptr->inode, entry_ptr->inode_data);
 }
 
-cloudabi_inode_t extfs::create(pseudofd_t pseudo, const char *path, size_t len, cloudabi_filetype_t type)
+cloudabi_inode_t extfs::create(pseudofd_t pseudo, const char *file, size_t len, cloudabi_filetype_t type)
 {
 	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
 
-	std::string filename = dereference_path(directory, std::string(path, len), 0);
+	std::string filename(file, len);
 	assert(directory->type == CLOUDABI_FILETYPE_DIRECTORY);
 
 	bool entry_found = false;
@@ -1233,31 +1219,12 @@ size_t extfs::readdir(pseudofd_t pseudo, char *buffer, size_t buflen, cloudabi_d
 	return copied;
 }
 
-static void file_entry_to_filestat(file_entry_ptr const &entry, cloudabi_filestat_t *buf) {
-	buf->st_dev = entry->device;
-	buf->st_ino = entry->inode;
-	buf->st_filetype = entry->type;
-	buf->st_nlink = entry->inode_data.nlink;
-	buf->st_size = entry->inode_data.size1;
-	if(entry->type == CLOUDABI_FILETYPE_REGULAR_FILE) {
-		buf->st_size += (uint64_t(entry->inode_data.size2_or_dir_acl_blockptr) & 0xffffffff) << 32;
-	}
-	buf->st_atim = uint64_t(entry->inode_data.atime) * 1'000'000'000LLU;
-	buf->st_mtim = uint64_t(entry->inode_data.ctime) * 1'000'000'000LLU;
-	buf->st_ctim = uint64_t(entry->inode_data.mtime) * 1'000'000'000LLU;
-}
-
-void extfs::stat_get(pseudofd_t pseudo, cloudabi_lookupflags_t flags, char *path, size_t len, cloudabi_filestat_t *buf) {
-	auto file_entry = lookup(pseudo, path, len, flags);
-	file_entry_to_filestat(get_file_entry_from_inode(file_entry.inode), buf);
-}
-
 void extfs::stat_fget(pseudofd_t pseudo, cloudabi_filestat_t *buf) {
 	file_entry_ptr entry = get_file_entry_from_pseudo(pseudo);
 	file_entry_to_filestat(entry, buf);
 }
 
-void extfs::update_file_entry_stat(file_entry_ptr entry, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags)
+void extfs::update_file_entry_stat(file_entry_ptr entry, const cloudabi_filestat_t *new_buf, cloudabi_fsflags_t fsflags)
 {
 	auto now = time(NULL);
 	entry->inode_data.mtime = now;
@@ -1267,30 +1234,55 @@ void extfs::update_file_entry_stat(file_entry_ptr entry, const cloudabi_filestat
 			throw cloudabi_system_error(EINVAL);
 		}
 
-		size_t size = entry->inode_data.size1;
-		size += (uint64_t(entry->inode_data.size2_or_dir_acl_blockptr) & 0xffffffff) << 32;
+		size_t current_size = entry->inode_data.size1;
+		current_size += (uint64_t(entry->inode_data.size2_or_dir_acl_blockptr) & 0xffffffff) << 32;
+		auto new_size = new_buf->st_size;
 
-		if(size < buf->st_size) {
-			allocate(entry, buf->st_size);
-		} else if(size > buf->st_size) {
+		if(current_size < new_size) {
+			allocate(entry, new_size);
+		} else if(current_size > new_size) {
 			// file is too large.
-			// TODO: deallocate unnecessary blocks
-			entry->inode_data.size1 = buf->st_size & 0xffffffff;
-			entry->inode_data.size2_or_dir_acl_blockptr = (buf->st_size >> 32) & 0xffffffff;
+			entry->inode_data.size1 = new_size & 0xffffffff;
+			entry->inode_data.size2_or_dir_acl_blockptr = (new_size >> 32) & 0xffffffff;
+
+			ext2_block_iterator it(blockdev, block_size, entry->inode_data);
+			// Go to the first block that isn't entirely allocated anymore
+			for (; it != ext2_block_iterator() && new_size > block_size; ++it) {
+				new_size -= block_size;
+			}
+			if (new_size > 0) {
+				// Clear the part of this block that isn't allocated anymore
+				auto datablock = *it;
+				char contents[block_size];
+				ssize_t res = ::pread(blockdev, contents, block_size, block_size * datablock);
+				check_ssize(res, block_size);
+				memset(contents + new_size, 0, block_size - new_size);
+				res = ::pwrite(blockdev, contents, block_size, block_size * datablock);
+				check_ssize(res, block_size);
+				++it;
+			}
+			// Clear the rest of the blocks
+			// TODO: deallocate them, instead?
+			for (; it != ext2_block_iterator(); ++it) {
+				char contents[block_size];
+				memset(contents, 0, block_size);
+				ssize_t res = ::pwrite(blockdev, contents, block_size, block_size * (*it));
+				check_ssize(res, block_size);
+			}
 		}
 
 		entry->inode_data.ctime = now;
 	}
 
 	if(fsflags & CLOUDABI_FILESTAT_ATIM) {
-		entry->inode_data.atime = buf->st_atim / 1'000'000'000LLU;
+		entry->inode_data.atime = new_buf->st_atim / 1'000'000'000LLU;
 	}
 	if(fsflags & CLOUDABI_FILESTAT_ATIM_NOW) {
 		entry->inode_data.atime = now;
 	}
 
 	if(fsflags & CLOUDABI_FILESTAT_MTIM) {
-		entry->inode_data.ctime = buf->st_mtim / 1'000'000'000LLU;
+		entry->inode_data.ctime = new_buf->st_mtim / 1'000'000'000LLU;
 	}
 	if(fsflags & CLOUDABI_FILESTAT_MTIM_NOW) {
 		entry->inode_data.ctime = now;
@@ -1304,21 +1296,11 @@ void extfs::stat_fput(pseudofd_t pseudo, const cloudabi_filestat_t *buf, cloudab
 	update_file_entry_stat(entry, buf, fsflags);
 }
 
-void extfs::stat_put(pseudofd_t pseudo, cloudabi_lookupflags_t lookupflags, const char *path, size_t pathlen, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags) {
-	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
-	std::string filename = dereference_path(directory, std::string(path, pathlen), lookupflags);
-
-	auto entry = lookup_nonrecursive(directory->inode, filename);
+void extfs::stat_put(pseudofd_t pseudo, cloudabi_lookupflags_t lookupflags, const char *file, size_t filelen, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags) {
+	auto entry = lookup(pseudo, file, filelen, 0, NULL);
 	auto entry_ptr = get_file_entry_from_inode(entry.inode);
 
 	update_file_entry_stat(entry_ptr, buf, fsflags);
-}
-
-std::string extfs::dereference_path(file_entry_ptr &dir, std::string path, cloudabi_lookupflags_t lookupflags)
-{
-	auto dereferenced = dereference_path(dir->inode, path, lookupflags);
-	dir = get_file_entry_from_inode(dereferenced.first);
-	return dereferenced.second;
 }
 
 file_entry_ptr extfs::get_file_entry_from_inode(cloudabi_inode_t inode)
@@ -1802,7 +1784,7 @@ void extfs::allocate(file_entry_ptr entry, size_t size) {
 			++next;
 			assert(next == ext2_block_iterator());
 		}
-		has_size += 1024;
+		has_size += block_size;
 		++it;
 	}
 

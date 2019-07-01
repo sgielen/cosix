@@ -61,15 +61,15 @@ struct reverse_handler {
 	reverse_handler();
 	virtual ~reverse_handler();
 
-	virtual file_entry lookup(pseudofd_t pseudo, const char *path, size_t len, cloudabi_lookupflags_t lookupflags);
+	virtual file_entry lookup(pseudofd_t pseudo, const char *file, size_t len, cloudabi_oflags_t oflags, cloudabi_filestat_t *statbuf);
 
-	virtual pseudofd_t open(cloudabi_inode_t inode, cloudabi_oflags_t flags);
-	virtual size_t readlink(pseudofd_t pseudo, const char *path, size_t pathlen, char *buf, size_t buflen);
-	virtual void rename(pseudofd_t pseudo1, const char *path1, size_t path1len, pseudofd_t pseudo2, const char *path2, size_t path2len);
-	virtual void symlink(pseudofd_t pseudo ,const char *path1, size_t path1len, const char *path2, size_t path2len);
-	virtual void link(pseudofd_t pseudo1, const char *path1, size_t path1len, cloudabi_lookupflags_t lookupflags, pseudofd_t pseudo2, const char *path2, size_t path2len);
-	virtual void unlink(pseudofd_t pseudo, const char *path, size_t len, cloudabi_ulflags_t unlinkflags);
-	virtual cloudabi_inode_t create(pseudofd_t pseudo, const char *path, size_t len, cloudabi_filetype_t type);
+	virtual std::pair<pseudofd_t, cloudabi_filetype_t> open(cloudabi_inode_t inode);
+	virtual size_t readlink(pseudofd_t pseudo, const char *filename, size_t len, char *buf, size_t buflen);
+	virtual void rename(pseudofd_t pseudo1, const char *filename1, size_t filename1len, pseudofd_t pseudo2, const char *filename2, size_t filename2len);
+	virtual void symlink(pseudofd_t pseudo ,const char *target, size_t targetlen, const char *filename, size_t len);
+	virtual void link(pseudofd_t pseudo1, const char *filename1, size_t filename1len, cloudabi_lookupflags_t lookupflags, pseudofd_t pseudo2, const char *filename2, size_t filename2len);
+	virtual void unlink(pseudofd_t pseudo, const char *filename, size_t len, cloudabi_ulflags_t unlinkflags);
+	virtual cloudabi_inode_t create(pseudofd_t pseudo, const char *filename, size_t len, cloudabi_filetype_t type);
 	virtual void allocate(pseudofd_t pseudo, off_t offset, off_t length);
 	virtual void close(pseudofd_t pseudo);
 	virtual bool is_readable(pseudofd_t pseudo, size_t &nbytes, bool &hangup);
@@ -78,12 +78,11 @@ struct reverse_handler {
 	virtual void datasync(pseudofd_t pseudo);
 	virtual void sync(pseudofd_t pseudo);
 	virtual size_t readdir(pseudofd_t pseudo, char *buffer, size_t buflen, cloudabi_dircookie_t &cookie);
-	virtual void stat_get(pseudofd_t pseudo, cloudabi_lookupflags_t flags, char *path, size_t len, cloudabi_filestat_t *statbuf);
 	virtual size_t sock_recv(pseudofd_t pseudo, char *dest, size_t requested);
 	virtual void sock_send(pseudofd_t pseudo, const char *buf, size_t length);
 	virtual void stat_fget(pseudofd_t pseudo, cloudabi_filestat_t *statbuf);
 	virtual void stat_fput(pseudofd_t pseudo, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags);
-	virtual void stat_put(pseudofd_t pseudo, cloudabi_lookupflags_t lookupflags, const char *path, size_t pathlen, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags);
+	virtual void stat_put(pseudofd_t pseudo, cloudabi_lookupflags_t lookupflags, const char *filename, size_t len, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags);
 
 	cloudabi_device_t device;
 };

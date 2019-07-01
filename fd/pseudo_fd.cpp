@@ -1,5 +1,6 @@
 #include "pseudo_fd.hpp"
 #include <fd/scheduler.hpp>
+#include <oslibc/numeric.h>
 
 using namespace cloudos;
 
@@ -57,22 +58,6 @@ bool pseudo_fd::is_valid_path(const char *path, size_t length)
 		}
 	}
 
-	return true;
-}
-
-bool pseudo_fd::lookup_inode(const char *path, size_t length, cloudabi_lookupflags_t lookupflags, reverse_response_t *response)
-{
-	if(!is_valid_path(path, length)) {
-		return false;
-	}
-	reverse_request_t request;
-	request.pseudofd = pseudo_id;
-	request.op = reverse_request_t::operation::lookup;
-	request.inode = 0;
-	request.flags = lookupflags;
-	request.send_length = length;
-	request.recv_length = 0;
-	maybe_deallocate(send_request(&request, path, response));
 	return true;
 }
 
@@ -193,48 +178,72 @@ void pseudo_fd::sync()
 	}
 }
 
-shared_ptr<fd_t> pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_lookupflags_t lookupflags, cloudabi_oflags_t oflags, const cloudabi_fdstat_t * fdstat)
+void pseudo_fd::lookup(const char *file, size_t filelen, cloudabi_oflags_t oflags, cloudabi_filestat_t *filestat)
 {
-	int64_t inode;
-	int filetype;
+	auto res = lookup_device_id();
+	if(res != 0) {
+		error = res;
+		return;
+	}
+
+	if(!is_valid_path(file, filelen)) {
+		error = EINVAL;
+		return;
+	}
+
+	reverse_request_t request;
+	request.pseudofd = pseudo_id;
+	request.op = reverse_request_t::operation::lookup;
+	request.inode = 0;
+	request.flags = oflags;
+	request.send_length = filelen;
+	request.recv_length = 0;
 	reverse_response_t response;
-	if(!lookup_inode(path, pathlen, lookupflags, &response)) {
-		error = -response.result;
-		return nullptr;
-	} else if(response.result == -ENOENT && (oflags & CLOUDABI_O_CREAT)) {
-		// The file doesn't exist and should be created.
-		filetype = CLOUDABI_FILETYPE_REGULAR_FILE;
-		reverse_request_t request;
-		request.pseudofd = pseudo_id;
-		request.op = reverse_request_t::operation::create;
-		request.inode = 0;
-		request.flags = filetype;
-		request.send_length = pathlen;
+	Blk b = send_request(&request, file, &response);
 
-		maybe_deallocate(send_request(&request, path, &response));
-		if(response.result < 0) {
-			error = -response.result;
-			return nullptr;
-		}
-
-		inode = response.result;
-	} else if(response.result < 0) {
+	if (response.result < 0) {
+		maybe_deallocate(b);
 		error = -response.result;
+		return;
+	}
+
+	if (b.size < sizeof(cloudabi_filestat_t)) {
+		error = EIO;
+		maybe_deallocate(b);
+		return;
+	}
+
+	memcpy(filestat, b.ptr, sizeof(cloudabi_filestat_t));
+	maybe_deallocate(b);
+	if (filestat->st_dev != device) {
+		get_vga_stream() << "Pseudo FD powered filesystem changed device IDs\n";
+		error = EIO;
+		return;
+	}
+	if (filestat->st_ino != static_cast<unsigned long long>(response.result)) {
+		get_vga_stream() << "Pseudo FD powered filesystem inconsistent in inodes\n";
+		error = EIO;
+		return;
+	}
+
+	error = 0;
+}
+
+
+shared_ptr<fd_t> pseudo_fd::inode_open(cloudabi_device_t st_dev, cloudabi_inode_t st_ino, const cloudabi_fdstat_t *fdstat)
+{
+	if (st_dev != device) {
+		error = EINVAL;
 		return nullptr;
-	} else if(oflags & CLOUDABI_O_EXCL) {
-		error = EEXIST;
-		return nullptr;
-	} else {
-		inode = response.result;
-		filetype = response.flags;
 	}
 
 	reverse_request_t request;
 	request.pseudofd = pseudo_id;
 	request.op = reverse_request_t::operation::open;
-	request.inode = inode;
-	request.flags = oflags;
+	request.inode = st_ino;
+	request.flags = 0;
 
+	reverse_response_t response;
 	maybe_deallocate(send_request(&request, nullptr, &response));
 	if(response.result < 0) {
 		error = -response.result;
@@ -246,11 +255,11 @@ shared_ptr<fd_t> pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_lo
 	char new_name[sizeof(name)];
 	strncpy(new_name, name, sizeof(new_name));
 	strncat(new_name, "->", sizeof(new_name) - strlen(new_name) - 1);
-	size_t copy = sizeof(new_name) - strlen(new_name) - 1;
-	if(copy > pathlen) copy = pathlen;
-	strncat(new_name, path, copy);
 
-	auto new_fd = make_shared<pseudo_fd>(new_pseudo_id, reverse_fd, filetype, fdstat->fs_flags, new_name);
+	char buf[sizeof(name)];
+	strncat(new_name, ui64toa_s(st_ino, buf, sizeof(buf), 10), sizeof(new_name) - strlen(new_name) - 1);
+
+	auto new_fd = make_shared<pseudo_fd>(new_pseudo_id, reverse_fd, response.flags, fdstat->fs_flags, new_name);
 	// TODO: check if the rights are actually obtainable before opening the file;
 	// ignore those that don't apply to this filetype, return ENOTCAPABLE if not
 	new_fd->flags = fdstat->fs_flags;
@@ -259,7 +268,7 @@ shared_ptr<fd_t> pseudo_fd::openat(const char *path, size_t pathlen, cloudabi_lo
 	return new_fd;
 }
 
-cloudabi_inode_t pseudo_fd::file_create(const char *path, size_t pathlen, cloudabi_filetype_t type)
+cloudabi_inode_t pseudo_fd::file_create(const char *file, size_t filelen, cloudabi_filetype_t type)
 {
 	auto res = lookup_device_id();
 	if(res != 0) {
@@ -272,10 +281,10 @@ cloudabi_inode_t pseudo_fd::file_create(const char *path, size_t pathlen, clouda
 	request.op = reverse_request_t::operation::create;
 	request.inode = 0;
 	request.flags = type;
-	request.send_length = pathlen;
+	request.send_length = filelen;
 
 	reverse_response_t response;
-	maybe_deallocate(send_request(&request, path, &response));
+	maybe_deallocate(send_request(&request, file, &response));
 	if(response.result < 0) {
 		error = -response.result;
 		return 0;
@@ -359,7 +368,7 @@ void pseudo_fd::file_rename(const char *path1, size_t path1len, shared_ptr<fd_t>
 	}
 }
 
-void pseudo_fd::file_link(const char *path1, size_t path1len, cloudabi_lookupflags_t lookupflags, shared_ptr<fd_t> fd2, const char *path2, size_t path2len)
+void pseudo_fd::file_link(const char *path1, size_t path1len, shared_ptr<fd_t> fd2, const char *path2, size_t path2len)
 {
 	pseudo_fd *fd2ps = dynamic_cast<pseudo_fd*>(fd2.get());
 	if(fd2ps == nullptr) {
@@ -392,7 +401,7 @@ void pseudo_fd::file_link(const char *path1, size_t path1len, cloudabi_lookupfla
 	request.op = reverse_request_t::operation::link;
 	request.inode = 0;
 	request.flags = fd2ps->pseudo_id;
-	request.offset = lookupflags;
+	request.offset = 0;
 	request.send_length = path.size;
 
 	reverse_response_t response;
@@ -456,43 +465,6 @@ void pseudo_fd::file_unlink(const char *path, size_t pathlen, cloudabi_ulflags_t
 	}
 }
 
-void pseudo_fd::file_stat_get(cloudabi_lookupflags_t flags, const char *path, size_t pathlen, cloudabi_filestat_t *buf)
-{
-	auto res = lookup_device_id();
-	if(res != 0) {
-		error = res;
-		return;
-	}
-
-	reverse_request_t request;
-	request.pseudofd = pseudo_id;
-	request.op = reverse_request_t::operation::stat_get;
-	request.inode = 0;
-	request.flags = flags;
-	request.send_length = pathlen;
-
-	reverse_response_t response;
-	Blk b = send_request(&request, path, &response);
-	if(response.result < 0) {
-		maybe_deallocate(b);
-		error = -response.result;
-	} else {
-		if(b.size < sizeof(cloudabi_filestat_t)) {
-			error = EIO;
-			maybe_deallocate(b);
-			return;
-		}
-		memcpy(buf, b.ptr, sizeof(cloudabi_filestat_t));
-		maybe_deallocate(b);
-		if(buf->st_dev != device) {
-			get_vga_stream() << "Pseudo FD powered filesystem changed device ID's";
-			error = EIO;
-			return;
-		}
-		error = 0;
-	}
-}
-
 void pseudo_fd::file_stat_fget(cloudabi_filestat_t *buf)
 {
 	auto res = lookup_device_id();
@@ -529,7 +501,7 @@ void pseudo_fd::file_stat_fget(cloudabi_filestat_t *buf)
 	}
 }
 
-void pseudo_fd::file_stat_put(cloudabi_lookupflags_t lookupflags, const char *path, size_t pathlen, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags)
+void pseudo_fd::file_stat_put(const char *path, size_t pathlen, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags)
 {
 	auto res = lookup_device_id();
 	if(res != 0) {
@@ -546,7 +518,7 @@ void pseudo_fd::file_stat_put(cloudabi_lookupflags_t lookupflags, const char *pa
 	request.pseudofd = pseudo_id;
 	request.op = reverse_request_t::operation::stat_put;
 	request.inode = fsflags;
-	request.flags = lookupflags;
+	request.flags = 0;
 	request.send_length = buffer.size;
 
 	reverse_response_t response;

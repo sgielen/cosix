@@ -10,6 +10,12 @@ using namespace cloudos;
 static const int PROCFS_DEPTH_MAX = 5;
 static const int PROCFS_FILE_MAX = 40;
 
+static const int PROCFS_ROOT_INO = 0;
+static const int PROCFS_KERNEL_INO = 1;
+static const int PROCFS_UPTIME_INO = 2;
+static const int PROCFS_ALLOCTRACK_INO = 3;
+static const int PROCFS_CMDLINE_INO = 4;
+
 namespace cloudos {
 
 struct procfs_directory_fd : fd_t {
@@ -17,7 +23,8 @@ struct procfs_directory_fd : fd_t {
 
 	bool to_string(char *buf, size_t length);
 
-	shared_ptr<fd_t> openat(const char * /*path */, size_t /*pathlen*/, cloudabi_lookupflags_t /*lookupflags*/, cloudabi_oflags_t /*oflags*/, const cloudabi_fdstat_t * /*fdstat*/) override;
+	void lookup(const char *file, size_t filelen, cloudabi_oflags_t, cloudabi_filestat_t *filestat) override;
+	shared_ptr<fd_t> inode_open(cloudabi_device_t, cloudabi_inode_t, const cloudabi_fdstat_t *) override;
 
 private:
 	char path[PROCFS_DEPTH_MAX][PROCFS_FILE_MAX];
@@ -93,10 +100,19 @@ bool procfs_directory_fd::to_string(char *buf, size_t length) {
 	return true;
 }
 
-shared_ptr<fd_t> procfs_directory_fd::openat(const char *pathname, size_t pathlen, cloudabi_lookupflags_t, cloudabi_oflags_t oflags, const cloudabi_fdstat_t *) {
-	if(pathname == nullptr || pathlen == 0 || pathname[0] == 0 || pathname[0] == '/') {
-		error = EINVAL;
-		return nullptr;
+void procfs_directory_fd::lookup(const char *file, size_t filelen, cloudabi_oflags_t, cloudabi_filestat_t *filestat) {
+	filestat->st_dev = device;
+	filestat->st_nlink = 1;
+	filestat->st_atim = 0;
+	filestat->st_mtim = 0;
+	filestat->st_ctim = 0;
+
+	if (strncmp(file, ".", filelen) == 0) {
+		filestat->st_ino = PROCFS_ROOT_INO;
+		filestat->st_filetype = CLOUDABI_FILETYPE_DIRECTORY;
+		filestat->st_size = 0;
+		error = 0;
+		return;
 	}
 
 	char pathbuf[PROCFS_DEPTH_MAX * (PROCFS_FILE_MAX + 1)];
@@ -105,51 +121,61 @@ shared_ptr<fd_t> procfs_directory_fd::openat(const char *pathname, size_t pathle
 	}
 	size_t pathbuf_length = strlen(pathbuf);
 
-	if(pathlen + 1 + pathbuf_length >= sizeof(pathbuf)) {
+	if(filelen + 1 + pathbuf_length >= sizeof(pathbuf)) {
 		error = ENOMEM;
+		return;
+	}
+
+	// TODO: actual path resolving with './', '../', symlinks and hardlinks
+	strncpy(&pathbuf[pathbuf_length], file, filelen + 1);
+	pathbuf[pathbuf_length + filelen] = 0;
+
+	if(strcmp(pathbuf, "kernel/uptime") == 0) {
+		filestat->st_ino = PROCFS_UPTIME_INO;
+		filestat->st_filetype = CLOUDABI_FILETYPE_REGULAR_FILE;
+		filestat->st_size = 0;
+		error = 0;
+	} else if(strcmp(pathbuf, "kernel/alloctracker") == 0) {
+		filestat->st_ino = PROCFS_ALLOCTRACK_INO;
+		filestat->st_filetype = CLOUDABI_FILETYPE_REGULAR_FILE;
+		filestat->st_size = 0;
+		error = 0;
+	} else if(strcmp(pathbuf, "kernel/cmdline") == 0) {
+		filestat->st_ino = PROCFS_CMDLINE_INO;
+		filestat->st_filetype = CLOUDABI_FILETYPE_REGULAR_FILE;
+		filestat->st_size = 0;
+		error = 0;
+	} else if(strcmp(pathbuf, "kernel") == 0 || strcmp(pathbuf, "kernel/") == 0) {
+		filestat->st_ino = PROCFS_KERNEL_INO;
+		filestat->st_filetype = CLOUDABI_FILETYPE_DIRECTORY;
+		filestat->st_size = 0;
+		error = 0;
+	} else {
+		error = ENOENT;
+	}
+}
+
+shared_ptr<fd_t> procfs_directory_fd::inode_open(cloudabi_device_t dev, cloudabi_inode_t ino, const cloudabi_fdstat_t *) {
+	if (dev != device) {
+		error = EINVAL;
 		return nullptr;
 	}
 
-	bool must_be_directory = (oflags & CLOUDABI_O_DIRECTORY) == CLOUDABI_O_DIRECTORY;
-
-	// TODO: look at oflags and fdstat
-	// TODO: actual path resolving with './', '../', symlinks and hardlinks
-	strncpy(&pathbuf[pathbuf_length], pathname, pathlen + 1);
-
-	if(strcmp(pathbuf, "kernel/uptime") == 0) {
-		if(must_be_directory) {
-			error = ENOTDIR;
-			return nullptr;
-		} else {
-			error = 0;
-			return make_shared<procfs_uptime_fd>(pathbuf);
-		}
-	} else if(strcmp(pathbuf, "kernel/alloctracker") == 0) {
-		if(must_be_directory) {
-			error = ENOTDIR;
-			return nullptr;
-		} else {
-			error = 0;
-			return make_shared<procfs_alloctrack_fd>(pathbuf);
-		}
-	} else if(strcmp(pathbuf, "kernel/cmdline") == 0) {
-		if(must_be_directory) {
-			error = ENOTDIR;
-			return nullptr;
-		} else {
-			error = 0;
-			return make_shared<procfs_cmdline_fd>(pathbuf);
-		}
-	} else if(strcmp(pathbuf, "kernel") == 0 || strcmp(pathbuf, "kernel/") == 0) {
-		error = 0;
+	if (ino == PROCFS_UPTIME_INO) {
+		return make_shared<procfs_uptime_fd>("procfs/kernel/uptime");
+	} else if(ino == PROCFS_ALLOCTRACK_INO) {
+		return make_shared<procfs_alloctrack_fd>("procfs/kernel/alloctracker");
+	} else if(ino == PROCFS_CMDLINE_INO) {
+		return make_shared<procfs_cmdline_fd>("procfs/kernel/cmdline");
+	} else if(ino == PROCFS_KERNEL_INO) {
 		char pb[2][PROCFS_FILE_MAX];
 		strncpy(pb[0], "kernel", PROCFS_FILE_MAX);
 		pb[1][0] = 0;
-		return make_shared<procfs_directory_fd>(pb, "procfs_kernel_dir");
-	} else {
-		error = ENOENT;
-		return nullptr;
+		return make_shared<procfs_directory_fd>(pb, "procfs/kernel");
 	}
+
+	error = ENOENT;
+	return nullptr;
 }
 
 size_t procfs_uptime_fd::read(void *dest, size_t count) {

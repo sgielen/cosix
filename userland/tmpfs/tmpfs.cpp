@@ -15,7 +15,8 @@ static cloudabi_timestamp_t timestamp() {
 }
 
 tmpfs::tmpfs(cloudabi_device_t d)
-: reverse_filesystem(d)
+: reverse_handler()
+, device(d)
 {
 	// make directory entry /
 	file_entry_ptr root(new tmpfs_file_entry);
@@ -36,42 +37,64 @@ tmpfs::tmpfs(cloudabi_device_t d)
 	pseudo_fds[0] = root_pseudo;
 }
 
-file_entry tmpfs::lookup_nonrecursive(cloudabi_inode_t inode, std::string const &filename)
-{
-	file_entry_ptr entry = get_file_entry_from_inode(inode);
-	if(filename.empty()) {
-		return *entry;
-	}
-	if(entry->type != CLOUDABI_FILETYPE_DIRECTORY) {
-		throw cloudabi_system_error(ENOTDIR);
-	}
-	auto it = entry->files.find(filename);
-	if(it == entry->files.end()) {
-		throw cloudabi_system_error(ENOENT);
+static void file_entry_to_filestat(file_entry_ptr const &entry, cloudabi_filestat_t *buf) {
+	buf->st_dev = entry->device;
+	buf->st_ino = entry->inode;
+	buf->st_filetype = entry->type;
+	buf->st_nlink = entry->hardlinks;
+	if(entry->type == CLOUDABI_FILETYPE_REGULAR_FILE || entry->type == CLOUDABI_FILETYPE_SYMBOLIC_LINK) {
+		buf->st_size = entry->contents.size();
 	} else {
-		return *it->second;
+		buf->st_size = 0;
 	}
+	buf->st_atim = entry->access_time;
+	buf->st_mtim = entry->content_time;
+	buf->st_ctim = entry->metadata_time;
 }
 
-std::string tmpfs::readlink(cloudabi_inode_t inode)
-{
-	file_entry_ptr entry = get_file_entry_from_inode(inode);
-	if(entry->type != CLOUDABI_FILETYPE_SYMBOLIC_LINK) {
-		throw cloudabi_system_error(EINVAL);
-	}
-	return entry->contents;
-}
-
-file_entry tmpfs::lookup(pseudofd_t pseudo, const char *path, size_t len, cloudabi_lookupflags_t lookupflags)
+file_entry tmpfs::lookup(pseudofd_t pseudo, const char *file, size_t len, cloudabi_oflags_t oflags, cloudabi_filestat_t *filestat)
 {
 	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
 
-	std::string filename = dereference_path(directory, std::string(path, len), lookupflags);
+	std::string filename(file, len);
 	directory->access_time = timestamp();
-	return lookup_nonrecursive(directory->inode, filename);
+
+	file_entry entry;
+	try {
+		file_entry_ptr entry_ptr = get_file_entry_from_inode(directory->inode);
+		if(filename.empty()) {
+			entry = *entry_ptr;
+		} else {
+			if(entry_ptr->type != CLOUDABI_FILETYPE_DIRECTORY) {
+				throw cloudabi_system_error(ENOTDIR);
+			}
+			auto it = entry_ptr->files.find(filename);
+			if(it == entry_ptr->files.end()) {
+				throw cloudabi_system_error(ENOENT);
+			} else {
+				entry = *it->second;
+			}
+		}
+
+		if (oflags & CLOUDABI_O_EXCL) {
+			// file shouldn't exist, but it does
+			throw cloudabi_system_error(EEXIST);
+		}
+	} catch(cloudabi_system_error &e) {
+		if (e.error == ENOENT && (oflags & CLOUDABI_O_CREAT)) {
+			auto ino = create(pseudo, file, len, CLOUDABI_FILETYPE_REGULAR_FILE);
+			entry = *get_file_entry_from_inode(ino);
+		} else {
+			throw cloudabi_system_error(e.error);
+		}
+	}
+	if (filestat) {
+		file_entry_to_filestat(get_file_entry_from_inode(entry.inode), filestat);
+	}
+	return entry;
 }
 
-pseudofd_t tmpfs::open(cloudabi_inode_t inode, cloudabi_oflags_t oflags)
+std::pair<pseudofd_t, cloudabi_filetype_t> tmpfs::open(cloudabi_inode_t inode)
 {
 	file_entry_ptr entry = get_file_entry_from_inode(inode);
 
@@ -82,30 +105,18 @@ pseudofd_t tmpfs::open(cloudabi_inode_t inode, cloudabi_oflags_t oflags)
 		throw cloudabi_system_error(EINVAL);
 	}
 
-	if(oflags & CLOUDABI_O_DIRECTORY && entry->type != CLOUDABI_FILETYPE_DIRECTORY) {
-		throw cloudabi_system_error(ENOTDIR);
-	}
-
 	entry->access_time = timestamp();
-
-	if(oflags & CLOUDABI_O_TRUNC) {
-		if(entry->type != CLOUDABI_FILETYPE_REGULAR_FILE) {
-			throw cloudabi_system_error(EINVAL);
-		}
-		entry->contents.clear();
-		entry->content_time = entry->metadata_time = timestamp();
-	}
 
 	pseudo_fd_ptr pseudo(new pseudo_fd_entry);
 	pseudo->file = entry;
 	pseudofd_t fd = reinterpret_cast<pseudofd_t>(pseudo.get());
 	pseudo_fds[fd] = pseudo;
-	return fd;
+	return std::make_pair(fd, entry->type);
 }
 
 void tmpfs::link(pseudofd_t pseudo1, const char *path1, size_t path1len, cloudabi_lookupflags_t lookupflags, pseudofd_t pseudo2, const char *path2, size_t path2len) {
 	file_entry_ptr dir1 = get_file_entry_from_pseudo(pseudo1);
-	std::string filename1 = dereference_path(dir1, std::string(path1, path1len), lookupflags);
+	std::string filename1(path1, path1len);
 
 	auto it1 = dir1->files.find(filename1);
 	if(it1 == dir1->files.end()) {
@@ -115,7 +126,7 @@ void tmpfs::link(pseudofd_t pseudo1, const char *path1, size_t path1len, cloudab
 	}
 
 	file_entry_ptr dir2 = get_file_entry_from_pseudo(pseudo2);
-	std::string filename2 = dereference_path(dir2, std::string(path2, path2len), 0);
+	std::string filename2(path2, path2len);
 
 	auto it2 = dir2->files.find(filename2);
 	if(it2 != dir2->files.end()) {
@@ -145,7 +156,7 @@ void tmpfs::allocate(pseudofd_t pseudo, off_t offset, off_t length) {
 
 size_t tmpfs::readlink(pseudofd_t pseudo, const char *path, size_t pathlen, char *buf, size_t buflen) {
 	file_entry_ptr dir = get_file_entry_from_pseudo(pseudo);
-	std::string filename = dereference_path(dir, std::string(path, pathlen), 0);
+	std::string filename(path, pathlen);
 	auto it = dir->files.find(filename);
 	if(it == dir->files.end()) {
 		throw cloudabi_system_error(ENOENT);
@@ -166,8 +177,8 @@ void tmpfs::rename(pseudofd_t pseudo1, const char *path1, size_t path1len, pseud
 	file_entry_ptr dir1 = get_file_entry_from_pseudo(pseudo1);
 	file_entry_ptr dir2 = get_file_entry_from_pseudo(pseudo2);
 
-	std::string filename1 = dereference_path(dir1, std::string(path1, path1len), 0);
-	std::string filename2 = dereference_path(dir2, std::string(path2, path2len), 0);
+	std::string filename1(path1, path1len);
+	std::string filename2(path2, path2len);
 
 	// TODO: check if dir1/fn1 is a parent of dir2/fn2 (i.e. directory would be moved inside itself)
 
@@ -233,7 +244,7 @@ void tmpfs::rename(pseudofd_t pseudo1, const char *path1, size_t path1len, pseud
 void tmpfs::symlink(pseudofd_t pseudo ,const char *path1, size_t path1len, const char *path2, size_t path2len) {
 	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
 
-	std::string filename = dereference_path(directory, std::string(path2, path2len), 0);
+	std::string filename(path2, path2len);
 	auto it = directory->files.find(filename);
 	if(it != directory->files.end()) {
 		throw cloudabi_system_error(EEXIST);
@@ -258,7 +269,7 @@ void tmpfs::unlink(pseudofd_t pseudo, const char *path, size_t len, cloudabi_ulf
 {
 	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
 
-	std::string filename = dereference_path(directory, std::string(path, len), 0);
+	std::string filename(path, len);
 	auto it = directory->files.find(filename);
 	if(it == directory->files.end()) {
 		throw cloudabi_system_error(ENOENT);
@@ -297,7 +308,7 @@ cloudabi_inode_t tmpfs::create(pseudofd_t pseudo, const char *path, size_t len, 
 {
 	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
 
-	std::string filename = dereference_path(directory, std::string(path, len), 0);
+	std::string filename(path, len);
 	auto it = directory->files.find(filename);
 	if(it != directory->files.end()) {
 		// TODO: only for directories, or if O_CREAT and O_EXCL are given?
@@ -426,33 +437,6 @@ size_t tmpfs::readdir(pseudofd_t pseudo, char *buffer, size_t buflen, cloudabi_d
 	return to_copy;
 }
 
-static void file_entry_to_filestat(file_entry_ptr &entry, cloudabi_filestat_t *buf) {
-	buf->st_dev = entry->device;
-	buf->st_ino = entry->inode;
-	buf->st_filetype = entry->type;
-	buf->st_nlink = entry->hardlinks;
-	if(entry->type == CLOUDABI_FILETYPE_REGULAR_FILE) {
-		buf->st_size = entry->contents.size();
-	} else {
-		buf->st_size = 0;
-	}
-	buf->st_atim = entry->access_time;
-	buf->st_mtim = entry->content_time;
-	buf->st_ctim = entry->metadata_time;
-}
-
-void tmpfs::stat_get(pseudofd_t pseudo, cloudabi_lookupflags_t flags, char *path, size_t len, cloudabi_filestat_t *buf) {
-	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
-
-	std::string filename = dereference_path(directory, std::string(path, len), flags);
-	auto it = directory->files.find(filename);
-	if(it == directory->files.end()) {
-		throw cloudabi_system_error(ENOENT);
-	}
-
-	file_entry_to_filestat(it->second, buf);
-}
-
 void tmpfs::stat_fget(pseudofd_t pseudo, cloudabi_filestat_t *buf) {
 	file_entry_ptr entry = get_file_entry_from_pseudo(pseudo);
 	file_entry_to_filestat(entry, buf);
@@ -493,20 +477,13 @@ void tmpfs::stat_fput(pseudofd_t pseudo, const cloudabi_filestat_t *buf, cloudab
 
 void tmpfs::stat_put(pseudofd_t pseudo, cloudabi_lookupflags_t lookupflags, const char *path, size_t pathlen, const cloudabi_filestat_t *buf, cloudabi_fsflags_t fsflags) {
 	file_entry_ptr directory = get_file_entry_from_pseudo(pseudo);
-	std::string filename = dereference_path(directory, std::string(path, pathlen), lookupflags);
+	std::string filename(path, pathlen);
 	auto it = directory->files.find(filename);
 	if(it == directory->files.end()) {
 		throw cloudabi_system_error(ENOENT);
 	}
 
 	update_file_entry_stat(it->second, buf, fsflags);
-}
-
-std::string tmpfs::dereference_path(file_entry_ptr &dir, std::string path, cloudabi_lookupflags_t lookupflags)
-{
-	auto dereferenced = dereference_path(dir->inode, path, lookupflags);
-	dir = get_file_entry_from_inode(dereferenced.first);
-	return dereferenced.second;
 }
 
 file_entry_ptr tmpfs::get_file_entry_from_inode(cloudabi_inode_t inode)
