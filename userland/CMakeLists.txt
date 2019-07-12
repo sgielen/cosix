@@ -7,6 +7,13 @@ if(BAREMETAL_ENABLED)
 	# in cloudabi target mode.
 	set_property(GLOBAL PROPERTY TARGET_SUPPORTS_SHARED_LIBS TRUE)
 
+	# Also, if our linker is LLD, the option -fPIC is not supported; its
+	# alternative is --pie but this is incompatible with the --shared flag
+	# we give to create a shared module, so remove -fPIC altogether
+	if(CMAKE_GLD_LINKER_IS_LLD)
+		string(REPLACE "-fPIC" "" CMAKE_SHARED_LIBRARY_ASM_FLAGS "${CMAKE_SHARED_LIBRARY_ASM_FLAGS}")
+	endif()
+
 	add_library(vdso MODULE ../cloudabi/vdsos/cloudabi_vdso_i686.S)
 	set_target_properties(vdso PROPERTIES LINKER_LANGUAGE VDSO)
 	set_target_properties(vdso PROPERTIES LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/vdso.ld")

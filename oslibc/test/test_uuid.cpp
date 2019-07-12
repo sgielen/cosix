@@ -1,5 +1,6 @@
 #include <oslibc/uuid.hpp>
 #include <catch.hpp>
+#include <string.h>
 
 TEST_CASE("generate uuid") {
 	// initialize random generator
